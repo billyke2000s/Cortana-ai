@@ -91,15 +91,26 @@ WORK_TRIGGERS = {
     'pc_health': r'\b(slow|lag(gy|ging)?|crash(es|ing|ed)?|freez|disk|space|storage|memory|ram|cpu|processor|health|performance|uptime|troubleshoot|keeps? (closing|crashing))\b',
     'draft_email': r'\b(e-?mail|mail)\b',
 }
-CONFIRM = {'create_file', 'organise_files', 'draft_email'}
+# Full access mode (1.7, owner request, D-038): only offered when the setting is on AND the request comes from the PC.
+FULL_TOOLS = [
+    _fn('computer_task', "Use the PC's mouse and keyboard yourself to do something in any app or website, e.g. play a song in Spotify, change a setting, fill in a page. You look at the screen and click/type step by step. The user approves the goal once.", {
+        'goal': {'type': 'string', 'description': 'The full task in one sentence, e.g. "Play a chill playlist in the Spotify app".'}}, ['goal']),
+    _fn('run_command', 'Run one PowerShell command on the PC (install, find, change or check anything). Prefer this over computer_task when a command can do it. The user approves the exact command first.', {
+        'command': {'type': 'string', 'description': 'One PowerShell command or short script.'},
+        'why': {'type': 'string', 'description': 'A few words on what it does.'}}, ['command']),
+]
+FULL = {'computer_task', 'run_command'}
+CONFIRM = {'create_file', 'organise_files', 'draft_email'} | FULL
 
 
-def tools_for(text, context=6144):
-    """Core tools always; a work tool when the question is about it, or all of them when the context is large."""
+def tools_for(text, context=6144, full=False):
+    """Core tools always; a work tool when the question is about it, or all of them when the context is large.
+    full=True (full access on, request from the PC) adds computer_task and run_command."""
+    extra = FULL_TOOLS if full else []
     if context >= 12288:
-        return TOOLS + WORK_TOOLS
+        return TOOLS + WORK_TOOLS + extra
     text = str(text or '').lower()
-    return TOOLS + [t for t in WORK_TOOLS if re.search(WORK_TRIGGERS[t['function']['name']], text)]
+    return TOOLS + [t for t in WORK_TOOLS if re.search(WORK_TRIGGERS[t['function']['name']], text)] + extra
 
 
 def preview(name, args, store):
@@ -115,6 +126,15 @@ def preview(name, args, store):
             return work.preview_organise(args)
         if name == 'draft_email':
             return work.preview_email(args)
+        if name == 'run_command':
+            import control
+            return control.preview_command(args)
+        if name == 'computer_task':
+            goal = ' '.join(str(args.get('goal') or '').split())[:300]
+            if not goal:
+                return {'error': 'Say what to do on the computer.'}
+            return {'summary': 'Let me use your mouse and keyboard to: ' + goal,
+                    'detail': 'Up to 15 steps. To stop me at any time, push the mouse into the top-left corner of the screen, or press Stop.'}
         return {'error': f'{name} does not need approval.'}
     except (ValueError, RuntimeError, OSError) as e:
         return {'error': str(e)[:200]}
@@ -131,6 +151,14 @@ def done_text(name, result):
         return f"Done, Chief. I {result['done']} in {result['folder']}.{extra}"
     if name == 'draft_email':
         return 'The draft is open in your mail app. Check it and press Send.'
+    if name == 'run_command':
+        return 'Done. The command finished.' if result.get('exit_code') == 0 else f"The command finished with errors (code {result.get('exit_code')}). The output is on screen."
+    if name == 'computer_task':
+        if result.get('done'):
+            return 'Done, Chief. ' + result['done']
+        if result.get('stopped'):
+            return result['stopped']
+        return "I couldn't finish that. " + str(result.get('could_not_finish', ''))
     return 'Done.'
 
 
@@ -141,9 +169,10 @@ TOOL_LABELS = {'set_timer': 'SETTING TIMER', 'set_reminder': 'SETTING REMINDER',
                'search_documents': 'READING DOCUMENTS', 'summarise_document': 'READING DOCUMENT', 'look_at_screen': 'LOOKING AT SCREEN',
                'clipboard': 'CHECKING CLIPBOARD', 'find_files': 'SEARCHING FILES', 'open_file': 'OPENING FILE',
                'create_file': 'PREPARING FILE', 'analyse_table': 'CRUNCHING NUMBERS', 'calculate': 'CALCULATING',
-               'organise_files': 'PLANNING TIDY-UP', 'pc_health': 'CHECKING PC HEALTH', 'draft_email': 'DRAFTING EMAIL'}
+               'organise_files': 'PLANNING TIDY-UP', 'pc_health': 'CHECKING PC HEALTH', 'draft_email': 'DRAFTING EMAIL',
+               'computer_task': 'PLANNING', 'run_command': 'PREPARING COMMAND'}
 # Longer results for tools whose text is the answer (the default is 2,500 characters; see DECISIONS D-004/D-023).
-RESULT_LIMIT = {'pc_health': 3000, 'web_search': 3500, 'clipboard': 3500, 'search_documents': 3200, 'summarise_document': 3200, 'open_file': 3200}
+RESULT_LIMIT = {'run_command': 3400, 'pc_health': 3000, 'web_search': 3500, 'clipboard': 3500, 'search_documents': 3200, 'summarise_document': 3200, 'open_file': 3200}
 CHANGES = {'set_timer': 'objectives', 'set_reminder': 'objectives', 'add_task': 'objectives', 'complete_objective': 'objectives',
            'remember': 'memory', 'forget': 'memory', 'add_event': 'objectives'}
 
@@ -657,7 +686,7 @@ def run(name, args, store, llm=None, approved=False):
     if name in CONFIRM and not approved:
         return {'error': 'This needs the user to approve it first.'}, None
     try:
-        if name in {t['function']['name'] for t in WORK_TOOLS}:
+        if name in {t['function']['name'] for t in WORK_TOOLS} or name == 'run_command':
             return work_tool(name, args, store)
         if name == 'set_timer':
             minutes = float(args.get('minutes', 0))
@@ -736,6 +765,9 @@ def work_tool(name, args, store):
         return {'error': 'Screen, clipboard and file access is switched off in Settings.'}, None
     if name == 'organise_files':
         return work.organise(args), None
+    if name == 'run_command':
+        import control
+        return control.run_command(args), None
     if name == 'pc_health':
         return work.pc_health(), None
     if name == 'draft_email':

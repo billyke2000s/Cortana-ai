@@ -102,7 +102,7 @@ async function send(text){
   if(ev.type==='sentence'){spoken+=(spoken?' ':'')+ev.text;out.textContent=spoken;out.scrollTop=out.scrollHeight;q.add(ev.text);turn.text=spoken;chatChanged();}
   else if(ev.type==='tool'){if(state==='thinking')label.textContent=ev.label+'…';turn.working=ev.label;chatChanged();}
   else if(ev.type==='screen'){turn.screen=ev.markdown;holoLast=ev.markdown;if(holoPage==='chat')chatChanged();else showScreen(ev.markdown);}   // in Chat, the card goes inline
-  else if(ev.type==='confirm'){(turn.confirms??=[]).push({id:ev.id,label:ev.label,summary:ev.summary,detail:ev.detail,state:'waiting'});pendingConfirm=ev.id;chatChanged();if(holoPage!=='chat')window.CortanaPages?.open('chat');}
+  else if(ev.type==='confirm'){(turn.confirms??=[]).push({id:ev.id,name:ev.name,label:ev.label,summary:ev.summary,detail:ev.detail,state:'waiting'});pendingConfirm=ev.id;chatChanged();if(holoPage!=='chat')window.CortanaPages?.open('chat');}
   else if(ev.type==='refresh')document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:ev.what}}));
   else if(ev.type==='done')history=[...messages,{role:'assistant',content:ev.raw||ev.reply}].slice(-18);
   else if(ev.type==='error')throw Error(ev.error);
@@ -221,7 +221,8 @@ addEventListener('keydown',e=>{if(e.key==='Escape')stop();});
 addEventListener('pagehide',stop);
 // An existing assistant can provide replies using this API without replacing the UI.
 function note(text,error=false){chatLog.push({role:'system',text,error});chatChanged();}
-window.Cortana={attachImage(b64){if(pendingImages.length>=2)throw Error('Two pictures at most per question.');pendingImages.push(b64);return pendingImages.length;},confirm:resolveConfirm,get deep(){return deepThinking;},set deep(v){deepThinking=!!v;savePreference('deep',deepThinking?'1':'0');},applyMode,restoreConversation,clearConversation(){stop();history=[];chatLog.length=0;chatChanged();},speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
+function stopTask(id){api('/api/cancel',{request_id:'task_'+id}).catch(()=>{});}   // ends a mouse/keyboard task between steps
+window.Cortana={stopTask,attachImage(b64){if(pendingImages.length>=2)throw Error('Two pictures at most per question.');pendingImages.push(b64);return pendingImages.length;},confirm:resolveConfirm,get deep(){return deepThinking;},set deep(v){deepThinking=!!v;savePreference('deep',deepThinking?'1':'0');},applyMode,restoreConversation,clearConversation(){stop();history=[];chatLog.length=0;chatChanged();},speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
  note};
 
 /* ---- Timer and reminder alerts (checked with every status poll) ---- */

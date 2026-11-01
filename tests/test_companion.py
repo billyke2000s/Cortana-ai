@@ -513,3 +513,105 @@ class ActionGuardTests(unittest.TestCase):
         calls.clear()
         with patch.object(rt,'ollama_stream',model):list(rt.chat_stream([{'role':'user','content':'Add milk to my list'}]))
         self.assertEqual(len(calls),2)   # exactly one retry, then she stops
+
+class FullAccessTests(unittest.TestCase):
+    """1.7 (D-038): full access is off by default, PC-only, approved per command / per task, and stoppable."""
+    def setUp(self):
+        import control;self.c=control
+        self.rt=base.runtime.Runtime();self.rt.store.close();self.rt.store=base.store.Store(':memory:');self.rt.ai_ready=True
+        self.addCleanup(self.rt.store.close)
+
+    def offered(self,local):
+        seen=[]
+        def model(payload):seen.append({t['function']['name'] for t in payload.get('tools',[])});yield {'message':{'content':'Hello Chief.'}}
+        with patch.object(self.rt,'ollama_stream',model):list(self.rt.chat_stream([{'role':'user','content':'Open notepad and type hi'}],local=local))
+        return seen[0]
+
+    def test_tools_only_when_switched_on_and_on_the_pc(self):
+        self.assertFalse({'run_command','computer_task'}&self.offered(True))     # off by default
+        self.rt.store.set('full_access',True)
+        self.assertFalse({'run_command','computer_task'}&self.offered(False))    # paired phone: never
+        self.assertTrue({'run_command','computer_task'}<=self.offered(True))
+
+    def test_approval_rules(self):
+        self.rt.store.set('full_access',True)
+        pid=self.rt.hold('run_command',{'command':'Get-Date'},local=True)
+        with self.assertRaises(ValueError):self.rt.confirm(pid,True,local=False)   # the phone can't approve it
+        self.rt.store.set('full_access',False)
+        with self.assertRaises(ValueError):self.rt.confirm(pid,True,local=True)    # switched off after asking: refused
+        self.rt.store.set('full_access',True)
+        phone=self.rt.hold('run_command',{'command':'Get-Date'},local=False)
+        with self.assertRaises(ValueError):self.rt.confirm(phone,True,local=True)  # asked from the phone: never runs
+        ok=self.rt.hold('run_command',{'command':'Get-Date'},local=True)
+        with patch.object(self.c,'run_command',return_value={'exit_code':0,'output':'Sunday'}) as run:
+            r=self.rt.confirm(ok,True,local=True)
+        run.assert_called_once_with({'command':'Get-Date'});self.assertEqual(r['say'],'Done. The command finished.')
+        self.assertEqual(base.tools.run('run_command',{'command':'Get-Date'},self.rt.store)[0]['error'],'This needs the user to approve it first.')
+
+    def test_command_preview_shows_the_exact_command(self):
+        p=base.tools.preview('run_command',{'command':'Get-ChildItem C:\\\\Users','why':'list users'},self.rt.store)
+        self.assertEqual(p['detail'],'Get-ChildItem C:\\\\Users');self.assertIn('list users',p['summary'])
+        self.assertIn('error',base.tools.preview('run_command',{'command':' '},self.rt.store))
+
+    def run_task(self,replies,stop_after=None,cancel_at=None):
+        done,said=[],iter(replies)
+        def llm(prompt,images=None,max_tokens=0):
+            self.assertEqual(images,['SHOT']);return next(said)
+        def check():
+            if cancel_at is not None and len(done)>=cancel_at:raise companion.Cancelled('Request stopped.')
+        stop=lambda:stop_after is not None and len(done)>=stop_after
+        with patch.object(self.c,'log'):
+            r=self.c.computer_task('Play music in Spotify',llm,check,shoot=lambda:('SHOT',(1280,720)),act=lambda s,size:done.append((s['action'],size)),stop=stop)
+        return r,done
+
+    def test_computer_task_loop(self):
+        r,done=self.run_task(['{"action":"press","keys":"win","note":"open start"}','Sure! {"action":"type","text":"spotify\\n"}','{"action":"click","x":640,"y":360}',
+                              '{"action":"done","note":"Music is playing"}'])
+        self.assertEqual([d[0] for d in done],['press','type','click']);self.assertEqual(r['done'],'Music is playing');self.assertEqual(len(r['steps']),3)
+        r,done=self.run_task(['nonsense']*20);self.assertEqual(done,[]);self.assertIn('Stopped after 15 steps',r['could_not_finish'])
+
+    def test_emergency_stops(self):
+        r,done=self.run_task(['{"action":"click","x":1,"y":1}']*5,stop_after=2);self.assertEqual(len(done),2);self.assertIn('corner',r['stopped'])
+        with self.assertRaises(companion.Cancelled):self.run_task(['{"action":"click","x":1,"y":1}']*5,cancel_at=1)
+
+    def test_actions_are_validated_before_anything_is_sent(self):
+        with self.assertRaises(ValueError):self.c.perform({'action':'click','x':5000,'y':10},(1280,720))
+        with self.assertRaises(ValueError):self.c.parse_keys('ctrl+banana')
+        self.assertEqual(self.c.parse_keys('ctrl + shift + esc'),[0x11,0x10,0x1B])
+        png=base.base64.b64encode(b'\x89PNG\r\n\x1a\n\0\0\0\rIHDR'+(1280).to_bytes(4,'big')+(720).to_bytes(4,'big')+b'\0'*20).decode()
+        self.assertEqual(self.c.png_size(png),(1280,720))
+        with self.assertRaises(ValueError):self.c.parse_step('{"action":"format_disk"}')
+
+class FullAccessSettingsTests(unittest.TestCase):
+    request=base.ApiTests.request
+    setUpClass=classmethod(CompanionApiTests.setUpClass.__func__)
+    tearDownClass=classmethod(CompanionApiTests.tearDownClass.__func__)
+    def test_only_the_pc_can_switch_it(self):
+        self.assertEqual(self.request('POST','/api/settings',{'full_access':True},host='phone.example')[0],403)   # unpaired phone
+        self.assertEqual(self.request('POST','/api/settings',{'full_access':'yes'})[0],400)
+        self.assertEqual(self.request('POST','/api/settings',{'full_access':True})[0],200)
+        self.assertTrue(json.loads(self.request('GET','/api/settings')[2])['full_access'])
+        self.assertFalse(base.server.settings_action(self.rt,{'tools_enabled':True},local=False) is None)
+        with self.assertRaises(ValueError):base.server.settings_action(self.rt,{'full_access':False},local=False)   # a paired phone
+        self.request('POST','/api/settings',{'full_access':False})
+
+class LauncherTests(unittest.TestCase):
+    def test_crash_log_and_old_unpack_cleanup(self):
+        import launcher
+        with tempfile.TemporaryDirectory() as tmp,patch.object(launcher,'DATA',Path(tmp)/'data'):
+            old_hook,old_thread=base.sys.excepthook,threading.excepthook
+            try:
+                log,write=launcher.crash_logging()
+                t=threading.Thread(target=lambda:1/0,name='voice');t.start();t.join()
+                log.flush();text=(Path(tmp)/'data'/'crash.log').read_text()
+                self.assertIn('error in thread voice',text);self.assertIn('ZeroDivisionError',text)
+            finally:
+                base.sys.excepthook,threading.excepthook=old_hook,old_thread
+                import faulthandler;faulthandler.disable();log.close()
+            temp=Path(tmp)/'temp';mine=temp/'_MEImine';old=temp/'_MEIold';other=temp/'_MEIother'
+            for d in (mine,old):(d/'voice-profile').mkdir(parents=True);(d/'voice-profile'/'voice_profile.json').write_text('{}');(d/'assets').mkdir();(d/'assets'/'cortana.glb').write_bytes(b'')
+            other.mkdir()
+            os_time=time.time()-3600;base.os.utime(old,(os_time,os_time));base.os.utime(other,(os_time,os_time))
+            with patch.object(launcher.sys,'_MEIPASS',str(mine),create=True),patch('tempfile.gettempdir',return_value=str(temp)):
+                launcher.clean_old_unpacks()
+            self.assertFalse(old.exists());self.assertTrue(mine.exists() and other.exists())   # only old Cortana copies go

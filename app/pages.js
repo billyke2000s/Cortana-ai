@@ -111,6 +111,7 @@ function chatMsg(m,i){
  const body=m.text?`<p>${esc(m.text)}</p>`:m.pending?`<p class="chat-typing">${esc(m.working?m.working+'…':'Thinking')}<i></i><i></i><i></i></p>`:'';
  const asks=(m.confirms||[]).map(c=>`<div class="chat-confirm" data-state="${esc(c.state)}"><b>◆ ${esc(c.summary)}</b>${c.detail?`<pre>${esc(c.detail)}</pre>`:''}${
   c.state==='waiting'?`<span><button type="button" class="pg-primary" data-act="confirm-yes" data-id="${esc(c.id)}">Approve</button> <button type="button" class="pg-btn" data-act="confirm-no" data-id="${esc(c.id)}">Cancel</button></span>`:
+  c.state==='working'&&c.name==='computer_task'?`<span><small>Working… (or push the mouse into the top-left corner)</small> <button type="button" class="pg-btn pg-del" data-act="task-stop" data-id="${esc(c.id)}">Stop</button></span>`:
   `<small>${esc({working:'Working…',done:'Done',failed:'Did not work',cancelled:'Cancelled'}[c.state]||'')}</small>`}</div>`).join('');
  return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${asks}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
 }
@@ -217,6 +218,9 @@ async function systems(){
    <h3>Brain</h3>
    <label>Memory size<select id="sContext">${opt('auto','Auto: largest that fits your graphics card',s.context_mode!=='standard')}${opt('standard','Standard (6,144 tokens)',s.context_mode==='standard')}</select></label>
    <p class="pg-muted">Current: ${esc(s.context)} tokens. Bigger remembers more of the conversation and long documents. Deep thinking: 🧠 in Chat, or say “think carefully about…”.</p>
+   ${C.state!==undefined&&(await get('/api/status')).canPair?`<h3>Full access</h3>
+   <label class="pg-check"><input type="checkbox" id="sFull"${s.full_access?' checked':''}> Let her run commands and use the mouse and keyboard on this PC</label>
+   <p class="pg-muted">Only from this PC, never from your phone. She shows every command, and every mouse/keyboard task, for you to approve first. Stop a task by pushing the mouse into the top-left corner. Everything she runs is logged in full-access.log. Small AI models make mistakes: approve carefully.</p>`:''}
    <h3>Character</h3>
    <label>Expression<select id="sExpression">${opt('normal','Normal',s.expression_mode!=='expressive')}${opt('expressive','Expressive',s.expression_mode==='expressive')}</select></label>
    <button type="button" class="pg-btn pg-wide" data-act="expression-preview">Preview expression</button>
@@ -253,7 +257,7 @@ async function saveSystems(){
  data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;data.pc_access=v('sAccess').checked;
  if(v('sEngine').value!==s.voice_engine)data.voice_engine=v('sEngine').value;
  if(v('sVoice').value!==s.voice)data.voice=v('sVoice').value;
- data.expression_mode=v('sExpression').value;data.context_mode=v('sContext').value;data.briefing_time=v('sBriefAt').value;data.watch_folders=v('sWatchDocs').checked;data.watch_downloads=v('sWatchDl').checked;data.native_notifications=v('sNotifications').checked;
+ data.expression_mode=v('sExpression').value;data.context_mode=v('sContext').value;if(v('sFull'))data.full_access=v('sFull').checked;data.briefing_time=v('sBriefAt').value;data.watch_folders=v('sWatchDocs').checked;data.watch_downloads=v('sWatchDl').checked;data.native_notifications=v('sNotifications').checked;
  data.home_location=v('sHome').value.trim();
  if(v('sCal').value.trim())data.calendar_url=v('sCal').value.trim();
  if(v('sBrave').value.trim())data.brave_key=v('sBrave').value.trim();
@@ -270,6 +274,7 @@ D.body().addEventListener('click',async e=>{
  try{
   if(act==='complete'||act==='delete'||act==='snooze'){await post('/api/objectives',{action:act,id:Number(id)});objectives();}
   else if(act==='confirm-yes'||act==='confirm-no')C.confirm(id,act==='confirm-yes');
+  else if(act==='task-stop'){C.stopTask(id);btn.disabled=true;btn.textContent='Stopping…';}
   else if(act==='deep'){C.deep=!C.deep;btn.setAttribute('aria-pressed',String(C.deep));C.note(C.deep?'Deep thinking on: slower, more careful answers.':'Deep thinking off.');}
   else if(act==='edit-fact'){await post('/api/memory',{action:'edit',id:Number(id),text:document.querySelector('[data-fact="'+Number(id)+'"]').value});memory();}
   else if(act==='forget'){await post('/api/memory',{action:'forget',id:Number(id)});memory();}

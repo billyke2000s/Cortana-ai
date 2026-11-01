@@ -168,3 +168,5 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 - Stream event `{type:"confirm",id,label,summary,detail}`: an action is waiting for approval (create a file, tidy a folder, open an email draft). Nothing has happened yet.
 - `POST /api/confirm {id:str, approve:bool}` → `{ok, say, result?, refresh?}`. Runs (or drops) the held action once; ids expire after 10 minutes; unknown/expired ids → 400.
 - `POST /api/chat-stream` accepts optional `images`: up to 2 base64 PNG/JPEG/WebP pictures (≤1.8 MB each) for the current question only; the request limit is 4 MB only when pictures are attached (64 KB otherwise). Pictures are never stored.
+- Stream `confirm` events add `name` (the tool). `computer_task` cards can be stopped with `POST /api/cancel {request_id:"task_<id>"}` (between steps).
+- Settings GET/POST add `full_access` (boolean, default false). POST is refused from a paired phone; `run_command`/`computer_task` approvals via `POST /api/confirm` are refused unless they come from the PC.

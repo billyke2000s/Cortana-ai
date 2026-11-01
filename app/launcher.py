@@ -1,11 +1,41 @@
 """One-file entry point: local assistant, speech, browser and phone QR."""
 import sys,os,threading,queue,time,json,webbrowser,traceback
+from pathlib import Path
 from runtime import Runtime,DATA,qr_matrix
 from server import AppServer
+def crash_logging():
+    """The windowed exe has no console, so a crash left no trace. Python errors in any thread and native crashes
+    (faulthandler) now go to DATA/crash.log, newest at the end."""
+    import faulthandler
+    DATA.mkdir(parents=True,exist_ok=True)
+    log=open(DATA/'crash.log','a',encoding='utf8',buffering=1)
+    log.write(f"--- Cortana started {time.strftime('%Y-%m-%d %H:%M:%S')} (pid {os.getpid()})\n")
+    faulthandler.enable(log,all_threads=True)
+    def write(kind,exc_type,exc,tb):
+        log.write(f"{time.strftime('%H:%M:%S')} {kind}:\n"+''.join(traceback.format_exception(exc_type,exc,tb))+'\n')
+    sys.excepthook=lambda t,e,tb:write('unhandled error',t,e,tb)
+    threading.excepthook=lambda a:write(f'error in thread {a.thread.name if a.thread else "?"}',a.exc_type,a.exc_value,a.exc_traceback)
+    return log,write
+
+def clean_old_unpacks():
+    """Each run of the one-file exe unpacks into %TEMP%\\_MEIxxxx and deletes it on exit; if a helper still held a file,
+    Windows refused ('Failed to remove temporary directory') and the copy stayed behind. Remove earlier Cortana copies
+    (identified by Cortana's own files) so they don't pile up. Other apps' _MEI folders are never touched."""
+    import shutil,tempfile
+    mine=getattr(sys,'_MEIPASS',None)
+    if not mine:return
+    for d in Path(tempfile.gettempdir()).glob('_MEI*'):
+        try:
+            if str(d)!=mine and (d/'voice-profile'/'voice_profile.json').exists() and (d/'assets'/'cortana.glb').exists() and time.time()-d.stat().st_mtime>600:
+                shutil.rmtree(d,ignore_errors=True)
+        except OSError:pass
+
 def main():
     import argparse
     if sys.stdout is None:sys.stdout=open(os.devnull,'w')   # the windowed exe has no console; --headless prints status lines
     if sys.stderr is None:sys.stderr=open(os.devnull,'w')
+    crash_log,log_error=crash_logging()
+    threading.Thread(target=clean_old_unpacks,daemon=True).start()
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=0);parser.add_argument('--headless',action='store_true');parser.add_argument('--no-tunnel',action='store_true');parser.add_argument('--no-open',action='store_true');args=parser.parse_args()
     events=queue.Queue();runtime=Runtime(events.put)
     runtime.ask_model=not args.headless   # first launch: let the user pick the model (headless/tests keep the automatic pick)
@@ -42,7 +72,7 @@ def main():
         finally:runtime.close();server.shutdown();server.server_close()
         return
     import tkinter as tk
-    window=tk.Tk();window.title('Cortana');window.geometry('460x730');window.minsize(400,680);window.configure(bg='#041228')
+    window=tk.Tk();window.report_callback_exception=lambda t,e,tb:log_error('error in the launcher window',t,e,tb);window.title('Cortana');window.geometry('460x730');window.minsize(400,680);window.configure(bg='#041228')
     tk.Label(window,text='CORTANA',font=('Segoe UI',27,'bold'),fg='#9fe2ff',bg='#041228').pack(pady=(22,3))
     tk.Label(window,text='YOUR PC IS THE CORE. YOUR PHONE IS THE DISPLAY.',font=('Segoe UI',9),fg='#a9c6e6',bg='#041228').pack()
     status=tk.StringVar(value='Starting your assistant...')

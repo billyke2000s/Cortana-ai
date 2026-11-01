@@ -9,7 +9,7 @@ UNPAIRED_PAGE=('<!doctype html><meta name=viewport content="width=device-width,i
  '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#020814;color:#e8f4ff;font:16px system-ui;text-align:center;padding:24px">'
  '<div><h1 style="color:#9fe2ff;letter-spacing:.12em">CORTANA</h1><p>This phone isn\'t paired with this session.</p>'
  '<p style="color:#a9c6e6">Scan the QR code shown in the Cortana window on your PC.<br>Each time Cortana restarts it shows a new QR code, so old links stop working.</p></div>').encode()
-SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode','briefing_time','watch_folders','watch_downloads')
+SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode','briefing_time','watch_folders','watch_downloads','full_access')
 _weather_cache={'at':0,'key':None,'value':None}
 class AppServer(ThreadingHTTPServer):
     daemon_threads=True
@@ -64,7 +64,7 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/settings':
             store=runtime.store
             return self.send_json({**{k:store.get(k) for k in SETTINGS_PUBLIC},'model':runtime.model,'voice':store.get('voice','en_US-hfc_female-medium'),
-                'expression_mode':store.get('expression_mode','normal'),'context_mode':store.get('context_mode','auto'),'briefing_time':store.get('briefing_time',''),'watch_folders':store.get('watch_folders',True),'watch_downloads':store.get('watch_downloads',False),'context':runtime.context(),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
+                'expression_mode':store.get('expression_mode','normal'),'context_mode':store.get('context_mode','auto'),'briefing_time':store.get('briefing_time',''),'watch_folders':store.get('watch_folders',True),'watch_downloads':store.get('watch_downloads',False),'full_access':store.get('full_access',False),'context':runtime.context(),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
                 'voice_engine':store.get('voice_engine','piper'),'pc_controls':store.get('pc_controls',True),'tools_enabled':store.get('tools_enabled',True),'pc_access':store.get('pc_access',True),
                 'phone_access':store.get('phone_access','cloudflare'),'calendar_connected':bool(store.get('calendar_url')),'brave_connected':bool(store.get('brave_key')),
                 'voices':runtime.voice.catalog(),'models':runtime.installed_models(),'voice_status':runtime.voice.status})
@@ -100,7 +100,7 @@ class Handler(SimpleHTTPRequestHandler):
                 runtime.jobs.cancel(key);return self.send_json({'ok':True})
             if self.path=='/api/confirm':
                 if not isinstance(data.get('approve'),bool) or not isinstance(data.get('id'),str):raise ValueError('Send id and approve (true or false).')
-                return self.send_json(runtime.confirm(data['id'],data['approve']))
+                return self.send_json(runtime.confirm(data['id'],data['approve'],self.local))
             if self.path=='/api/metrics':
                 value=data.get('playback_ms')
                 if not isinstance(value,(int,float)) or not 0<=value<=600000:raise ValueError('Invalid playback timing.')
@@ -132,11 +132,11 @@ class Handler(SimpleHTTPRequestHandler):
                 images=check_images(data.get('images',[]))
                 if size>64000 and not images:raise ValueError('Request too large.')   # only pictures may use the bigger limit
                 def events():
-                    with runtime.jobs.scope(data.get('request_id')):yield from runtime.chat_stream(messages,think,images)
+                    with runtime.jobs.scope(data.get('request_id')):yield from runtime.chat_stream(messages,think,images,self.local)
                 return self.stream_events(events())
             if self.path=='/api/objectives':return self.send_json(objectives_action(runtime.store,data))
             if self.path=='/api/memory':return self.send_json(memory_action(runtime.store,data))
-            if self.path=='/api/settings':return self.send_json(settings_action(runtime,data))
+            if self.path=='/api/settings':return self.send_json(settings_action(runtime,data,self.local))
             if self.path=='/api/documents':return self.send_json(documents_action(runtime.store,data,self.local))
             if self.path=='/api/events':
                 if data.get('action')!='remove':raise ValueError('Unknown action.')
@@ -191,7 +191,7 @@ def memory_action(store,data):
     elif action=='clear_history':store.clear_messages()
     else:raise ValueError('Unknown action.')
     return {'facts':store.facts(),'messages':store.recent_messages(60)}
-def settings_action(runtime,data):
+def settings_action(runtime,data,local=False):
     store=runtime.store
     if 'model' in data:
         model=str(data['model'])
@@ -213,6 +213,10 @@ def settings_action(runtime,data):
         at=data['briefing_time']
         if not isinstance(at,str) or (at and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',at)):raise ValueError('Use a time like 07:30, or leave it empty.')
         store.set('briefing_time',at)
+    if 'full_access' in data:   # full access can only be switched on or off on the PC itself (D-038)
+        if not isinstance(data['full_access'],bool):raise ValueError('Use true or false for full_access.')
+        if not local:raise ValueError('Full access can only be changed on the PC.')
+        store.set('full_access',data['full_access'])
     for key in ('setup_complete','native_notifications','watch_folders','watch_downloads'):
         if key in data:
             if not isinstance(data[key],bool):raise ValueError('Use true or false for '+key+'.')

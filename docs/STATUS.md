@@ -2,6 +2,12 @@
 
 _Last updated: 1 November 2026._
 
+## 1.7.0: verification
+
+- Offline suite: 124 tests passed on Linux (Python 3.13), including full access (off by default, never offered to or approvable from a phone, refused if switched off after asking, exact command preview), the computer-task loop with a scripted model (actions, done, 15-step cap, corner stop, Stop/cancel, unclear replies), input validation, the crash log and old-unpack cleanup, and Whisper deciding every wake burst.
+- Browser check passed (layouts, approval card, Systems with the Full access switch).
+- **[Unverified]**: real mouse/keyboard input and the DPI-aware screenshot on Windows, how accurately the 9B picks click positions, real PowerShell commands, "Hey Cortana" in the owner's room, whether the crash log captures the crash the owner saw.
+
 ## 1.6.0: verification
 
 **Released:** [v1.6.0](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.6.0), built from `b7213f79d5095ed54a483115681782e72b51e9cd` in Actions run 41337204413 (UI, Windows build + offline suite + native checks + packaged reference-voice smoke, real `qwen3.5:4b` 6/6 and `qwen3.5:9b` 6/6 on CPU runners). `Cortana.exe` SHA-256 `647e7c12de50f26b1309af51fddcd6c10ce70493c34811bb86276e6067939c61`. Later documentation commits do not change the app.

@@ -575,7 +575,7 @@ class Runtime:
                     if chunk.get('error'):raise RuntimeError(chunk['error'])
                     yield chunk
 
-    def chat_stream(self,messages,think=False,images=None):
+    def chat_stream(self,messages,think=False,images=None,local=False):
         """Yield events as the reply is generated: sentence, tool, refresh, screen, done.
         think=True (or "think carefully..." in the question) lets the model reason before answering (D-032)."""
         import tools
@@ -617,7 +617,8 @@ class Runtime:
             if change:yield {'type':'refresh','what':change}
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'set_reminder','arguments':reminder}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'set_reminder'}]
-        offered=tools.tools_for(clean[-1]['content'],ctx);rounds=6 if think else 4   # deep thinking may chain more steps
+        full=bool(local) and self.store.get('full_access',False)   # full access: PC only, owner switched it on (D-038)
+        offered=tools.tools_for(clean[-1]['content'],ctx,full);rounds=6 if think else 4   # deep thinking may chain more steps
         done_in_code={n for n,v in (('set_timer',timer),('set_reminder',reminder)) if v}
         offered=[t for t in offered if t['function']['name'] not in done_in_code]   # never a second, duplicate timer/reminder
         any_calls=bool(done_in_code) or place is not None;nudged=False
@@ -662,8 +663,8 @@ class Runtime:
                     plan=tools.preview(name,args,self.store)
                     if 'error' in plan:result,change=plan,None
                     else:
-                        pid=self.hold(name,args)
-                        yield {'type':'confirm','id':pid,'label':tools.TOOL_LABELS.get(name,'WORKING'),'summary':plan['summary'],'detail':plan.get('detail','')}
+                        pid=self.hold(name,args,local)
+                        yield {'type':'confirm','id':pid,'name':name,'label':tools.TOOL_LABELS.get(name,'WORKING'),'summary':plan['summary'],'detail':plan.get('detail','')}
                         result,change={'status':'waiting for the user to approve','shown_on_screen':plan['summary'],
                                        'note':'Tell the user in one sentence what you prepared and to say yes or tap Approve. It has NOT been done yet.'},None
                 else:result,change=tools.run(name,args,self.store,llm)
@@ -682,22 +683,34 @@ class Runtime:
 
     PENDING_SECONDS=600
 
-    def hold(self,name,args):
+    def hold(self,name,args,local=False):
         """Keep an action that needs approval; returns its one-time id."""
         if not hasattr(self,'pending'):self.pending={}
         now=time.monotonic()
         self.pending={k:v for k,v in self.pending.items() if now-v['at']<self.PENDING_SECONDS}
         while len(self.pending)>=20:self.pending.pop(next(iter(self.pending)))
-        pid=secrets.token_urlsafe(12);self.pending[pid]={'name':name,'args':args,'at':now};return pid
+        pid=secrets.token_urlsafe(12);self.pending[pid]={'name':name,'args':args,'at':now,'local':bool(local)};return pid
 
-    def confirm(self,pid,approve):
-        """Run (approve=True) or drop a held action, once. Returns {say, result?, refresh?}."""
+    def confirm(self,pid,approve,local=False):
+        """Run (approve=True) or drop a held action, once. Returns {say, result?, refresh?}.
+        Full-access actions are only approved on the PC itself, while full access is still switched on."""
         import tools
+        entry=getattr(self,'pending',{}).get(str(pid))
+        if entry and entry['name'] in tools.FULL and not (local and entry['local']):
+            raise ValueError('Approve this on the PC itself.')
         entry=getattr(self,'pending',{}).pop(str(pid),None)
         if not entry or time.monotonic()-entry['at']>=self.PENDING_SECONDS:
             raise ValueError('That request has expired. Ask me again.')
         if not approve:return {'ok':True,'say':'Cancelled. Nothing was changed.'}
+        if entry['name'] in tools.FULL and not self.store.get('full_access',False):
+            raise ValueError('Full access was switched off.')
         llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)
+        if entry['name']=='computer_task':   # runs here so Stop (POST /api/cancel {request_id:"task_<id>"}) can end it
+            import control
+            with self.jobs.scope('task_'+re.sub(r'[^A-Za-z0-9_-]','',str(pid))):
+                try:result=control.computer_task(entry['args'].get('goal',''),llm,self.jobs.check)
+                except (RuntimeError,ValueError) as e:result={'error':str(e)[:200]}
+            return {'ok':'error' not in result and bool(result.get('done')),'say':tools.done_text('computer_task',result),'result':result,'refresh':None}
         result,change=tools.run(entry['name'],entry['args'],self.store,llm,approved=True)
         return {'ok':'error' not in result,'say':tools.done_text(entry['name'],result),'result':result,'refresh':change}
 

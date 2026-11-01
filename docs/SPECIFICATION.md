@@ -167,3 +167,10 @@ Every minute the launcher checks, without the page open:
 - **Finished downloads** (opt-in): new files at the top level of the user's Downloads folder, ignoring partial downloads (`.crdownload`, `.part`, …) and files changed in the last 15 seconds.
 - **Daily briefing** (opt-in, Systems → Briefing time): once a day at that local time (or within three hours after, if the PC was off), the page opens Mission Briefing and reads it aloud.
 Notices use the alert path: spoken in the open page and shown as a Windows pop-up titled "Cortana".
+
+## 13. Full access (1.7, opt-in)
+
+Systems → **Full access** (PC only, off by default). When on, requests made on the PC also get:
+- `run_command(command, why?)`: one PowerShell command, shown exactly on the approval card; runs hidden in the user's home folder with a 120-second limit; exit code, the last 2,500 characters of output and any errors come back.
+- `computer_task(goal)`: the goal is approved once; then up to 15 rounds of: screenshot (whole primary screen, scaled to 1280 px) → the model returns one JSON action (click, double_click, right_click, type, press keys, scroll, wait, done, fail) → it is performed with Windows SendInput. Pushing the mouse into the top-left corner stops it before the next action; **Stop** on the card stops it between steps. The model is told never to type passwords or payment details.
+Every command and step is appended to `full-access.log` in the data folder. A paired phone never gets these tools and cannot approve them or switch the mode.

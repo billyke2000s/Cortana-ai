@@ -2,9 +2,14 @@
 
 All notable changes. Dates are UK time.
 
-## [1.6.1] - 2026-11-01
+## [1.7.0] - 2026-11-01
+
+### Added
+- **Full access mode** (Systems → Full access, off by default, PC only): she can run PowerShell commands and use the mouse and keyboard to do things in any app ("play something chill on Spotify"). Every command, and every mouse/keyboard task, is shown for approval first; push the mouse into the top-left corner or press Stop to end a task; everything is logged in `full-access.log`.
+- Crash log: errors in any part of the app and native crashes are written to `crash.log` in the Cortana data folder.
 
 ### Fixed
+- Old copies of the app left in the Temp folder after "Failed to remove temporary directory" are cleaned up on the next start.
 - "Hey Cortana" works again. Since 1.5 a small keyword detector screened every burst first and threw away clear "Hey Cortana"s before Whisper heard them; Whisper decides again, as in 1.4. Interrupting her while she speaks also uses Whisper now.
 
 ## [1.6.0] - 2026-11-01
