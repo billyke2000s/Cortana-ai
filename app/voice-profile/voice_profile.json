@@ -1,0 +1,8 @@
+{
+  "engine": "sherpa-onnx ZipVoice-Distill int8 + Vocos 24 kHz",
+  "reference_audio": "reference.wav",
+  "reference_text": "An explosion of sufficient size will help destabilize the ring and will cut through a number of primary systems.",
+  "steps": 8,
+  "pitch_shift": false,
+  "status": "experimental candidate; not an official Cortana model"
+}

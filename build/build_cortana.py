@@ -13,7 +13,7 @@ work.mkdir(parents=True, exist_ok=True)
 if os.name != 'nt':
     sys.exit('Build on Windows: Cortana.exe uses Windows speech, keyboard and process APIs.')
 
-needed = {'PyInstaller': 'pyinstaller', 'qrcode': 'qrcode', 'dateutil': 'python-dateutil', 'tzdata': 'tzdata', 'pypdf': 'pypdf'}
+needed = {'PyInstaller': 'pyinstaller', 'qrcode': 'qrcode', 'dateutil': 'python-dateutil', 'tzdata': 'tzdata', 'pypdf': 'pypdf', 'sherpa_onnx': 'sherpa-onnx==2.0.1', 'numpy': 'numpy'}
 missing = [pkg for mod, pkg in needed.items() if importlib.util.find_spec(mod) is None]
 if missing:
     print('Installing', ', '.join(missing))
@@ -25,14 +25,14 @@ if not (app / 'assets' / 'cortana.glb').exists():
 WEB_FILES = ['index.html', 'app.js', 'pages.js', 'avatar.js', 'responsive.css', 'mic-worklet.js', 'speech.ps1', 'manifest.webmanifest', 'app-icon.svg']
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onefile', '--windowed', '--name', 'Cortana',
         '--distpath', str(dist), '--workpath', str(work / 'pyinstaller'), '--specpath', str(work), '--paths', str(app)]
-for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata']:
+for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'sherpa_onnx', 'sherpa_onnx_core', 'numpy']:
     args += ['--hidden-import', name]
-args += ['--collect-data', 'tzdata']
-for name in ['PIL', 'numpy', 'torch', 'cv2', 'matplotlib', 'scipy', 'pandas']:
+args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx', '--collect-all', 'sherpa_onnx_core']
+for name in ['PIL', 'torch', 'cv2', 'matplotlib', 'scipy', 'pandas']:
     args += ['--exclude-module', name]
 for name in WEB_FILES:
     args += ['--add-data', str(app / name) + os.pathsep + '.']
-for name in ['assets', 'vendor']:
+for name in ['assets', 'vendor', 'voice-profile']:
     args += ['--add-data', str(app / name) + os.pathsep + name]
 args += [str(app / 'launcher.py')]
 

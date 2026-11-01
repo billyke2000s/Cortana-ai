@@ -18,6 +18,11 @@ def main():
     def startup():
         try:
             threading.Thread(target=runtime.voice.prepare,daemon=True).start()   # voice downloads/warms up alongside the AI
+            def auxiliaries():
+                try:runtime.neural.prepare_wake()
+                except Exception:runtime.neural.wake_status='Keyword detector unavailable; Whisper fallback active.'
+                runtime.lips.prepare(runtime.update)
+            threading.Thread(target=auxiliaries,daemon=True).start()
             runtime.ensure_ai()
             if runtime.closing.is_set():return
             runtime.ensure_stt()

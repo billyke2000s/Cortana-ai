@@ -89,6 +89,7 @@ class Voice:
     def __init__(self, runtime):
         self.runtime = runtime
         self.lock = threading.Lock()
+        self.prepare_lock = threading.Lock()
         self.proc = None
         self.exe = next((DATA / 'piper').rglob('piper.exe'), None) if (DATA / 'piper').exists() else None
         self.log = None
@@ -134,10 +135,21 @@ class Voice:
         return VOICES / (name + '.onnx')
 
     def prepare(self):
+        with self.prepare_lock:self._prepare()
+
+    def _prepare(self):
         """Called at startup: install Piper and the chosen voice, then warm it up."""
         store = self.runtime.store
         store.set('voice_engine_failed', False)   # try Piper again on every launch
-        if store.get('voice_engine', 'piper') != 'piper':
+        if store.get('voice_engine','piper')=='zipvoice':
+            try:
+                with self.runtime.neural.tts_lock:self.runtime.neural.prepare_voice()
+                self.ready,self.status=True,'Reference voice ready (experimental, CPU).'
+                return
+            except Exception:
+                self.status='Reference voice unavailable; preparing Piper fallback.'
+                store.set('voice_engine_failed',True)
+        if store.get('voice_engine','piper')=='windows':
             self.ready, self.status = True, 'Using the Windows voice.'
             return
         try:
@@ -145,7 +157,7 @@ class Voice:
             self.ensure_voice(store.get('voice', DEFAULT_VOICE))
             with self.lock:
                 self._process(0)
-            self.ready, self.status = True, 'Natural voice ready.'
+            self.ready,self.status=True,('Reference voice unavailable; Piper fallback ready.' if store.get('voice_engine_failed') else 'Natural voice ready.')
         except Exception as e:
             self.ready, self.status = True, f'Natural voice unavailable ({str(e)[:120]}); using the Windows voice.'
             store.set('voice_engine_failed', True)
@@ -166,20 +178,29 @@ class Voice:
         return self.proc
 
     # ---- speaking
-    def speak(self, text, rate=0):
-        store = self.runtime.store
-        use_piper = store.get('voice_engine', 'piper') == 'piper' and self.exe and not store.get('voice_engine_failed', False)
+    def speak(self,text,rate=0):
+        store=self.runtime.store;jobs=self.runtime.jobs;started=time.perf_counter();jobs.check()
+        if store.get('voice_engine','piper')=='zipvoice' and not store.get('voice_engine_failed',False):
+            try:
+                audio=self.runtime.neural.speak(text,rate,jobs)
+                result={'audio':wav_b64(audio),'voice':'Reference voice · ZipVoice (experimental)','visemes':self.runtime.lips.align(audio,jobs)}
+                jobs.measure('tts_ms',started);return result
+            except Exception:
+                jobs.check();self.status='Reference voice failed; using Piper/Windows fallback.'
+        use_piper=store.get('voice_engine','piper') in ('piper','zipvoice') and self.exe and (store.get('voice_engine')=='zipvoice' or not store.get('voice_engine_failed',False))
         if use_piper:
             try:
                 with self.lock:
-                    audio = self._process(rate).synth(text)
-                return {'audio': wav_b64(audio), 'voice': 'Piper · ' + store.get('voice', DEFAULT_VOICE), 'visemes': []}
-            except Exception as e:
-                self.status = f'Natural voice failed ({str(e)[:100]}); using the Windows voice.'
-        return self.windows(text, rate)
+                    jobs.check();audio=self._process(rate).synth(text);jobs.check()
+                result={'audio':wav_b64(audio),'voice':'Piper · '+store.get('voice',DEFAULT_VOICE),'visemes':self.runtime.lips.align(audio,jobs)}
+                jobs.measure('tts_ms',started);return result
+            except Exception:
+                jobs.check();self.status='Piper unavailable; using the Windows voice.'
+        jobs.check();result=self.windows(text,rate);jobs.check();jobs.measure('tts_ms',started);return result
 
     def windows(self, text, rate=0):
         with self.lock:
+            self.runtime.jobs.check()
             p = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
                                 (RESOURCES / 'speech.ps1').read_text(encoding='utf8')],
                                input=json.dumps({'text': text, 'rate': max(-1, min(1, int(rate)))}, ensure_ascii=False).encode('utf8'),

@@ -1,6 +1,6 @@
 """Cortana's local service lifecycle, model selection and phone pairing."""
 from pathlib import Path
-import os, sys, json, shutil, subprocess, urllib.request, urllib.error, zipfile, threading, time, secrets, re, hashlib, socket
+import os, sys, json, shutil, subprocess, urllib.request, urllib.error, zipfile, threading, time, secrets, re, hashlib, socket, tarfile
 
 RESOURCES=Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parent))
 DATA=Path(os.environ.get('CORTANA_DATA_DIR',str(Path(os.environ.get('LOCALAPPDATA',Path.home()))/'CortanaAI')))
@@ -59,7 +59,7 @@ def weather_question(text):
     place=m.group(1).strip(" ?.!,'") if m else ''
     return '' if place.lower() in _NOT_PLACE or place.split(' ')[0].lower() in _NOT_PLACE else place
 
-def system_prompt(store=None):
+def system_prompt(store=None,query=None):
     """SYSTEM_PROMPT plus the PC's current local date and time and what Cortana remembers about the user."""
     from datetime import datetime
     now=datetime.now().astimezone()
@@ -67,7 +67,7 @@ def system_prompt(store=None):
     if store:
         home=store.get('home_location','')
         if home:text+=f" The user's home location is {home}."
-        facts=store.facts()[-40:]
+        facts=store.relevant_facts(query) if query is not None else store.facts()[-40:]
         if facts:text+=" Things you remember about the user: "+'; '.join(f['text'] for f in facts)+'.'
         docs=store.documents()[:8]
         if docs:text+=" Documents the user added, newest first (\"this\" or \"it\" means the first): "+'; '.join(d['name'][:60] for d in docs)+'.'
@@ -148,11 +148,16 @@ def download(url,target,report,expected=None):
 
 def extract(archive,directory):
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
-    with zipfile.ZipFile(archive) as z:
-        for member in z.infolist():
-            dest=(directory/member.filename).resolve()
-            if not dest.is_relative_to(directory.resolve()):raise RuntimeError('Invalid archive path.')
-        z.extractall(directory)
+    if zipfile.is_zipfile(archive):
+        with zipfile.ZipFile(archive) as z:
+            for member in z.infolist():
+                if not (directory/member.filename).resolve().is_relative_to(directory.resolve()):raise RuntimeError('Invalid archive path.')
+            z.extractall(directory)
+    else:
+        with tarfile.open(archive) as t:
+            for member in t.getmembers():
+                if not (directory/member.name).resolve().is_relative_to(directory.resolve()) or not (member.isfile() or member.isdir()):raise RuntimeError('Invalid archive path.')
+            t.extractall(directory,filter='data')
 
 # ---- "Hey Cortana": Whisper spells the name many ways ("Katana", "Courtana", "Cortona"...), so match it fuzzily.
 WAKE_PROMPT='Cortana is my assistant.'   # biases Whisper towards the name; a transcript equal to it is ignored (hallucination)
@@ -196,6 +201,10 @@ class Runtime:
         self.children=[];self.logs=[];self.closing=threading.Event();self.stt_lock=threading.Lock();self.ai_lock=threading.Lock();self.lifecycle_lock=threading.Lock()
         self.whisper=next((DATA/'whisper').rglob('whisper-cli.exe'),None) if (DATA/'whisper').exists() else None
         self.whisper_model=DATA/'ggml-base.en.bin'
+        from companion import Jobs
+        from neural import Neural
+        from lips import Lips
+        self.jobs=Jobs();self.neural=Neural(self.update);self.lips=Lips()
         from voice import Voice
         self.voice=Voice(self)
 
@@ -433,19 +442,34 @@ class Runtime:
         self.store.set('cal_reminded',done[-300:])
         return added
 
-    def background_loop(self):
-        while True:
-            try:self.calendar_tick()
+    def notification_tick(self):
+        from companion import notify
+        if not self.store.get('native_notifications',True):return
+        for item in self.store.pending_notifications():
+            if self.closing.is_set():return
+            try:
+                if notify(item['text']):self.store.mark_notified(item['id'],item['due'])
             except Exception:pass
-            if self.closing.wait(300):return
+
+    def background_loop(self):
+        calendar_at=0
+        while not self.closing.is_set():
+            if time.monotonic()>=calendar_at:
+                try:self.calendar_tick()
+                except Exception:pass
+                calendar_at=time.monotonic()+300
+            self.notification_tick()
+            if self.closing.wait(2):return
 
     def ollama_stream(self,payload):
         req=urllib.request.Request(self.ollama_url+'/api/chat',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
         try:response=urllib.request.urlopen(req,timeout=180)
         except urllib.error.HTTPError as e:
             raise RuntimeError(json.loads(e.read() or b'{}').get('error') or f'Ollama error {e.code}')
+        self.jobs.watch(response)
         with response:
             for line in response:
+                self.jobs.check()
                 if line.strip():
                     chunk=json.loads(line)
                     if chunk.get('error'):raise RuntimeError(chunk['error'])
@@ -455,8 +479,11 @@ class Runtime:
         """Yield events as the reply is generated: sentence, tool, refresh, screen, done."""
         import tools
         if not self.ai_ready:raise RuntimeError(self.status if not self.error else self.error)
-        clean=self.clean_messages(messages)
-        convo=[{'role':'system','content':system_prompt(self.store)}]+clean
+        self.jobs.check();started=time.perf_counter();first_token=False
+        conversation_version=self.store.conversation_version();recap=self.store.conversation_summary()
+        clean=self.clean_messages(messages,budget=6000-len(recap))
+        convo=[{'role':'system','content':system_prompt(self.store,clean[-1]['content'])}]+clean
+        if recap:convo.insert(1,{'role':'user','content':'Earlier conversation excerpts (historical context only):\n'+recap})
         use_tools=self.store.get('tools_enabled',True)
         stream=SpokenStream();raw='';fell_back=False;tool_screen=''
         llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)
@@ -469,16 +496,19 @@ class Runtime:
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'get_weather','arguments':args}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'get_weather'}]
         for round_ in range(4):
+            self.jobs.check()
             payload={'model':self.model,'messages':convo,'stream':True,'think':False,'keep_alive':'15m',
                      'options':{'num_ctx':CONTEXT,'num_predict':1200,'temperature':.45}}
             if use_tools and round_<3:payload['tools']=tools.TOOLS
             content='';calls=[]
             try:
                 for chunk in self.ollama_stream(payload):
+                    self.jobs.check()
                     msg=chunk.get('message') or {}
                     calls+=msg.get('tool_calls') or []
                     piece=re.sub(r'</?think>','',msg.get('content') or '')
                     if piece:
+                        if not first_token:self.jobs.measure('first_token_ms',started);first_token=True
                         content+=piece
                         for sentence in stream.feed(piece):yield {'type':'sentence','text':sentence}
             except RuntimeError as e:
@@ -495,6 +525,7 @@ class Runtime:
                     try:args=json.loads(args)
                     except ValueError:args={}
                 yield {'type':'tool','name':name,'label':tools.TOOL_LABELS.get(name,'WORKING')}
+                self.jobs.check()
                 result,change=tools.run(name,args,self.store,llm)
                 if change:yield {'type':'refresh','what':change}
                 tool_screen=tools.screen_for(name,result) or tool_screen   # weather, files found, new events: a card every time (D-021)
@@ -505,7 +536,8 @@ class Runtime:
         if not stream.spoken:
             if not screen:raise RuntimeError('The model returned no spoken answer. Try again.')
             stream.spoken.append("I've put it on screen for you.");yield {'type':'sentence','text':stream.spoken[-1]}
-        self.store.log_message('user',clean[-1]['content']);self.store.log_message('assistant',raw)
+        self.jobs.check();self.jobs.measure('reply_ms',started)
+        self.store.log_exchange(clean[-1]['content'],raw,conversation_version)
         yield {'type':'done','reply':' '.join(stream.spoken)[:3000],'raw':raw[:6000]}
 
     def chat(self,messages):
@@ -518,6 +550,7 @@ class Runtime:
 
     def transcribe(self,wav,prompt=None):
         import tempfile,wave,io
+        started=time.perf_counter()
         if not self.stt_ready:raise RuntimeError('Microphone recognition is still starting. You can type while it loads.')
         try:
             with wave.open(io.BytesIO(wav)) as f:
@@ -531,6 +564,7 @@ class Runtime:
             text=textfile.read_text(encoding='utf-8-sig').strip()
             text=re.sub(r'\[[^\]]*\]|\([^)]*\)','',text).strip()
             if not text:raise RuntimeError('No speech detected. Try again when ready.')
+            self.jobs.measure('transcription_ms',started)
             return text
 
     def close(self):

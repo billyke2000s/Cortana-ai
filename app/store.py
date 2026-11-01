@@ -1,5 +1,5 @@
 """Cortana's local storage on this PC (SQLite): settings, remembered facts, conversation log, timers, reminders and tasks."""
-import sqlite3, threading, time, json
+import sqlite3, threading, time, json, re, math
 
 SCHEMA = '''
 PRAGMA journal_mode=WAL;
@@ -28,6 +28,9 @@ class Store:
         self.lock = threading.Lock()
         with self.lock:
             self.db.executescript(SCHEMA)
+            if 'notified' not in {r[1] for r in self.db.execute('PRAGMA table_info(items)')}:
+                self.db.execute('ALTER TABLE items ADD COLUMN notified INTEGER NOT NULL DEFAULT 0')
+            self.db.commit()
 
     def close(self):
         with self.lock:
@@ -69,6 +72,32 @@ class Store:
         self.q('DELETE FROM facts WHERE id NOT IN (SELECT id FROM facts ORDER BY id DESC LIMIT ?)', (MAX_FACTS,))
         return fid
 
+    def edit_fact(self,fact_id,text):
+        text=' '.join(str(text).split())[:300]
+        if not text:raise ValueError('Nothing to remember.')
+        if not self.q('SELECT id FROM facts WHERE id=?',(int(fact_id),)):raise ValueError('That memory no longer exists.')
+        self.q('UPDATE facts SET text=?,created=? WHERE id=?',(text,time.time(),int(fact_id)))
+
+    def relevant_facts(self,query,limit=12,budget=1800):
+        stop={'the','and','what','with','that','this','about','have','does','from','your','please','user'}
+        words=lambda t:set(w for w in re.findall(r"[a-z0-9']+",t.lower()) if len(w)>2 and w not in stop)
+        wanted=words(query);facts=self.facts()
+        counts={w:sum(w in words(f['text']) for f in facts) for w in wanted}
+        score=lambda f:sum(math.log(1+len(facts)/(1+counts[w])) for w in wanted & words(f['text']))
+        output=[]
+        for f in sorted(facts,key=lambda f:(score(f),f['created'],f['id']),reverse=True):
+            if len(output)>=limit:break
+            if len(f['text'])+2>budget:continue
+            output.append(f);budget-=len(f['text'])+2
+        return output
+
+    def fact_conflicts(self):
+        groups={}
+        for f in self.facts():
+            m=re.match(r"(.{3,90}?) (?:is|are|=) (.+)",f['text'],re.I)
+            if m:groups.setdefault(m[1].lower().strip(),[]).append(f['id'])
+        return [ids for ids in groups.values() if len(ids)>1]
+
     def forget_fact(self, fact_id=None, match=None):
         if fact_id is not None:
             return self.q('DELETE FROM facts WHERE id=? RETURNING id', (int(fact_id),))
@@ -89,8 +118,36 @@ class Store:
     def recent_messages(self, limit=40):
         return list(reversed(self.q('SELECT id,role,content,created FROM messages ORDER BY id DESC LIMIT ?', (int(limit),))))
 
+    def conversation_version(self):return self.get('conversation_version',0)
+
+    def log_exchange(self,user,assistant,version):
+        # A reply completing after Clear History cannot bring the old conversation back.
+        with self.lock:
+            row=self.db.execute("SELECT value FROM settings WHERE key='conversation_version'").fetchone()
+            if (json.loads(row[0]) if row else 0)!=version:return
+            now=time.time()
+            self.db.executemany('INSERT INTO messages(role,content,created) VALUES(?,?,?)',
+                [('user',str(user)[:6000],now),('assistant',str(assistant)[:6000],now)])
+            self.db.execute('DELETE FROM messages WHERE id NOT IN (SELECT id FROM messages ORDER BY id DESC LIMIT ?)',(MAX_MESSAGES,))
+            self.db.commit()
+
     def clear_messages(self):
-        self.q('DELETE FROM messages')
+        with self.lock:
+            row=self.db.execute("SELECT value FROM settings WHERE key='conversation_version'").fetchone()
+            version=(json.loads(row[0]) if row else 0)+1
+            self.db.execute('DELETE FROM messages')
+            self.db.execute("INSERT INTO settings(key,value) VALUES('conversation_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(json.dumps(version),))
+            self.db.commit()
+
+    def conversation_summary(self,budget=800):
+        rows=self.q('SELECT role,content FROM messages ORDER BY id DESC LIMIT 30 OFFSET 16')
+        lines=[];size=0
+        for m in rows:
+            text=' '.join(m['content'].split('[[SCREEN]]')[0].split())[:130]
+            line=m['role']+': '+text
+            if size+len(line)+1>budget:break
+            lines.append(line);size+=len(line)+1
+        return '\n'.join(reversed(lines))
 
     # ---- timers, reminders, tasks
     def add_item(self, kind, text, due=None):
@@ -128,6 +185,22 @@ class Store:
             self.q('UPDATE items SET announced=1, done=1 WHERE id=?', (item['id'],))
         elif item:
             self.q('UPDATE items SET announced=1 WHERE id=?', (item['id'],))
+
+    def snooze(self,item_id,minutes=10):
+        minutes=float(minutes)
+        if not math.isfinite(minutes) or not 1<=minutes<=1440:raise ValueError('Snooze for 1 to 1440 minutes.')
+        item=self.item(item_id)
+        if not item or item['kind'] not in ('timer','reminder'):raise ValueError('Choose a timer or reminder.')
+        self.q('UPDATE items SET due=?,done=0,announced=0,notified=0 WHERE id=?',(time.time()+minutes*60,int(item_id)))
+
+    def pending_notifications(self):
+        return self.q('SELECT * FROM items WHERE done=0 AND announced=0 AND notified=0 AND due<=? ORDER BY due',(time.time(),))
+
+    def mark_notified(self,item_id,due):
+        self.q('UPDATE items SET notified=1 WHERE id=? AND due=?',(int(item_id),float(due)))
+
+    def recent_alerts(self):
+        return self.q("SELECT * FROM items WHERE kind='timer' AND announced=1 AND due>? ORDER BY due DESC LIMIT 20",(time.time()-86400,))
 
     # ---- documents the user added (text is stored in pieces for searching)
     def add_document(self, name, text, pieces, pages=None, path=None):

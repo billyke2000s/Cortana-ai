@@ -31,3 +31,6 @@ Thumbs.db
 .vscode/
 .idea/
 live-check-report.json
+
+# Scoped private reference requested for this release. Model weights remain ignored.
+!app/voice-profile/reference.wav
