@@ -665,3 +665,26 @@ class TakeOverTests(unittest.TestCase):
         with patch.object(control,'log'):
             r=control.computer_task('x',lambda *a,**k:next(replies),lambda:None,shoot=lambda:('SHOT',(1280,720)),act=act,stop=stop)
         self.assertEqual(r['done'],'ok')   # her own moves to the corner never stopped her
+
+class VisibleControlTests(unittest.TestCase):
+    """Blue border/cursor hook, fast in-app screenshot encoding and the cursor file."""
+    def test_show_hook_always_switches_off(self):
+        import control;seen=[]
+        def boom(prompt,images=None,max_tokens=0):raise RuntimeError('model gone')
+        with patch.object(control,'log'),self.assertRaises(RuntimeError):
+            control.computer_task('x',boom,lambda:None,shoot=lambda:('S',(10,10)),act=lambda s,z:None,stop=lambda:False,show=seen.append)
+        self.assertEqual(seen,[True,False])   # the border and blue cursor go away even when the task fails
+
+    def test_png_encoding_round_trips(self):
+        import control,zlib,struct
+        w,h=3,2;bgra=bytes([10,20,30,255]*(w*h))
+        rgb=control.bgra_to_rgb(bgra,w,h);self.assertEqual(bytes(rgb[:3]),bytes([30,20,10]))
+        png=control.png_bytes(rgb,w,h);self.assertEqual(control.png_size(base.base64.b64encode(png).decode()),(w,h))
+        idat=png[png.index(b'IDAT')+4:png.index(b'IEND')-8];raw=zlib.decompress(idat)
+        self.assertEqual(raw,(b'\x00'+bytes([30,20,10])*w)*h)
+
+    def test_cursor_file_is_a_valid_cur(self):
+        import control,struct
+        cur=control.cursor_file();self.assertEqual(struct.unpack('<HHH',cur[:6]),(0,2,1))
+        size,=struct.unpack('<I',cur[14:18]);offset,=struct.unpack('<I',cur[18:22]);self.assertEqual(offset,22);self.assertEqual(len(cur),22+size)
+        hotspot=struct.unpack('<HH',cur[10:14]);self.assertEqual(hotspot,(0,0))   # the click point is the arrow tip

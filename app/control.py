@@ -255,8 +255,14 @@ def grab_screen(max_width=1280):
 # ---- Cortana-blue cursor while she has control
 def cursor_file(size=32):
     """A Cortana-blue arrow as .cur bytes (32-bit BGRA with alpha, hotspot at the tip)."""
-    def inside(x, y):   # classic arrow: a triangle with a short tail
-        return (x <= y * 0.62 and y <= 22 and x >= 0) or (9 <= y <= 30 and 0.42 * (y - 9) + 6 <= x <= 0.42 * (y - 9) + 10 and x <= 15)
+    arrow = [(0, 0), (0, 24), (6, 18.5), (10.5, 28), (14, 26.5), (9.5, 17.5), (17, 17.5)]   # classic pointer, tip at 0,0
+
+    def inside(x, y):   # point-in-polygon at the pixel centre
+        px, py, hit = x + .5, y + .5, False
+        for (x1, y1), (x2, y2) in zip(arrow, arrow[1:] + arrow[:1]):
+            if (y1 > py) != (y2 > py) and px < x1 + (py - y1) * (x2 - x1) / (y2 - y1):
+                hit = not hit
+        return hit
     rows = []
     for y in range(size - 1, -1, -1):   # bitmap rows are stored bottom-up
         row = bytearray()

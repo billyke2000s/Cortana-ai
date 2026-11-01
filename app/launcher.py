@@ -81,9 +81,42 @@ def main():
     tk.Label(window,text='Scan with your phone camera.\nKeep this app open while using Cortana.',font=('Segoe UI',11),fg='#d6eaff',bg='#041228').pack(pady=10)
     tk.Button(window,text='Open Cortana on this PC',command=lambda:webbrowser.open(runtime.local_url),font=('Segoe UI',11),bg='#16436c',fg='white',relief='flat',padx=20,pady=9).pack(pady=5)
     tk.Label(window,text='Phone access uses a private HTTPS link (Cloudflare or Tailscale).\nThe QR code grants access: keep it private.\nAI, speech and memory stay on this PC.',font=('Segoe UI',9),fg='#96b2cf',bg='#041228').pack(pady=12)
-    rendered=None
+    rendered=None;overlay=None
+    def show_overlay():
+        """Glowing blue frame round the whole screen while she has control. Click-through, always on top, and hidden from
+        screenshots (her own included), so it never gets in her way or yours."""
+        o=tk.Toplevel(window);o.overrideredirect(True);o.attributes('-topmost',True)
+        sw,sh=o.winfo_screenwidth(),o.winfo_screenheight();o.geometry(f'{sw}x{sh}+0+0')
+        key='#010203';o.configure(bg=key)
+        try:o.attributes('-transparentcolor',key)
+        except tk.TclError:pass
+        c=tk.Canvas(o,width=sw,height=sh,bg=key,highlightthickness=0);c.pack()
+        frames=[c.create_rectangle(w/2+i,w/2+i,sw-w/2-i,sh-w/2-i,outline=col,width=w) for i,(w,col) in enumerate([(16,'#0b3a73'),(9,'#1c78d8'),(3,'#9fe2ff')])]
+        c.create_rectangle(sw/2-250,10,sw/2+250,44,fill='#06213f',outline='#5cc8ff',width=2)
+        c.create_text(sw/2,27,text='◆  CORTANA HAS CONTROL  ·  move your mouse to take over',fill='#bfeeff',font=('Segoe UI',12,'bold'))
+        o.update_idletasks()
+        try:
+            import ctypes
+            u=ctypes.windll.user32;hwnd=u.GetParent(o.winfo_id()) or o.winfo_id()
+            u.SetWindowLongW(hwnd,-20,u.GetWindowLongW(hwnd,-20)|0x80000|0x20|0x80|0x08000000)   # layered, click-through, no taskbar, no focus
+            u.SetWindowDisplayAffinity(hwnd,0x11)   # WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+): not in screenshots
+        except Exception:pass
+        phase=[0]
+        def pulse():
+            if not o.winfo_exists():return
+            phase[0]=(phase[0]+1)%20;glow=['#1c78d8','#2a8cf0','#3aa2ff','#2a8cf0'][phase[0]//5]
+            c.itemconfigure(frames[1],outline=glow);o.after(120,pulse)
+        pulse();return o
+    try:
+        import control;control.restore_cursor()   # if a previous run crashed mid-task, give the user their own cursor back
+    except Exception:pass
     def poll():
-        nonlocal rendered
+        nonlocal rendered,overlay
+        if runtime.control_visible and overlay is None:
+            try:overlay=show_overlay()
+            except Exception as e:log_error('could not draw the control border',type(e),e,e.__traceback__);runtime.control_visible=False
+        elif not runtime.control_visible and overlay is not None:
+            overlay.destroy();overlay=None
         try:
             while True:status.set(events.get_nowait())
         except queue.Empty:pass
@@ -97,7 +130,11 @@ def main():
         if not runtime.phone_url and rendered:
             rendered=None;canvas.delete('all');canvas.create_text(140,140,text='Phone disconnected.\nRestart Cortana to reconnect.',fill='#a9c6e6',width=230)
         window.after(250,poll)
-    def close():window.destroy();runtime.close();server.shutdown();server.server_close()
+    def close():
+        try:
+            import control;control.restore_cursor()
+        except Exception:pass
+        window.destroy();runtime.close();server.shutdown();server.server_close()
     window.protocol('WM_DELETE_WINDOW',close);poll();window.mainloop()
 if __name__=='__main__':
     try:main()

@@ -4,6 +4,13 @@ All notable changes. Dates are UK time.
 
 ## [1.7.1] - 2026-11-01
 
+### Added
+- You can see when she has control: a glowing blue frame round the whole screen ("CORTANA HAS CONTROL · move your mouse to take over") and a Cortana-blue cursor. The frame is click-through and hidden from screenshots; your own cursor comes back when she finishes, fails or is stopped (and on the next start if the app crashed mid-task).
+- Faster mouse/keyboard steps: the screen is captured inside the app instead of starting PowerShell for every step, and the pause between steps is shorter.
+
+### Changed
+- To stop her, just move your mouse (or press Stop). The top-left-corner stop is gone: her own clicks could land there.
+
 ### Fixed
 - She knows about full access: when it's on she says so and uses it; when it's off she tells you to switch it on in Systems; on the phone she explains it only works on the PC. (In 1.7.0 she answered "do you have full system control?" from the old ability list and said no.)
 - With full access on, an instruction to act on the PC ("open Notepad and type hello", "play…", "install…") that she only talks about now sends her back once to actually do it, which shows the approval card. Seen on the owner's PC: "I'll open Notepad and type hello right now", and nothing happened.

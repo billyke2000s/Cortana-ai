@@ -696,6 +696,16 @@ class Runtime:
         self.store.log_exchange(clean[-1]['content'],raw,conversation_version)
         yield {'type':'done','reply':' '.join(stream.spoken)[:3000],'raw':raw[:6000]}
 
+    control_visible=False   # the launcher draws the blue screen border while this is True
+
+    def show_control(self,on):
+        """Blue border round the screen (drawn by the launcher window) and a Cortana-blue cursor while she has control."""
+        import control
+        self.control_visible=bool(on)
+        if os.name!='nt':return
+        try:control.set_blue_cursor() if on else control.restore_cursor()
+        except Exception:pass   # cosmetic: never let the cursor stop or break a task
+
     PENDING_SECONDS=600
 
     def hold(self,name,args,local=False):
@@ -723,7 +733,7 @@ class Runtime:
         if entry['name']=='computer_task':   # runs here so Stop (POST /api/cancel {request_id:"task_<id>"}) can end it
             import control
             with self.jobs.scope('task_'+re.sub(r'[^A-Za-z0-9_-]','',str(pid))):
-                try:result=control.computer_task(entry['args'].get('goal',''),llm,self.jobs.check)
+                try:result=control.computer_task(entry['args'].get('goal',''),llm,self.jobs.check,show=self.show_control)
                 except (RuntimeError,ValueError) as e:result={'error':str(e)[:200]}
             return {'ok':'error' not in result and bool(result.get('done')),'say':tools.done_text('computer_task',result),'result':result,'refresh':None}
         result,change=tools.run(entry['name'],entry['args'],self.store,llm,approved=True)
