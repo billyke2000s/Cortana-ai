@@ -69,9 +69,9 @@ works now with no training. **Cost:** CPU use in noisy rooms; slower than a dedi
 **Why:** Cloudflare Quick Tunnels change on every launch. Tailscale gives a private, stable HTTPS name; the token persists
 in that mode only. **Cost:** requires Tailscale on both devices; [Unverified] on hardware.
 
-### D-017: The 3D model and Halo assets are not in the repository
-**Why:** the repo is public; the model is a fan port of a Microsoft character with an unverified licence. The app degrades
-gracefully without it, and repo artwork is original.
+### D-017: The 3D model lives in the repository; the repository is private
+**Why:** the app is built around the rigged Cortana model, so the repo should build and run complete. The model is a
+fan-made Microsoft character, so the repository stays private and the model isn't published anywhere else.
 
 ### D-019: Recommend and restrict models by detected hardware
 **Why:** users shouldn't guess which model their GPU can run, or download 17 GB they can't use. Thresholds come from

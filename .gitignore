@@ -10,10 +10,6 @@ build/work/
 build/deps/
 *.spec
 
-# The 3D character model is NOT part of this repository (third-party fan asset, licence unverified).
-app/assets/*.glb
-app/assets/*.gltf
-
 # Local data and secrets: never commit
 *.db
 *.db-wal

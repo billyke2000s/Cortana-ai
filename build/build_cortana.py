@@ -20,7 +20,7 @@ if missing:
     subprocess.run([sys.executable, '-m', 'pip', 'install', '--quiet', *missing], check=True)
 
 if not (app / 'assets' / 'cortana.glb').exists():
-    print('WARNING: app/assets/cortana.glb is missing - the build works, but the 3D character will not appear. See app/assets/README.md.')
+    print('WARNING: app/assets/cortana.glb is missing - the 3D character will not appear in this build.')
 
 WEB_FILES = ['index.html', 'app.js', 'pages.js', 'avatar.js', 'responsive.css', 'mic-worklet.js', 'speech.ps1', 'manifest.webmanifest', 'app-icon.svg']
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onefile', '--windowed', '--name', 'Cortana',

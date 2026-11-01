@@ -215,7 +215,7 @@ try{
  mount.classList.add('materialising');
  setTimeout(()=>mount.classList.remove('materialising'),1800);
  requestAnimationFrame(frame);
-}catch(e){console.error(e);note.textContent='3D character not loaded. Put cortana.glb in app/assets (see app/assets/README.md), then restart.';}
+}catch(e){console.error(e);note.textContent='3D character could not load. Check app/assets/cortana.glb, then restart Cortana.';}
 
 // Register before the asynchronous model load completes.
 document.addEventListener('pointermove',e=>{const b=mount.getBoundingClientRect();if(e.clientX<b.left-100||e.clientX>b.right+100||e.clientY<b.top-100||e.clientY>b.bottom+100)return;lastPointer=performance.now()/1000;pointer.x=THREE.MathUtils.clamp((e.clientX-b.left)/b.width-.5,-.65,.65);pointer.y=THREE.MathUtils.clamp((e.clientY-b.top)/b.height-.5,-.6,.6);},{passive:true});

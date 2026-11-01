@@ -7,7 +7,6 @@
 - Python 3.11+ (64-bit) from python.org, with "Add to PATH".
 - [Ollama](https://ollama.com), or let Cortana download it on first run. Models: `ollama pull qwen3.5:9b` and `ollama pull qwen3.5:4b`.
 - Chrome or Edge.
-- Optional: `app/assets/cortana.glb` (see [app/assets/README.md](../app/assets/README.md)).
 
 ## Run from source
 

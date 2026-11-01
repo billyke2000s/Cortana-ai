@@ -46,7 +46,6 @@ Against Ollama with the real `SYSTEM_PROMPT` and `TOOLS`, for **both** `qwen3.5:
 
 Viewports: 320×568, 360×640, 390×844, 430×932, 844×390. Verify: panel above nav and face visible; pages open from tiles
 and nav; add/complete/delete objectives; memory add/forget; settings save; display panel Copy; no console errors.
-**Hide the character model in any screenshot you keep** (`#cortana-sprite canvas{visibility:hidden}`).
 
 ## 5. Manual checklist (Windows release)
 

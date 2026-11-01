@@ -30,7 +30,7 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 <tr>
 <td width="42%" align="center">
 <img src="docs/assets/demo.gif" alt="Animated demo of the interface: asking a question, the display panel sliding up, then the Objectives, Memory, Mission Briefing and Systems pages" width="300">
-<br><sub><i>Real interface, recorded in the test harness with demo data.<br>The 3D character is hidden: the model is not shipped (see <a href="#-credits--disclaimer">credits</a>).</i></sub>
+<br><sub><i>Real interface, recorded with demo data.</i></sub>
 </td>
 <td width="58%">
 
@@ -42,6 +42,7 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 - 🛠️ **She can actually do things:** timers, reminders, a to-do list, long-term memory, weather, web search, your calendar, and media/volume/app control on your PC.
 - 🖥️ **Holographic display panel.** Code, tables and step-by-step answers slide up on screen instead of being read aloud, with syntax colours and a **Copy** button.
 - 📱 **Your phone becomes the screen.** Scan a QR code and the same interface runs on your phone, still powered by your PC.
+- 🌀 **A living hologram.** A fully rigged 3D Cortana blinks, looks around, reacts while listening and thinking, and lip-syncs to her voice.
 - 🎙️ **Natural voice.** Piper neural voices, swappable for **your own trained voice**, with lip sync driven by the audio.
 
 </td>
@@ -108,7 +109,7 @@ Full details: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [API.md](docs/API.md) �
 <td align="center"><img src="docs/assets/screens/systems.png" width="220" alt="Systems settings"><br><b>Systems</b></td>
 </tr>
 </table>
-<sub>Screenshots use demo data. The hologram character is hidden because the model isn't part of this repo.</sub>
+<sub>Screenshots use demo data.</sub>
 
 ---
 
@@ -198,7 +199,7 @@ cortana-ai/
 │   ├── speech.ps1          # Windows voice with mouth timings
 │   ├── index.html · app.js · pages.js · avatar.js · responsive.css · mic-worklet.js
 │   ├── vendor/             # three.js (MIT)
-│   └── assets/             # rig.json (the 3D model is NOT included, see assets/README.md)
+│   └── assets/             # cortana.glb (3D model) + rig.json (bone axes)
 ├── build/build_cortana.py  # builds dist/Cortana.exe
 ├── tests/                  # offline suite (no GPU/internet) + live check
 ├── tools/voice-trainer/    # train a Piper voice from your own recordings
@@ -248,7 +249,7 @@ Point it at **[AGENTS.md](AGENTS.md)** first. It's a strict rulebook (security i
 
 - **AI:** [Qwen 3.5](https://qwenlm.github.io/) via [Ollama](https://ollama.com) · **Speech recognition:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) · **Voice:** [Piper](https://github.com/rhasspy/piper) · **3D:** [three.js](https://threejs.org) (MIT) · **Weather:** [Open-Meteo](https://open-meteo.com) · **QR:** python-qrcode · **Phone link:** Cloudflare Quick Tunnels / Tailscale.
 - **Cortana**, **Halo**, **UNSC** and **Master Chief** are trademarks of Microsoft. This is an unofficial, non-commercial fan project, not affiliated with or endorsed by Microsoft, 343 Industries or Bungie.
-- **No Halo assets are distributed here.** The 3D character model used privately during development is a third-party fan port with an unverified licence, so it's excluded (see [app/assets/README.md](app/assets/README.md)). The interface artwork in this repo is original.
+- **Private repository.** It contains the Cortana 3D model and is kept private; don't make it public.
 - **Licence:** none has been chosen yet, so by default all rights are reserved by the author. Add a `LICENSE` file to change that.
 
 <div align="center"><br><sub>Built with an unreasonable amount of blue glow.</sub></div>

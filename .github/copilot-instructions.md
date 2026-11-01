@@ -9,4 +9,4 @@ Minimum before you finish any change:
 2. You followed the relevant checklist in AGENTS.md §10.
 3. You report what you ran, what you could not verify (Windows-only features, real GPU, phone, microphone), and label it **[Unverified]**.
 
-Never commit `app/assets/*.glb`, voices, recordings, databases, logs or secrets. Never weaken the security rules in AGENTS.md §4.
+This repository contains the Cortana 3D model and **must stay private**. Never commit voices, recordings, databases, logs or secrets. Never weaken the security rules in AGENTS.md §4.

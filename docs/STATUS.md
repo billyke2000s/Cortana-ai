@@ -33,7 +33,6 @@ _Last updated: 1 November 2026._
 - The wake word transcribes every speech burst with Whisper on the CPU, so expect CPU use in noisy rooms.
 - 9B runs partly on the CPU when other GPU apps (games) are open; switch to Fast (4B) in Systems.
 - Cloudflare Quick Tunnels are a development service with no uptime guarantee; a new QR appears on every launch.
-- The 3D model is not distributed (see `app/assets/README.md`).
 
 ## Roadmap
 

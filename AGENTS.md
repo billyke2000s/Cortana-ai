@@ -15,7 +15,7 @@ ask the user. Do not work around it.
 2. **Run the offline tests before and after every change:** `python -m unittest discover -s tests -v`. They MUST pass. A change that breaks a test is not done, even if the feature "works".
 3. **Never claim something works unless you ran it.** Say exactly what you ran and what you could not run (Windows-only parts, real GPU, phone, microphone). Label anything unverified as **[Unverified]**.
 4. **Never weaken security** (§4): pairing, origin check, file whitelist, escaping, tool allow-lists, secrets. No exceptions "for testing".
-5. **Never commit the 3D model, voices, recordings, databases, logs, secrets or build output** (§5, `.gitignore`).
+5. **Never commit voices, recordings, databases, logs, secrets or build output** (`.gitignore`), and **never make this repo public** (it contains the 3D model, §5).
 6. **Keep the contracts** in §3 (stream events, `[[SCREEN]]` marker, API shapes, settings keys). If you must change one, change every producer and consumer, the tests and `docs/API.md` in the same change.
 7. **Smallest change that solves the problem.** No drive-by refactors, renames, reformatting or dependency additions. Preserve working features.
 8. **Every new web file, Python module or setting has a checklist** (§10). Missing one step = broken `.exe`.
@@ -133,9 +133,9 @@ Don't rename them; other modules and tests use them.
 
 ## 5. Legal & ethical rules
 
-1. **Never commit `app/assets/*.glb`** or any Halo/Microsoft asset (models, textures, audio, logos). The repo is public.
+1. **This repository contains the Cortana 3D model (`app/assets/cortana.glb`) and MUST stay private.** Never make it public, fork it publicly, or publish the model, its textures or renders of her elsewhere.
 2. **Voices:** only voices the user owns or has explicit permission to use. MUST NOT add features, scripts or docs for cloning a third party's voice (e.g. a game character's voice actor) from recordings. The voice trainer's consent checkbox stays.
-3. **Screenshots and artwork** in the repo MUST NOT show the Halo character model. Hide it (`#cortana-sprite canvas{visibility:hidden}`) when capturing.
+3. **Screenshots** in the repo show the real interface with her on the hologram stage; regenerate them when the UI changes.
 4. Keep the trademark disclaimer in `README.md`. Don't add Microsoft/Halo logos.
 5. Respect licences of anything added (three.js is MIT, keep `THREE-LICENSE.txt`). Record new third-party code in README credits.
 
@@ -244,7 +244,7 @@ Don't rename them; other modules and tests use them.
 
 - `python -m unittest discover -s tests -v` MUST pass before you finish. Add tests for every bug you fix (a regression test that fails before the fix).
 - The offline suite uses `tests/fake_ollama.py`. If you change how the backend talks to Ollama (payload fields, tool message format), update the fake **to match real Ollama behaviour**, not to make your code pass.
-- Browser UI checks: Playwright/Chromium at phone sizes is the expected way to verify UI changes when available. Hide the character model in any screenshot you keep.
+- Browser UI checks: Playwright/Chromium at phone sizes is the expected way to verify UI changes when available.
 - "Verified" means you observed it. Unit tests passing ≠ "works on Windows". State the gap explicitly.
 
 ---
@@ -268,7 +268,7 @@ Don't duplicate content between docs; link instead. Keep README claims true (e.g
 ## 13. Git rules
 
 - Small, focused commits with imperative messages ("Fix QR pairing cookie for scanner apps").
-- Never commit: `*.glb`, voices (`*.onnx`), recordings, `*.db`, logs, `dist/`, `build/work/`, `.env`, any secret. Check `git status` before committing.
+- Never commit: voices (`*.onnx`), recordings, `*.db`, logs, `dist/`, `build/work/`, `.env`, any secret. Check `git status` before committing.
 - Don't rewrite history on `main`. Don't force-push.
 
 ---
@@ -299,7 +299,7 @@ Don't duplicate content between docs; link instead. Keep README claims true (e.g
 - [ ] Read every touched file and its callers.
 - [ ] Offline tests pass (paste the summary line).
 - [ ] New/changed behaviour has tests.
-- [ ] Security rules (§4) still hold; no secrets or assets added.
+- [ ] Security rules (§4) still hold; no secrets added; repo still private.
 - [ ] Checklists (§10) completed for anything added.
 - [ ] Docs updated (§12), `CHANGELOG.md` entry added.
 - [ ] Report to the user: what changed, what you ran (results), what you could **not** verify, known issues.
