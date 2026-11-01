@@ -629,3 +629,20 @@ class FullAccessPromptTests(unittest.TestCase):
         self.assertIn('Full access is ON',self.prompt_for(True,True))
         self.assertIn('switch on Full access in Systems',self.prompt_for(False,True))
         on_phone=self.prompt_for(True,False);self.assertIn('only works when the user talks to you on the PC',on_phone);self.assertNotIn('Full access is ON',on_phone)
+
+class FullAccessBackstopTests(unittest.TestCase):
+    """She said 'I'll open Notepad and type hello right now' with full access on, and called nothing (owner's PC, 1.7.0)."""
+    def test_pc_instruction_she_only_talks_about_gets_sent_back(self):
+        rt=base.runtime.Runtime();rt.store.close();rt.store=base.store.Store(':memory:');rt.ai_ready=True;self.addCleanup(rt.store.close)
+        rt.store.set('full_access',True);calls=[]
+        def model(payload):
+            calls.append([dict(m) for m in payload['messages']])   # a copy: the app keeps adding to the same list
+            if len(calls)==1:yield {'message':{'content':"I'll open Notepad and type hello right now."}}
+            else:yield {'message':{'content':'','tool_calls':[{'function':{'name':'computer_task','arguments':{'goal':'Open Notepad and type hello'}}}]}}
+        with patch.object(rt,'ollama_stream',model):events=list(rt.chat_stream([{'role':'user','content':'Open Notepad and type hello.'}],local=True))
+        self.assertIn('App check',calls[1][-1]['content'])
+        card=[e for e in events if e['type']=='confirm'];self.assertEqual(card[0]['name'],'computer_task')   # an approval card, nothing run
+    def test_only_with_full_access(self):
+        w=base.runtime.wants_action
+        self.assertTrue(w('Open Notepad and type hello.',True));self.assertFalse(w('Open Notepad and type hello.',False))
+        self.assertFalse(w('How do I install Python?',True));self.assertTrue(w('play something chill on Spotify',True))

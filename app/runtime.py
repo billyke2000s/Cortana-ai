@@ -105,9 +105,15 @@ def reminder_request(text):
 
 # The user asked her to *do* something that has a tool. If a turn ends without any tool call, she only said it (D-036).
 _ACTION_ASK=re.compile(r"\b(remind me|remember (that|my|i|to|this)|add .{1,60} to (my |the )?(list|to-?do|objectives|calendar)|put .{1,60} on my (list|to-?do|calendar)|set (a |an )?(timer|reminder|alarm)|book .{1,40} (on|at|for))\b",re.I)
-def wants_action(text):
-    """A request to do something with a tool, not a question about it ("do you remember my dog's name?")."""
-    return bool(_ACTION_ASK.search(text or '')) and not re.match(r"\s*(do|does|did|what|when|where|who|whom|how|why|is|are|was|were|have|has)\b",text or '',re.I)
+# With full access on, any instruction to act on the PC needs a tool too ("open Notepad", "play something on Spotify").
+_PC_ASK=re.compile(r"\b(open|launch|start|close|quit|play|pause|install|uninstall|download|type|click|press|turn (on|off)|switch (on|off)|"
+                   r"enable|disable|change|set up|move|rename|delete|copy|run|search for|go to|navigate|mute|unmute|restart|shut ?down)\b",re.I)
+def wants_action(text,full=False):
+    """A request to do something with a tool, not a question about it ("do you remember my dog's name?").
+    full=True also counts instructions to act on the PC, which only full access can carry out."""
+    text=text or ''
+    if re.match(r"\s*(do|does|did|what|when|where|who|whom|how|why|is|are|was|were|have|has)\b",text,re.I):return False
+    return bool(_ACTION_ASK.search(text)) or (full and bool(_PC_ASK.search(text)))
 
 _NUDGE=("(App check, not from the user: your last reply said you did it, but you called no tool, so nothing happened. "
         "Call the right tool now. After it runs, reply only 'Done.')")
@@ -656,7 +662,7 @@ class Runtime:
                 self.model=FAST_MODEL;fell_back=True;continue
             raw+=content
             if not calls:
-                if use_tools and not any_calls and not nudged and wants_action(clean[-1]['content']):
+                if use_tools and not any_calls and not nudged and wants_action(clean[-1]['content'],full):
                     nudged=True;convo+=[{'role':'assistant','content':content},{'role':'user','content':_NUDGE}];continue
                 break
             any_calls=True

@@ -6,6 +6,7 @@ All notable changes. Dates are UK time.
 
 ### Fixed
 - She knows about full access: when it's on she says so and uses it; when it's off she tells you to switch it on in Systems; on the phone she explains it only works on the PC. (In 1.7.0 she answered "do you have full system control?" from the old ability list and said no.)
+- With full access on, an instruction to act on the PC ("open Notepad and type hello", "play…", "install…") that she only talks about now sends her back once to actually do it, which shows the approval card. Seen on the owner's PC: "I'll open Notepad and type hello right now", and nothing happened.
 
 ## [1.7.0] - 2026-11-01
 
