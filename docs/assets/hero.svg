@@ -81,6 +81,20 @@
       <g class="spin r3"><circle cx="640" cy="210" r="112" fill="none" stroke="#bff0ff" stroke-width="1.2" stroke-dasharray="1 14"/></g>
     </g>
     <circle class="pulse" cx="640" cy="210" r="80" fill="url(#core)" filter="url(#bigglow)"/>
+    <!-- Cortana holographic portrait, illustrated in SVG to display directly on GitHub -->
+    <g class="cortana-portrait" opacity=".94" filter="url(#glow)">
+      <path d="M553 317 Q545 276 570 262 L601 247 L612 231 L668 231 L680 247 L713 262 Q738 278 728 317Z" fill="#1258a3" stroke="#8bdfff" stroke-width="2"/>
+      <path d="M572 305 Q584 275 602 268 L614 283 L640 296 L667 283 L681 268 Q705 282 711 305" fill="none" stroke="#6ed8ff" stroke-width="5" opacity=".65"/>
+      <path d="M611 229 L612 253 Q640 275 669 253 L667 229" fill="#4eace0" stroke="#b7f3ff" stroke-width="2"/>
+      <path d="M593 156 Q588 116 610 103 Q638 86 667 103 Q690 120 684 159 L675 199 Q671 226 642 240 Q611 226 604 199Z" fill="#398bc6" stroke="#b1ecff" stroke-width="2.5"/>
+      <path d="M591 160 Q578 132 593 108 Q607 84 642 86 Q675 83 691 113 Q698 135 682 164 L677 141 Q667 125 661 110 Q644 136 602 139 L604 167Z" fill="#0b397e" stroke="#9ceaff" stroke-width="2"/>
+      <path d="M599 128 Q613 91 640 93 M641 94 Q674 104 684 130" stroke="#8be8ff" stroke-width="3" opacity=".65" fill="none"/>
+      <path d="M610 169 Q623 162 634 169 M649 169 Q660 162 673 168" fill="none" stroke="#c4f7ff" stroke-width="2.5"/>
+      <circle cx="623" cy="171" r="3" fill="#e7ffff"/><circle cx="659" cy="171" r="3" fill="#e7ffff"/>
+      <path d="M642 174 L637 195 L646 197 M629 211 Q642 217 654 210" fill="none" stroke="#a6e9ff" stroke-width="2"/>
+      <path d="M602 190 Q592 212 608 230 M678 190 Q689 214 670 231" fill="none" stroke="#7fdbff" stroke-width="2" opacity=".7"/>
+      <path d="M566 281 H715 M573 294 H708 M585 307 H696" stroke="#c2faff" stroke-width="1" opacity=".28"/>
+    </g>
     <!-- light column and platform -->
     <rect class="beam" x="590" y="190" width="100" height="140" fill="url(#beam)" opacity=".6"/>
     <g class="beam" stroke="#bff0ff" stroke-opacity=".5"><line x1="605" y1="230" x2="605" y2="328"/><line x1="625" y1="205" x2="625" y2="330"/>
