@@ -83,7 +83,7 @@ def create_file(args):
     elif kind == 'spreadsheet':
         out = io.StringIO()
         csv.writer(out, lineterminator='\r\n').writerows(csv_rows(content))
-        path.write_text(out.getvalue(), encoding='utf-8-sig')   # the BOM makes Excel read accents correctly
+        path.write_text(out.getvalue(), encoding='utf-8-sig', newline='')   # BOM: Excel reads accents; newline='': no doubled \r on Windows
     elif kind == 'webpage':
         path.write_text(html_page(filename.rsplit('.', 1)[0], content), encoding='utf-8')
     else:
