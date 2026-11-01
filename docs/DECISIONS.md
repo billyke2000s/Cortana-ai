@@ -160,7 +160,7 @@ New documents, finished downloads and the daily briefing are stored as items of 
 
 ### D-034: Work tools only when asked about (context budget)
 
-Six work tools add ~640 tokens of schema. Offering them on every turn would push a full 6,144-token prompt over budget and silently cut the system prompt (D-004), so `tools_for()` adds each one only when its trigger words appear in the question; with an Auto context of 12,288+ they are always offered. The cost is that an oddly worded request may not get the tool; the trigger lists are deliberately broad.
+Six work tools add ~640 tokens of schema. Offering them on every turn would push a full 6,144-token prompt over budget and silently cut the system prompt (D-004), so `tools_for()` adds each one only when its trigger words appear in the question; with an Auto context of 12,288+ they are always offered. The cost is that an oddly worded request may not get the tool; the trigger lists are deliberately broad. Triggers must not fire on everyday questions: "table" was removed after the 9B release check fumbled "How do I build a table in Python?" while being offered `analyse_table`; a test pins the release-check questions to exactly the core tools.
 
 ### D-035: Ask before doing
 

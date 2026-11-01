@@ -85,7 +85,7 @@ WORK_TOOLS = [
 ]
 WORK_TRIGGERS = {
     'create_file': r'\b(document|doc|word file|report|spreadsheet|csv|excel|file|letter|essay|notes|readme|web ?page|save (it|this|that))\b',
-    'analyse_table': r'\b(csv|spreadsheet|table|totals?|average|sum|columns?|rows?)\b',
+    'analyse_table': r'\b(csv|spreadsheet|totals?|average|sum of|columns?)\b',   # not 'table': "build a table in Python" is a coding question
     'calculate': r'\b(calculate|work out|how much|how many|percent(age)?|total|divide|multiply|convert)\b|%|\d\s*[-+*/x×÷^]\s*\d',
     'organise_files': r'\b(organi[sz]e|tidy|clean ?up|sort (out|my)|duplicates?|messy|declutter)\b',
     'pc_health': r'\b(slow|lag(gy|ging)?|crash(es|ing|ed)?|freez|disk|space|storage|memory|ram|cpu|processor|health|performance|uptime|troubleshoot|keeps? (closing|crashing))\b',

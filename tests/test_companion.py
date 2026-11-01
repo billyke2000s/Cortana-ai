@@ -375,6 +375,8 @@ class WorkAbilityTests(unittest.TestCase):
     def test_gating_and_approval_rule(self):
         t=base.tools;core=len(t.TOOLS);names=lambda q,c=6144:{x['function']['name'] for x in t.tools_for(q,c)}
         self.assertEqual(len(t.tools_for('Set a timer for pasta')),core)    # ordinary turns: budget unchanged
+        for plain in ['How do I build a table in Python?','Tell me a joke.','What is my dog called?','Remember that my favourite colour is cyan.']:
+            self.assertEqual(len(t.tools_for(plain)),core,plain)   # the release-check questions see exactly the 1.5 tools
         self.assertIn('organise_files',names('can you tidy my downloads'));self.assertIn('pc_health',names('why is my pc so slow'))
         self.assertIn('calculate',names('what is 17% of 230'));self.assertIn('create_file',names('turn this into a word document'))
         self.assertEqual(len(t.tools_for('hello',16384)),core+len(t.WORK_TOOLS))
