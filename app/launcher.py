@@ -25,6 +25,7 @@ def main():
         except Exception as e:
             runtime.error=str(e);runtime.update('Setup needs attention: '+str(e));(DATA/'startup-error.log').write_text(traceback.format_exc(),encoding='utf8')
     threading.Thread(target=startup,daemon=True).start()
+    threading.Thread(target=runtime.background_loop,daemon=True).start()   # calendar reminders
     if not args.no_open:webbrowser.open(runtime.local_url)
     if args.headless:
         print('CORTANA_LOCAL_URL='+runtime.local_url,flush=True)

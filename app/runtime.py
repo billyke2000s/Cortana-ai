@@ -21,6 +21,8 @@ SYSTEM_PROMPT=("You are Cortana, a warm, capable personal AI companion with dry 
  "then write a new line containing exactly [[SCREEN]] followed by the full on-screen content in Markdown, starting with a '# ' title line. "
  "Use fenced code blocks with the language name for code. Never read code aloud, not even a single function name with brackets. "
  "Example of the format: Here's the simplest way, using the tabulate library. I've put it on screen.\n[[SCREEN]]\n# Python table\n```python\nfrom tabulate import tabulate\nprint(tabulate(rows, headers=['Name', 'Age']))\n```\n"
+ "You can work with the user's PC: read documents they added (search_documents, summarise_document), find files by name and open or read them, look at their screen only when they ask about it, read their clipboard when they mention something they copied, and add calendar events. Never say you cannot see their screen, files or clipboard: use the tool. "
+ "File search results and new calendar events are put on screen automatically, like weather. "
  "Weather results are put on screen automatically: answer weather questions in one or two spoken sentences and never write [[SCREEN]] for them. "
  "Only write [[SCREEN]] when there is something to show. "
  "The spoken part must contain no Markdown, code or symbols. Never include role labels, stage directions or hidden reasoning.")
@@ -53,6 +55,8 @@ def system_prompt(store=None):
         if home:text+=f" The user's home location is {home}."
         facts=store.facts()[-40:]
         if facts:text+=" Things you remember about the user: "+'; '.join(f['text'] for f in facts)+'.'
+        docs=store.documents()[:8]
+        if docs:text+=" Documents the user added, newest first (\"this\" or \"it\" means the first): "+'; '.join(d['name'][:60] for d in docs)+'.'
     return text
 
 _SENTENCE_END=re.compile(r'(?<=[.!?\u2026])["\'\u201d\u2019)\]]*\s+|\n+')
@@ -392,6 +396,35 @@ class Runtime:
         if not clean or clean[0]['role']!='user':raise ValueError('A user message is required.')
         return list(reversed(clean))
 
+    def complete(self,prompt,images=None,max_tokens=300):
+        """One short, non-streaming answer from the current model (document notes, screenshots). Images: base64 PNGs."""
+        msg={'role':'user','content':prompt}
+        if images:msg['images']=images
+        r=request_json(self.ollama_url+'/api/chat',{'model':self.model,'messages':[msg],'stream':False,'think':False,'keep_alive':'15m',
+                       'options':{'num_ctx':CONTEXT,'num_predict':int(max_tokens),'temperature':.2}},timeout=180)
+        text=re.sub(r'<think>.*?</think>','',(r.get('message') or {}).get('content') or '',flags=re.S).strip()
+        if not text:raise RuntimeError('The model gave no answer.')
+        return text
+
+    def calendar_tick(self,now=None):
+        """Create a 10-minute-before reminder for each timed Google Calendar event coming up (once per event)."""
+        import tools
+        url=self.store.get('calendar_url','')
+        if not url:return 0
+        now=now or time.time();done=self.store.get('cal_reminded',[]);added=0
+        for title,start in tools.ical_upcoming(url,12,now):
+            key=f'{title}|{int(start)}'
+            if key in done or start-now<60:continue
+            self.store.add_item('reminder',f'{title} starts in 10 minutes',max(now,start-600));done.append(key);added+=1
+        self.store.set('cal_reminded',done[-300:])
+        return added
+
+    def background_loop(self):
+        while True:
+            try:self.calendar_tick()
+            except Exception:pass
+            if self.closing.wait(300):return
+
     def ollama_stream(self,payload):
         req=urllib.request.Request(self.ollama_url+'/api/chat',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
         try:response=urllib.request.urlopen(req,timeout=180)
@@ -412,6 +445,7 @@ class Runtime:
         convo=[{'role':'system','content':system_prompt(self.store)}]+clean
         use_tools=self.store.get('tools_enabled',True)
         stream=SpokenStream();raw='';fell_back=False;tool_screen=''
+        llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)
         for round_ in range(4):
             payload={'model':self.model,'messages':convo,'stream':True,'think':False,'keep_alive':'15m',
                      'options':{'num_ctx':CONTEXT,'num_predict':1200,'temperature':.45}}
@@ -439,10 +473,10 @@ class Runtime:
                     try:args=json.loads(args)
                     except ValueError:args={}
                 yield {'type':'tool','name':name,'label':tools.TOOL_LABELS.get(name,'WORKING')}
-                result,change=tools.run(name,args,self.store)
+                result,change=tools.run(name,args,self.store,llm)
                 if change:yield {'type':'refresh','what':change}
-                if name=='get_weather' and isinstance(result,dict):tool_screen=tools.weather_screen(result) or tool_screen   # always a forecast card
-                convo.append({'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:3500 if name=='web_search' else 2500],'tool_name':name})
+                tool_screen=tools.screen_for(name,result) or tool_screen   # weather, files found, new events: a card every time (D-021)
+                convo.append({'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:tools.RESULT_LIMIT.get(name,2500)],'tool_name':name})
         for sentence in stream.finish():yield {'type':'sentence','text':sentence}
         screen=tool_screen or (stream.screen or '').strip()   # the tool's card wins, so weather looks the same every time
         if screen:yield {'type':'screen','markdown':screen[:12000]}

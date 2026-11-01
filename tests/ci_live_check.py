@@ -4,7 +4,7 @@
 2. Wake word: Windows text-to-speech says phrases into a 16 kHz WAV, the real whisper.cpp transcribes them with the
    wake hint, and runtime.wake_match decides. Usage: python tests/ci_live_check.py [whisper-cli.exe] [ggml-model.bin]
 """
-import json, os, subprocess, sys, tempfile
+import base64, json, os, subprocess, sys, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 import tools, runtime  # noqa: E402
 
@@ -49,6 +49,34 @@ if len(sys.argv) == 3:
         print(f"{'OK ' if ok else 'BAD'} said={phrase!r} | plain={res['plain'][0]!r} -> {res['plain'][1]!r} | hint={res['hint'][0]!r} -> {res['hint'][1]!r}")
         if not ok:
             failures.append('wake: ' + phrase)
+
+print('\n=== PC access (Windows) ===')
+import files  # noqa: E402
+try:
+    shot = files.screenshot()
+    print(f'Screenshot: {len(base64.b64decode(shot)):,} bytes PNG')
+except Exception as e:
+    print('Screenshot FAILED:', e); failures.append('screenshot')
+try:
+    files.set_clipboard_text('Cortana clipboard test ✓')
+    back = files.clipboard_text()
+    print('Clipboard round trip:', repr(back))
+    if back != 'Cortana clipboard test ✓':
+        failures.append('clipboard')
+except Exception as e:
+    print('Clipboard FAILED:', e); failures.append('clipboard')
+try:
+    print('Clipboard image (none expected):', files.clipboard_image())
+except Exception as e:
+    print('Clipboard image FAILED:', e); failures.append('clipboard image')
+home_test = os.path.join(os.path.expanduser('~'), 'Documents', 'Cortana Test Coursework Brief.txt')
+os.makedirs(os.path.dirname(home_test), exist_ok=True)
+open(home_test, 'w').write('The deadline is 5 March.')
+found, scanned, partial = files.find('cortana test coursework')
+print(f'find_files: {[f["name"] for f in found]} (scanned {scanned:,}, partial={partial})')
+if not any(f['path'] == home_test for f in found):
+    failures.append('find_files')
+os.remove(home_test)
 
 print('\nFAILURES:', failures or 'none')
 sys.exit(1 if failures else 0)

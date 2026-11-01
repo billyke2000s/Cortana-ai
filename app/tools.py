@@ -1,4 +1,5 @@
-"""Abilities Cortana's AI can use: timers, reminders, tasks, memory, weather, web search, PC controls and calendar.
+"""Abilities Cortana's AI can use: timers, reminders, tasks, memory, weather, web search, PC controls, calendar,
+documents, file search, the screen and the clipboard (the PC-access parts live in files.py).
 
 Every tool returns a small JSON-able dict that is handed back to the model. Nothing here runs arbitrary commands:
 PC controls are a fixed allow-list, and network lookups only go to the services named below.
@@ -40,13 +41,39 @@ TOOLS = [
         'steps': {'type': 'integer', 'description': 'For volume: how many 2% steps (default 5).'}}, ['action']),
     _fn('get_calendar', "Events from the user's calendar for a day.", {
         'day': {'type': 'string', 'description': "'today', 'tomorrow' or 'YYYY-MM-DD'."}}),
+    _fn('add_event', 'Put an event in the calendar (study time, meetings, appointments). Reminds the user 10 minutes before.', {
+        'title': {'type': 'string'},
+        'day': {'type': 'string', 'description': "'today', 'tomorrow', a weekday like 'thursday', or 'YYYY-MM-DD'."},
+        'time': {'type': 'string', 'description': "24-hour start time 'HH:MM'."},
+        'minutes': {'type': 'number', 'description': 'Length in minutes (default 60).'}}, ['title', 'day', 'time']),
+    _fn('search_documents', 'Look up information inside the documents the user added (notes, briefs, PDFs). Use for questions about their content or to quiz the user.', {
+        'query': {'type': 'string', 'description': 'What to look for, e.g. deadline, chapter 3.'},
+        'document': {'type': 'string', 'description': 'Words from the document name; empty searches all.'}}, ['query']),
+    _fn('summarise_document', 'Summarise a whole document the user added. Empty document = the most recent one.', {
+        'document': {'type': 'string'}}),
+    _fn('look_at_screen', "Look at the user's PC screen, only when they ask about their screen, an error on it, or what they are looking at.", {
+        'question': {'type': 'string', 'description': 'What to find out from the screen.'}}, ['question']),
+    _fn('clipboard', "Read what the user copied (when they mention something they copied), or write text to the clipboard when asked to copy.", {
+        'action': {'type': 'string', 'enum': ['read', 'write']},
+        'text': {'type': 'string', 'description': 'For write: the text to copy.'}}, ['action']),
+    _fn('find_files', "Search the user's PC (Desktop, Documents, Downloads, OneDrive...) for files by name.", {
+        'query': {'type': 'string', 'description': 'Words from the file name.'},
+        'kind': {'type': 'string', 'enum': ['', 'document', 'pdf', 'word', 'slides', 'spreadsheet', 'image', 'video', 'audio', 'code']},
+        'days': {'type': 'number', 'description': 'Only files changed in the last N days (e.g. 7 for last week).'}}, ['query']),
+    _fn('open_file', 'Open a file from the last find_files results, or read it so you can answer questions about it.', {
+        'number': {'type': 'integer', 'description': 'Its number in the last results.'},
+        'read': {'type': 'boolean', 'description': 'true = read it into your documents instead of opening it.'}}, ['number']),
 ]
 TOOL_LABELS = {'set_timer': 'SETTING TIMER', 'set_reminder': 'SETTING REMINDER', 'add_task': 'UPDATING OBJECTIVES',
                'list_objectives': 'CHECKING OBJECTIVES', 'complete_objective': 'UPDATING OBJECTIVES', 'remember': 'SAVING TO MEMORY',
                'forget': 'UPDATING MEMORY', 'get_weather': 'CHECKING WEATHER', 'web_search': 'SEARCHING',
-               'pc_control': 'CONTROLLING PC', 'get_calendar': 'CHECKING CALENDAR'}
+               'pc_control': 'CONTROLLING PC', 'get_calendar': 'CHECKING CALENDAR', 'add_event': 'UPDATING CALENDAR',
+               'search_documents': 'READING DOCUMENTS', 'summarise_document': 'READING DOCUMENT', 'look_at_screen': 'LOOKING AT SCREEN',
+               'clipboard': 'CHECKING CLIPBOARD', 'find_files': 'SEARCHING FILES', 'open_file': 'OPENING FILE'}
+# Longer results for tools whose text is the answer (the default is 2,500 characters; see DECISIONS D-004/D-023).
+RESULT_LIMIT = {'web_search': 3500, 'clipboard': 4500, 'search_documents': 3200, 'summarise_document': 3200, 'open_file': 3200}
 CHANGES = {'set_timer': 'objectives', 'set_reminder': 'objectives', 'add_task': 'objectives', 'complete_objective': 'objectives',
-           'remember': 'memory', 'forget': 'memory'}
+           'remember': 'memory', 'forget': 'memory', 'add_event': 'objectives'}
 
 # ------------------------------------------------------------------ helpers
 def get_json(url, headers=None, timeout=12):
@@ -443,9 +470,116 @@ def calendar(url, day='today'):
     return {'day': d.strftime('%A %d %B'), 'events': [
         {'title': e['title'], 'time': 'all day' if e['all_day'] else e['start'].strftime('%H:%M'), 'location': e['location']} for e in items]}
 
+# ------------------------------------------------------------------ events Cortana keeps (+ one-tap "Add to Google Calendar")
+WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+
+def resolve_day(day, hhmm, now=None):
+    """'today' | 'tomorrow' | weekday | 'YYYY-MM-DD' + 'HH:MM' -> datetime. Resolved here because small models get dates wrong."""
+    now = now or datetime.now()
+    m = re.fullmatch(r'\s*(\d{1,2})[:.](\d{2})\s*', str(hhmm or ''))
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        raise ValueError("Ask the user for a start time (24-hour 'HH:MM').")
+    h, mi = int(m.group(1)), int(m.group(2))
+    d = str(day or 'today').strip().lower()
+    if d in ('', 'today'):
+        target = now.date()
+    elif d == 'tomorrow':
+        target = now.date() + timedelta(days=1)
+    elif d[:3] in [w[:3] for w in WEEKDAYS]:
+        ahead = ([w[:3] for w in WEEKDAYS].index(d[:3]) - now.weekday()) % 7
+        target = now.date() + timedelta(days=ahead)
+        if ahead == 0 and now.replace(hour=h, minute=mi) <= now:
+            target += timedelta(days=7)   # "Thursday" said on a Thursday after that time = next week
+    else:
+        try:
+            target = datetime.strptime(d[:10], '%Y-%m-%d').date()
+        except ValueError:
+            raise ValueError("Day must be 'today', 'tomorrow', a weekday or 'YYYY-MM-DD'.")
+    return datetime(target.year, target.month, target.day, h, mi)
+
+def google_add_link(title, start, end):
+    from datetime import timezone
+    z = lambda ts: datetime.fromtimestamp(ts, timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    return 'https://calendar.google.com/calendar/render?' + urllib.parse.urlencode(
+        {'action': 'TEMPLATE', 'text': title, 'dates': f'{z(start)}/{z(end)}', 'details': 'Added by Cortana'})
+
+def add_event(store, title, day, hhmm, minutes=60):
+    title = ' '.join(str(title or '').split())[:160]
+    if not title:
+        raise ValueError('Ask the user what the event is.')
+    minutes = float(minutes or 60)
+    if not 5 <= minutes <= 24 * 60:
+        raise ValueError('Events must last between 5 minutes and 24 hours.')
+    start = resolve_day(day, hhmm)
+    if start < datetime.now() - timedelta(minutes=1):
+        raise ValueError('That time has already passed.')
+    s, e = start.timestamp(), start.timestamp() + minutes * 60
+    eid = store.add_event(title, s, e)
+    if s - 600 > time.time():
+        store.add_item('reminder', f'{title} starts in 10 minutes', s - 600)
+    return {'done': 'event added', 'id': eid, 'title': title, 'when': f'{start:%A} {start.day} {start:%B}, {start:%H:%M}–{datetime.fromtimestamp(e):%H:%M}',
+            'reminder': '10 minutes before', 'google_link': google_add_link(title, s, e)}
+
+def day_events(store, day='today'):
+    """Events for a day from Cortana's own calendar plus the connected Google calendar (if any)."""
+    day = str(day or 'today').strip().lower()
+    d = date.today() + timedelta(days=1) if day == 'tomorrow' else date.today() if day in ('', 'today') else datetime.strptime(day[:10], '%Y-%m-%d').date()
+    lo = datetime.combine(d, datetime.min.time()).timestamp()
+    events = [{'title': e['title'], 'time': f"{datetime.fromtimestamp(e['start']):%H:%M}", 'location': '', 'source': 'Cortana', 'id': e['id']}
+              for e in store.events_between(lo, lo + 86400)]
+    url, error = store.get('calendar_url', ''), None
+    if url:
+        try:
+            events += [{**e, 'source': 'Google'} for e in calendar(url, d.isoformat())['events']]
+        except Exception:
+            error = 'Could not read the Google calendar right now.'
+    events.sort(key=lambda e: (e['time'] != 'all day', e['time']))
+    if not url and not events:
+        return {'error': "Nothing in Cortana's calendar that day, and no Google calendar is connected (Settings → calendar secret iCal address)."}
+    out = {'day': d.strftime('%A %d %B'), 'events': events}
+    if error:
+        out['error'] = error
+    return out
+
+def ical_upcoming(url, hours=12, now=None):
+    """(title, start timestamp) for timed Google events starting in the next few hours."""
+    now = now or time.time()
+    if _ics_cache['url'] != url or time.time() - _ics_cache['at'] > 300:
+        _ics_cache.update(url=url, at=time.time(), events=parse_ics(get_text(url)))
+    out = []
+    for d in (date.fromtimestamp(now), date.fromtimestamp(now) + timedelta(days=1)):
+        for e in events_on(_ics_cache['events'], d):
+            ts = e['start'].timestamp()
+            if not e['all_day'] and now < ts <= now + hours * 3600:
+                out.append((e['title'], ts))
+    return sorted(set(out), key=lambda x: x[1])
+
+# ------------------------------------------------------------------ cards shown on the display (built from data, D-021)
+def _home(path):
+    home = os.path.expanduser('~')
+    return '~' + path[len(home):] if path.lower().startswith(home.lower()) else path
+
+def screen_for(name, result):
+    if not isinstance(result, dict) or result.get('error'):
+        return ''
+    if name == 'get_weather':
+        return weather_screen(result)
+    if name == 'find_files' and result.get('files'):
+        rows = '\n'.join(f"| {f['number']} | **{f['name']}** | {f['modified']} |" for f in result['files'])
+        folders = '\n'.join(f"{f['number']}. `{f['folder']}`" for f in result['files'])
+        n = 1 if len(result['files']) == 1 else 2
+        return f"# Files found\n| # | Name | Changed |\n|---|---|---|\n{rows}\n\n### Where\n{folders}\n\nSay “open number {n}” to open one, or “read number {n}” so I can answer questions about it."
+    if name == 'add_event':
+        return (f"# Event added\n**{result['title']}**\n\n{result['when']} · reminder {result['reminder']}\n\n"
+                f"[Add to Google Calendar]({result['google_link']})")
+    return ''
+
 # ------------------------------------------------------------------ dispatcher
-def run(name, args, store):
-    """Run one tool. Returns (result_dict, change) where change is 'objectives', 'memory' or None."""
+FOUND = []   # paths from the last find_files: open_file may only open these (never a model-provided path)
+
+def run(name, args, store, llm=None):
+    """Run one tool. Returns (result_dict, change) where change is 'objectives', 'memory', 'documents' or None.
+    llm(prompt, images=None, max_tokens=300) -> str asks the local model (documents and screen need it)."""
     args = args if isinstance(args, dict) else {}
     try:
         if name == 'set_timer':
@@ -496,7 +630,107 @@ def run(name, args, store):
                 return {'error': 'PC controls are switched off in Settings.'}, None
             return pc_control(args.get('action'), args.get('target', ''), args.get('steps', 5)), None
         if name == 'get_calendar':
-            return calendar(store.get('calendar_url', ''), args.get('day', 'today')), None
+            return day_events(store, args.get('day', 'today')), None
+        if name == 'add_event':
+            return add_event(store, args.get('title'), args.get('day'), args.get('time'), args.get('minutes') or 60), 'objectives'
+        if name in ('search_documents', 'summarise_document'):
+            return documents_tool(name, args, store, llm), None
+        if name in ('look_at_screen', 'clipboard', 'find_files', 'open_file'):
+            if not store.get('pc_access', True):
+                return {'error': 'Screen, clipboard and file access is switched off in Settings.'}, None
+            return pc_access_tool(name, args, store, llm)
         return {'error': f'Unknown tool {name}.'}, None
+    except (ValueError, RuntimeError) as e:   # plain-English problems the user should hear
+        return {'error': str(e)[:200]}, None
     except Exception as e:
         return {'error': f'{name} failed: {str(e)[:160]}'}, None
+
+def documents_tool(name, args, store, llm):
+    import files
+    if not store.documents():
+        return {'error': 'No documents added yet. The user can drop a file into Chat with the paperclip, or ask you to find one on the PC.'}
+    want = str(args.get('document') or '').strip()
+    doc = store.find_document(want) if (want or name == 'summarise_document') else None
+    if want and not doc:
+        return {'error': 'No added document matches that name.', 'documents': [d['name'] for d in store.documents()[:10]]}
+    if name == 'search_documents':
+        hits = files.search(store.document_chunks(doc['id'] if doc else None), str(args.get('query', '')))
+        if not hits:
+            return {'error': 'Nothing in the documents matches that.', 'documents': [d['name'] for d in store.documents()[:10]]}
+        return {'results': [{'document': h['doc'], 'where': h['page'] or '', 'text': h['text']} for h in hits],
+                'note': 'Answer from these passages and say which document (and page) it came from.'}
+    doc = store.document(doc['id'])   # full row, including any saved summary
+    if doc.get('summary'):
+        return {'document': doc['name'], 'pages': doc['pages'], 'section_notes': doc['summary']}
+    text = store.document_text(doc['id'])
+    if len(text) <= 3000 or llm is None:
+        return {'document': doc['name'], 'pages': doc['pages'], 'text': text[:3000],
+                **({'note': 'Only the start of a long document; summarise what is here.'} if len(text) > 3000 else {})}
+    parts, total = files.sections(text)
+    notes = []
+    for i, part in enumerate(parts, 1):
+        notes.append('- ' + ' '.join(llm(f"Part {i} of {len(parts)} of the document '{doc['name']}'. In 2-3 plain sentences, summarise it. "
+                                         f"Keep key facts, names, dates, numbers, deadlines and requirements. No preamble.\n\n{part}",
+                                         max_tokens=170).split()))
+    summary = '\n'.join(notes)
+    store.set_summary(doc['id'], summary)
+    return {'document': doc['name'], 'pages': doc['pages'], 'section_notes': summary,
+            **({'note': f'Notes come from {len(parts)} evenly spaced parts of {total}.'} if total > len(parts) else {})}
+
+def pc_access_tool(name, args, store, llm):
+    import files
+    if name == 'look_at_screen':
+        if llm is None:
+            return {'error': 'Screen reading needs the AI model.'}, None
+        shot = files.screenshot()
+        q = str(args.get('question') or 'What is on the screen?')[:300]
+        answer = llm(f"This is a screenshot of the user's PC screen. {q} Answer precisely and briefly. "
+                     "Quote any error message exactly. If it isn't visible, say so.", images=[shot], max_tokens=450)
+        return {'from_screen': answer.strip()}, None
+    if name == 'clipboard':
+        if args.get('action') == 'write':
+            text = str(args.get('text') or '')
+            if not text.strip():
+                return {'error': 'Nothing to copy.'}, None
+            files.set_clipboard_text(text[:20000])
+            return {'done': 'copied to the clipboard'}, None
+        text = files.clipboard_text()
+        if text and text.strip():
+            return {'clipboard': text[:4000], **({'note': f'Clipboard text was cut to 4,000 of {len(text):,} characters.'} if len(text) > 4000 else {})}, None
+        image = files.clipboard_image()
+        if image and llm:
+            return {'clipboard_image': llm("This is an image the user copied. Describe it precisely; quote any text in it exactly.",
+                                           images=[image], max_tokens=450).strip()}, None
+        return {'error': 'The clipboard is empty.'}, None
+    if name == 'find_files':
+        q = str(args.get('query') or '').strip()
+        if not q and not args.get('kind'):
+            return {'error': 'Ask the user what the file is called.'}, None
+        found, scanned, partial = files.find(q, args.get('kind') or '', float(args.get('days') or 0))
+        FOUND[:] = [f['path'] for f in found]
+        if not found:
+            return {'error': f'No matching files found (checked {scanned:,} items in the usual folders).'}, None
+        return {'files': [{'number': i, 'name': f['name'], 'folder': _home(os.path.dirname(f['path'])), 'modified': when_text(f['modified'])}
+                          for i, f in enumerate(found, 1)],
+                'note': 'Shown on screen. The user can say which number to open or read.' + (' Search stopped early; results may be incomplete.' if partial else '')}, None
+    if name == 'open_file':
+        try:
+            n = int(args.get('number'))
+        except (TypeError, ValueError):
+            return {'error': 'Say which number from the list.'}, None
+        if not 1 <= n <= len(FOUND):
+            return {'error': 'Search for the file first, then pick its number.'}, None
+        path = FOUND[n - 1]
+        if not files.openable(path):
+            return {'error': 'For safety, Cortana does not open programs, scripts or shortcuts.'}, None
+        if args.get('read'):
+            from pathlib import Path
+            text, pages = files.extract_text(path, Path(path).read_bytes())
+            did = store.add_document(os.path.basename(path), text, files.chunks(text), pages, path)
+            return {'done': 'read into documents', 'document': os.path.basename(path), 'pages': pages, 'id': did,
+                    'start': text[:1500]}, 'documents'
+        if os.name != 'nt':
+            return {'error': 'Opening files only works on the Windows PC.'}, None
+        os.startfile(path)
+        return {'done': 'opened', 'file': os.path.basename(path)}, None
+    return {'error': f'Unknown tool {name}.'}, None

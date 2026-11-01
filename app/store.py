@@ -9,7 +9,13 @@ CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, role TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS items(
   id INTEGER PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, due REAL,
   done INTEGER NOT NULL DEFAULT 0, announced INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS documents(
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL, path TEXT, pages INTEGER, chars INTEGER NOT NULL, summary TEXT, added REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS doc_chunks(doc_id INTEGER NOT NULL, idx INTEGER NOT NULL, page TEXT, text TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS doc_chunks_doc ON doc_chunks(doc_id);
+CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, title TEXT NOT NULL, start REAL NOT NULL, end REAL NOT NULL, created REAL NOT NULL);
 '''
+MAX_DOCUMENTS = 200
 KINDS = ('timer', 'reminder', 'task')
 MAX_FACTS = 200
 MAX_MESSAGES = 2000
@@ -122,3 +128,67 @@ class Store:
             self.q('UPDATE items SET announced=1, done=1 WHERE id=?', (item['id'],))
         elif item:
             self.q('UPDATE items SET announced=1 WHERE id=?', (item['id'],))
+
+    # ---- documents the user added (text is stored in pieces for searching)
+    def add_document(self, name, text, pieces, pages=None, path=None):
+        """Store a document; re-adding the same name/path replaces it. Returns its id."""
+        name = ' '.join(str(name).split())[:160] or 'Document'
+        old = self.q('SELECT id FROM documents WHERE name=? OR (path IS NOT NULL AND path=?)', (name, path or ''))
+        for d in old:
+            self.remove_document(d['id'])
+        did = self.insert('INSERT INTO documents(name,path,pages,chars,added) VALUES(?,?,?,?,?)',
+                          (name, path, pages, len(text), time.time()))
+        with self.lock:
+            self.db.executemany('INSERT INTO doc_chunks(doc_id,idx,page,text) VALUES(?,?,?,?)',
+                                [(did, i, page, t) for i, (page, t) in enumerate(pieces)])
+            self.db.commit()
+        extra = self.q('SELECT id FROM documents ORDER BY id DESC LIMIT -1 OFFSET ?', (MAX_DOCUMENTS,))
+        for d in extra:
+            self.remove_document(d['id'])
+        return did
+
+    def documents(self):
+        return self.q('SELECT id,name,path,pages,chars,added,(summary IS NOT NULL) AS summarised FROM documents ORDER BY id DESC')
+
+    def document(self, doc_id):
+        rows = self.q('SELECT * FROM documents WHERE id=?', (int(doc_id),))
+        return rows[0] if rows else None
+
+    def find_document(self, match):
+        """Best document for words like 'the brief' or 'chapter notes'; empty match = the most recent one."""
+        docs = self.documents()
+        words = [w for w in str(match or '').lower().replace('.', ' ').split() if len(w) > 2 and w not in ('the', 'this', 'that', 'document', 'file', 'pdf')]
+        if not docs:
+            return None
+        if not words:
+            return docs[0]
+        scored = sorted(((sum(w in d['name'].lower() for w in words), -i, d) for i, d in enumerate(docs)), key=lambda x: (-x[0], -x[1]))
+        return scored[0][2] if scored[0][0] else None
+
+    def document_text(self, doc_id):
+        return '\n\n'.join(r['text'] for r in self.q('SELECT text FROM doc_chunks WHERE doc_id=? ORDER BY idx', (int(doc_id),)))
+
+    def document_chunks(self, doc_id=None):
+        sql = 'SELECT c.doc_id, d.name AS doc, c.page, c.text FROM doc_chunks c JOIN documents d ON d.id=c.doc_id'
+        return self.q(sql + (' WHERE c.doc_id=? ORDER BY c.idx' if doc_id else ' ORDER BY c.doc_id DESC, c.idx'), ((int(doc_id),) if doc_id else ()))
+
+    def set_summary(self, doc_id, summary):
+        self.q('UPDATE documents SET summary=? WHERE id=?', (str(summary)[:4000], int(doc_id)))
+
+    def remove_document(self, doc_id):
+        self.q('DELETE FROM doc_chunks WHERE doc_id=?', (int(doc_id),))
+        self.q('DELETE FROM documents WHERE id=?', (int(doc_id),))
+
+    # ---- calendar events kept by Cortana
+    def add_event(self, title, start, end):
+        title = ' '.join(str(title).split())[:160] or 'Event'
+        return self.insert('INSERT INTO events(title,start,end,created) VALUES(?,?,?,?)', (title, float(start), float(end), time.time()))
+
+    def events_between(self, lo, hi):
+        return self.q('SELECT * FROM events WHERE start<? AND end>? ORDER BY start', (float(hi), float(lo)))
+
+    def upcoming_events(self, limit=20):
+        return self.q('SELECT * FROM events WHERE end>? ORDER BY start LIMIT ?', (time.time(), int(limit)))
+
+    def remove_event(self, event_id):
+        self.q('DELETE FROM events WHERE id=?', (int(event_id),))

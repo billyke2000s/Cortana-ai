@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LAST_REQUEST = {}
 INSTALLED = ['qwen3.5:9b', 'qwen3.5:4b']
+COMPLETIONS = []   # non-streaming requests (document notes, screenshots), newest last
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -46,17 +47,31 @@ class Handler(BaseHTTPRequestHandler):
         LAST_REQUEST.clear()
         LAST_REQUEST.update(body)
         messages = body['messages']
+        if body.get('stream') is False:   # real Ollama returns one JSON object when stream is false
+            m = messages[-1]
+            COMPLETIONS.append(m)
+            text = ("The screen shows a Python error: NameError: name 'x' is not defined." if m.get('images')
+                    else 'This part covers the deadline of 5 March and the 3000 word limit.')
+            return self._json({'model': body['model'], 'message': {'role': 'assistant', 'content': text}, 'done': True})
         user = [m for m in messages if m['role'] == 'user'][-1]['content'].lower()
         last = messages[-1]
         words = lambda text: [{'message': {'content': w + ' '}} for w in text.split()] + [{'done': True}]
         if last['role'] == 'tool':
             reply = {'set_timer': 'Done, Chief. Your pasta timer is running.',
                      'remember': "Got it. I'll remember that.",
-                     'get_weather': "It's 12 degrees and cloudy in London, with rain likely tomorrow."}.get(last.get('tool_name'), 'Done.')
+                     'get_weather': "It's 12 degrees and cloudy in London, with rain likely tomorrow.",
+                     'find_files': 'I found these files. I have put them on screen.',
+                     'add_event': 'Done. Study time is in your calendar for tomorrow at three.'}.get(last.get('tool_name'), 'Done.')
             return self._stream(words(reply))
         if 'timer' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'set_timer', 'arguments': {'minutes': 10, 'label': 'pasta'}}}]}}, {'done': True}])
+        if 'find my' in user and body.get('tools'):
+            return self._stream([{'message': {'content': '', 'tool_calls': [
+                {'function': {'name': 'find_files', 'arguments': {'query': 'coursework'}}}]}}, {'done': True}])
+        if 'book' in user and body.get('tools'):
+            return self._stream([{'message': {'content': '', 'tool_calls': [
+                {'function': {'name': 'add_event', 'arguments': {'title': 'Study time', 'day': 'tomorrow', 'time': '15:00'}}}]}}, {'done': True}])
         if 'weather' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'get_weather', 'arguments': {'place': 'London'}}}]}}, {'done': True}])

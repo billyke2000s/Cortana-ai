@@ -3,12 +3,13 @@ from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler
 from urllib.parse import urlsplit,parse_qs,unquote
 from http.cookies import SimpleCookie
 import json,os,subprocess,threading,base64,secrets,re,time
+from pathlib import Path
 from runtime import RESOURCES,HIDDEN,qr_svg
 UNPAIRED_PAGE=('<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>Cortana: pair your phone</title>'
  '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#020814;color:#e8f4ff;font:16px system-ui;text-align:center;padding:24px">'
  '<div><h1 style="color:#9fe2ff;letter-spacing:.12em">CORTANA</h1><p>This phone isn\'t paired with this session.</p>'
  '<p style="color:#a9c6e6">Scan the QR code shown in the Cortana window on your PC.<br>Each time Cortana restarts it shows a new QR code, so old links stop working.</p></div>').encode()
-SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access')
+SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access')
 _weather_cache={'at':0,'key':None,'value':None}
 class AppServer(ThreadingHTTPServer):
     daemon_threads=True
@@ -62,10 +63,12 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/settings':
             store=runtime.store
             return self.send_json({**{k:store.get(k) for k in SETTINGS_PUBLIC},'model':runtime.model,'voice':store.get('voice','en_US-hfc_female-medium'),
-                'voice_engine':store.get('voice_engine','piper'),'pc_controls':store.get('pc_controls',True),'tools_enabled':store.get('tools_enabled',True),
+                'voice_engine':store.get('voice_engine','piper'),'pc_controls':store.get('pc_controls',True),'tools_enabled':store.get('tools_enabled',True),'pc_access':store.get('pc_access',True),
                 'phone_access':store.get('phone_access','cloudflare'),'calendar_connected':bool(store.get('calendar_url')),'brave_connected':bool(store.get('brave_key')),
                 'voices':runtime.voice.catalog(),'models':runtime.installed_models(),'voice_status':runtime.voice.status})
         if parsed.path=='/api/briefing':return self.send_json(briefing(runtime))
+        if parsed.path=='/api/documents':return self.send_json({'documents':runtime.store.documents(),'folders':runtime.store.get('doc_folders',[]),'canAddFolder':self.local})
+        if parsed.path=='/api/events':return self.send_json({'events':runtime.store.upcoming_events()})
         if parsed.path=='/api/models':return self.send_json(runtime.models_info())
         if parsed.path=='/api/phone-qr':
             if not self.local:return self.send_json({'error':'Pairing is available on the PC only.'},403)
@@ -84,7 +87,7 @@ class Handler(SimpleHTTPRequestHandler):
         if origin and origin!=expected:return self.send_json({'error':'Request must come from Cortana.'},403)
         if not self.headers.get('Content-Type','').startswith('application/json'):return self.send_json({'error':'JSON required.'},415)
         try:
-            size=int(self.headers.get('Content-Length','0'));limit=1500000 if self.path=='/api/transcribe' else 64000
+            size=int(self.headers.get('Content-Length','0'));limit={'/api/transcribe':1500000,'/api/documents':16000000}.get(self.path,64000)
             if not 0<size<=limit:return self.send_json({'error':'Request is too large or empty.'},400)
             data=json.loads(self.rfile.read(size))
             if not isinstance(data,dict):raise ValueError('Invalid request.')
@@ -112,6 +115,10 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path=='/api/objectives':return self.send_json(objectives_action(runtime.store,data))
             if self.path=='/api/memory':return self.send_json(memory_action(runtime.store,data))
             if self.path=='/api/settings':return self.send_json(settings_action(runtime,data))
+            if self.path=='/api/documents':return self.send_json(documents_action(runtime.store,data,self.local))
+            if self.path=='/api/events':
+                if data.get('action')!='remove':raise ValueError('Unknown action.')
+                runtime.store.remove_event(int(data['id']));return self.send_json({'events':runtime.store.upcoming_events()})
             if self.path=='/api/models':
                 tag=str(data.get('tag',''))
                 if data.get('action')=='download':runtime.start_pull(tag)
@@ -157,7 +164,7 @@ def settings_action(runtime,data):
         if url and not re.fullmatch(r'https://\S{10,800}',url):raise ValueError('The calendar address must start with https://')
         store.set('calendar_url',url)
     if 'brave_key' in data:store.set('brave_key',str(data['brave_key']).strip()[:120])
-    for key in ('pc_controls','tools_enabled'):
+    for key in ('pc_controls','tools_enabled','pc_access'):
         if key in data:store.set(key,bool(data[key]))
     if data.get('phone_access') in ('cloudflare','tailscale'):store.set('phone_access',data['phone_access'])
     if data.get('voice_engine') in ('piper','windows') or data.get('voice'):
@@ -165,6 +172,38 @@ def settings_action(runtime,data):
         if voice and voice not in [v['name'] for v in runtime.voice.catalog()]:raise ValueError('Unknown voice.')
         runtime.voice.switch(data.get('voice_engine'),voice)
     return {'ok':True}
+def documents_action(store,data,local):
+    """Add a dropped file (base64), add a whole folder (PC only), or remove a document."""
+    import files
+    action=data.get('action')
+    if action=='remove':store.remove_document(int(data['id']))
+    elif action=='add':
+        name=os.path.basename(str(data.get('name','')).replace('\\','/'))[:160]
+        if not name:raise ValueError('File name missing.')
+        raw=base64.b64decode(str(data.get('data','')),validate=True)
+        if not raw:raise ValueError('That file is empty.')
+        text,pages=files.extract_text(name,raw)
+        if not text.strip():raise ValueError('No readable text in that file.')
+        did=store.add_document(name,text,files.chunks(text),pages)
+        return {'added':{'id':did,'name':name,'pages':pages,'chars':len(text)},'documents':store.documents()}
+    elif action=='add_folder':
+        if not local:raise ValueError('Folders can only be added on the PC itself.')
+        folder=Path(str(data.get('path','')).strip().strip('"')).expanduser()
+        if not str(folder).strip() or not folder.is_dir():raise ValueError('That folder does not exist.')
+        added,skipped=[],[]
+        candidates=[p for p in sorted(folder.rglob('*')) if p.is_file() and p.suffix.lower() in files.DOC_TYPES and len(p.relative_to(folder).parts)<=4][:80]
+        for p in candidates:
+            try:
+                if p.stat().st_size>files.MAX_FILE_BYTES:raise ValueError('too large')
+                text,pages=files.extract_text(p.name,p.read_bytes())
+                if text.strip():store.add_document(p.name,text,files.chunks(text),pages,str(p));added.append(p.name)
+                else:skipped.append(p.name)
+            except Exception:skipped.append(p.name)
+        if not candidates:raise ValueError('No PDF, Word, PowerPoint or text files in that folder.')
+        store.set('doc_folders',(store.get('doc_folders',[])+[str(folder)])[-20:])
+        return {'added_count':len(added),'skipped':skipped[:20],'documents':store.documents()}
+    else:raise ValueError('Unknown action.')
+    return {'documents':store.documents()}
 def briefing(runtime):
     import tools
     store=runtime.store;out={'items':store.items(),'weather':None,'events':None}
@@ -175,8 +214,8 @@ def briefing(runtime):
                 _weather_cache.update(key=home,at=time.time(),value=tools.weather('',home))
             out['weather']=_weather_cache['value']
         except Exception:out['weather']={'error':'Weather is unavailable right now. Check the internet connection.'}
-    if store.get('calendar_url'):
-        try:out['events']=tools.calendar(store.get('calendar_url'),'today')
+    if store.get('calendar_url') or store.events_between(time.time()-86400,time.time()+86400):
+        try:out['events']=tools.day_events(store,'today')
         except Exception:out['events']={'error':'Could not read your calendar. Check the address in Systems and the internet connection.'}
     return out
 if __name__=='__main__':

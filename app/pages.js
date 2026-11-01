@@ -48,15 +48,24 @@ async function objectives(){
 /* ---------------- Memory ---------------- */
 async function memory(){
  try{
-  const {facts,messages}=await get('/api/memory');
+  const [{facts,messages},docs]=await Promise.all([get('/api/memory'),get('/api/documents')]);
   page('memory','Memory',`
    <h3>What I remember about you</h3>
    ${facts.length?`<ul class="pg-list">${facts.map(f=>`<li class="pg-item"><span class="pg-text">${esc(f.text)}</span><button type="button" class="pg-btn pg-del" data-act="forget" data-id="${f.id}" aria-label="Forget">✕</button></li>`).join('')}</ul>`:'<p class="pg-muted">Nothing yet. Tell me things like “remember my dog is called Max”.</p>'}
    <form class="pg-add" id="pgFact"><input id="pgFactText" placeholder="Add something to remember" maxlength="300" required aria-label="Fact"><button type="submit" class="pg-primary">Remember</button></form>
+   <h3>Documents I can read</h3>
+   ${docs.documents.length?`<ul class="pg-list">${docs.documents.map(d=>`<li class="pg-item"><span class="pg-ico">📄</span><span class="pg-text">${esc(d.name)}<span class="pg-due">${d.pages?esc(d.pages)+(/\.pptx$/i.test(d.name)?' slides':' pages')+' · ':''}${d.chars<1000?esc(d.chars)+' characters':esc(Math.round(d.chars/1000))+'k characters'}</span></span><button type="button" class="pg-btn pg-del" data-act="doc-remove" data-id="${d.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>`:'<p class="pg-muted">None yet. Add PDFs, Word, PowerPoint or text files, then ask “summarise this” or “quiz me on chapter 3”.</p>'}
+   <button type="button" class="pg-btn pg-wide" data-act="attach">Add files…</button>
+   ${docs.canAddFolder?`<form class="pg-add" id="pgFolder"><input id="pgFolderPath" placeholder="Folder, e.g. C:\\Users\\you\\Documents\\Coursework" maxlength="400" required aria-label="Folder path"><button type="submit" class="pg-primary">Add folder</button></form><p class="pg-muted" id="pgFolderMsg" role="status"></p>`:''}
    <h3>Recent conversations</h3>
    ${messages.length?`<ul class="pg-convo">${messages.slice(-30).map(m=>`<li class="${m.role==='user'?'you':'her'}"><b>${m.role==='user'?'You':'Cortana'}</b> ${esc(m.content.replace(/\[\[SCREEN\]\][\s\S]*/,'').slice(0,300))}</li>`).join('')}</ul>
     <button type="button" class="pg-btn pg-wide" data-act="clear">Clear conversation history</button>`:'<p class="pg-muted">No conversations saved yet.</p>'}
    <p class="pg-muted">Saved only on your PC.</p>`,'CORTANA // MEMORY');
+  const folder=document.getElementById('pgFolder');
+  if(folder)folder.onsubmit=async e=>{e.preventDefault();const msg=document.getElementById('pgFolderMsg');msg.textContent='Reading the folder… this can take a minute.';
+   try{const v=await post('/api/documents',{action:'add_folder',path:document.getElementById('pgFolderPath').value});memory();
+    setTimeout(()=>{const m=document.getElementById('pgFolderMsg');if(m)m.textContent=`Added ${v.added_count} file${v.added_count===1?'':'s'}${v.skipped.length?`; skipped ${v.skipped.length} (no readable text or too large)`:''}.`;},300);}
+   catch(err){msg.textContent=err.message;}};
   document.getElementById('pgFact').onsubmit=async e=>{e.preventDefault();try{await post('/api/memory',{action:'add',text:document.getElementById('pgFactText').value});memory();}catch(err){alertIn(err.message);}};
  }catch(e){failed('memory','Memory',e);}
 }
@@ -72,7 +81,7 @@ async function briefing(){
    `<div class="pg-card"><div class="pg-big">${esc(w.now.temp_c)}°</div><div><b>${esc(w.now.summary)}</b><br><span class="pg-muted">${esc(w.place)} · feels ${esc(w.now.feels_like_c)}° · wind ${esc(w.now.wind_kmh)} km/h</span></div></div>
     <ul class="pg-days">${w.days.map(d=>`<li><b>${esc(new Date(d.date+'T12:00').toLocaleDateString('en-GB',{weekday:'short'}))}</b>${esc(d.summary)}<span>${esc(d.high_c)}° / ${esc(d.low_c)}° · ${esc(d.rain_chance_pct??0)}% rain</span></li>`).join('')}</ul>`;
   const cal=!ev?`<p class="pg-muted">Connect your calendar in Systems to see today’s events.</p>`:ev.error?`<p class="pg-err">${esc(ev.error)}</p>`:
-   ev.events.length?`<ul class="pg-list">${ev.events.map(e=>`<li class="pg-item"><span class="pg-ico">${esc(e.time)}</span><span class="pg-text">${esc(e.title)}${e.location?`<span class="pg-due">${esc(e.location)}</span>`:''}</span></li>`).join('')}</ul>`:'<p class="pg-muted">Nothing on your calendar today.</p>';
+   ev.events.length?`<ul class="pg-list">${ev.events.map(e=>`<li class="pg-item"><span class="pg-ico">${esc(e.time)}</span><span class="pg-text">${esc(e.title)}${e.location?`<span class="pg-due">${esc(e.location)}</span>`:''}${e.source==='Cortana'?'<span class="pg-due">added by Cortana</span>':''}</span>${e.source==='Cortana'?`<button type="button" class="pg-btn pg-del" data-act="event-remove" data-id="${e.id}" aria-label="Remove event">✕</button>`:''}</li>`).join('')}</ul>`:'<p class="pg-muted">Nothing on your calendar today.</p>';
   page('briefing','Mission Briefing',`
    <p class="pg-muted">${esc(new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}))}</p>
    <button type="button" class="pg-primary pg-wide" data-act="read">▶ Read my briefing</button>
@@ -94,8 +103,9 @@ function briefingSpeech(b){
 /* ---------------- Chat ---------------- */
 /* Same holo panel as the other pages. Displays (code, tables, weather) appear as cards inside the conversation. */
 function chatMsg(m,i){
+ if(m.role==='system')return `<div class="chat-note${m.error?' chat-err':''}">${esc(m.text)}</div>`;
  if(m.role==='user')return `<div class="chat-msg chat-you"><small>YOU</small><p>${esc(m.text)}</p></div>`;
- const card=m.screen?(()=>{const r=D.render(m.screen);return `<div class="chat-card"><div class="chat-card-head">◆ ${esc(r.title)}<button type="button" class="pg-btn" data-act="chat-display" data-i="${i}">Expand</button></div>${r.html}</div>`;})():'';
+ const card=m.screen?(()=>{const r=D.render(m.screen);return `<div class="chat-card"><div class="chat-card-head">◆ ${esc(r.title)}<span><button type="button" class="pg-btn" data-act="card-copy" data-i="${i}">Copy</button> <button type="button" class="pg-btn" data-act="chat-display" data-i="${i}">Expand</button></span></div>${r.html}</div>`;})():'';
  const body=m.text?`<p>${esc(m.text)}</p>`:m.pending?`<p class="chat-typing">${esc(m.working?m.working+'…':'Thinking')}<i></i><i></i><i></i></p>`:'';
  return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
 }
@@ -109,6 +119,7 @@ function renderChatLog(){
 function chat(){
  page('chat','Chat',`<div id="chatLog" class="chat-log" aria-live="polite"></div>
   <form id="chatForm" class="chat-compose"><label class="sr-only" for="chatInput">Message</label>
+   <button type="button" class="pg-btn chat-attach" data-act="attach" aria-label="Add a file for Cortana to read" title="Add a PDF, Word, PowerPoint or text file">📎</button>
    <textarea id="chatInput" rows="1" maxlength="3000" placeholder="Message Cortana…" enterkeyhint="send"></textarea>
    <button type="submit" class="pg-primary" aria-label="Send">Send</button></form>`,'CORTANA // COMMS');
  renderChatLog();const b=D.body();b.scrollTop=b.scrollHeight;
@@ -120,6 +131,29 @@ function chat(){
  if(matchMedia('(pointer:fine)').matches)input.focus();
 }
 document.addEventListener('cortana:chat',()=>{if(D.page==='chat')renderChatLog();});
+
+/* Files for Cortana to read: the paperclip in Chat, dropping files on the panel, or Memory → Documents. */
+const DOC_ACCEPT='.pdf,.docx,.pptx,.txt,.md,.csv,.json,.py,.js,.html,.htm,.xml,.log,.rtf';
+const MAX_UPLOAD=12*1024*1024;
+function pickFiles(){
+ const input=document.createElement('input');input.type='file';input.multiple=true;input.accept=DOC_ACCEPT;
+ input.onchange=()=>uploadFiles([...input.files]);input.click();
+}
+async function uploadFiles(list){
+ for(const f of list){
+  if(f.size>MAX_UPLOAD){C.note(`${f.name} is over 12 MB. Add its folder from Memory on the PC instead.`,true);continue;}
+  C.note(`Reading ${f.name}…`);
+  try{
+   const data=await new Promise((ok,bad)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>bad(Error('Could not read the file.'));r.readAsDataURL(f);});
+   const v=await post('/api/documents',{action:'add',name:f.name,data});
+   const a=v.added;C.chat.pop();C.note(`📄 ${a.name} added${a.pages?` (${a.pages} ${/\.pptx$/i.test(a.name)?'slides':'pages'})`:''}. Ask me to summarise it, find something in it, or quiz you on it.`);
+  }catch(e){C.chat.pop();C.note(`${f.name}: ${e.message}`,true);}
+ }
+ if(D.page==='memory')memory();
+}
+D.body().addEventListener('dragover',e=>{if(e.dataTransfer?.types?.includes('Files')){e.preventDefault();D.body().classList.add('drop-on');}});
+D.body().addEventListener('dragleave',()=>D.body().classList.remove('drop-on'));
+D.body().addEventListener('drop',e=>{if(!e.dataTransfer?.files?.length)return;e.preventDefault();D.body().classList.remove('drop-on');if(D.page!=='chat')chat();uploadFiles([...e.dataTransfer.files]);});
 
 /* ---------------- Systems (settings) ---------------- */
 /* AI model picker: rated for this PC's graphics card; models that are too big can't be chosen. */
@@ -161,6 +195,7 @@ async function systems(){
    <div id="sModels"><p class="pg-muted">Checking your hardware…</p></div>
    <label class="pg-check"><input type="checkbox" id="sTools"${s.tools_enabled?' checked':''}> Abilities (timers, memory, weather, search, calendar)</label>
    <label class="pg-check"><input type="checkbox" id="sPC"${s.pc_controls?' checked':''}> PC controls (media, volume, open allowed apps)</label>
+   <label class="pg-check"><input type="checkbox" id="sAccess"${s.pc_access!==false?' checked':''}> Screen, clipboard and file access (only when you ask; nothing leaves this PC)</label>
    <h3>Voice</h3>
    <label>Engine<select id="sEngine">${opt('piper','Natural (Piper)',s.voice_engine==='piper')}${opt('windows','Windows voice',s.voice_engine==='windows')}</select></label>
    <label>Natural voice<select id="sVoice">${s.voices.map(v=>opt(v.name,v.name+(v.stock?'':' — your voice')+(v.installed?'':' (downloads)'),v.name===s.voice)).join('')}</select></label>
@@ -184,7 +219,7 @@ async function systems(){
 }
 async function saveSystems(){
  const s=systems.initial||{},v=id=>document.getElementById(id),data={};
- data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;
+ data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;data.pc_access=v('sAccess').checked;
  if(v('sEngine').value!==s.voice_engine)data.voice_engine=v('sEngine').value;
  if(v('sVoice').value!==s.voice)data.voice=v('sVoice').value;
  data.home_location=v('sHome').value.trim();
@@ -209,13 +244,21 @@ D.body().addEventListener('click',async e=>{
   else if(act==='save')saveSystems();
   else if(act==='get-model'||act==='use-model'){btn.disabled=true;await post('/api/models',{action:act==='get-model'?'download':'use',tag:btn.dataset.tag});renderModels();}
   else if(act==='disconnect'){await post('/api/settings',{calendar_url:''});systems();}
+  else if(act==='attach')pickFiles();
+  else if(act==='doc-remove'){await post('/api/documents',{action:'remove',id:Number(id)});memory();}
+  else if(act==='event-remove'){await post('/api/events',{action:'remove',id:Number(id)});briefing();}
+  else if(act==='card-copy'){
+   const md=(C.chat||[])[Number(btn.dataset.i)]?.screen||'';
+   const text=md.replace(/^# .*\n?/,'').replace(/^```\w*$/gm,'').replace(/\*\*([^*]+)\*\*/g,'$1').replace(/`([^`]+)`/g,'$1')
+    .replace(/\[([^\]]+)\]\((https:[^)]+)\)/g,'$1: $2').replace(/^\|?\s*-{3,}.*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+   try{await navigator.clipboard.writeText(text);btn.textContent='Copied';}catch{btn.textContent='Copy failed';}setTimeout(()=>{btn.textContent='Copy';},1500);}
   else if(act==='chat-display'){const m=(C.chat||[])[Number(btn.dataset.i)];if(m?.screen)C.showScreen(m.screen);}
   else if(act==='display'){D.hide();document.getElementById('settingsDialog').showModal();}
  }catch(err){alertIn(err.message);}
 });
 document.addEventListener('cortana:refresh',e=>{
  if(e.detail.what==='objectives'&&D.page==='tasks')objectives();
- if(e.detail.what==='memory'&&D.page==='memory')memory();
+ if((e.detail.what==='memory'||e.detail.what==='documents')&&D.page==='memory')memory();
 });
 const PAGES={chat,tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
 window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;}};

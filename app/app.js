@@ -190,7 +190,8 @@ refreshStatus();setInterval(refreshStatus,4000);
 addEventListener('keydown',e=>{if(e.key==='Escape')stop();});
 addEventListener('pagehide',stop);
 // An existing assistant can provide replies using this API without replacing the UI.
-window.Cortana={speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md)};
+window.Cortana={speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
+ note(text,error=false){chatLog.push({role:'system',text,error});chatChanged();}};
 
 /* ---- Timer and reminder alerts (checked with every status poll) ---- */
 const announced=new Set();
@@ -251,7 +252,8 @@ if(preference('wake','0')==='1')addEventListener('pointerdown',()=>setWake(true)
 const holoEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function holoInline(t){
  return t.split(/(`[^`]+`)/g).map(p=>p.length>1&&p.startsWith('`')&&p.endsWith('`')?'<code>'+holoEsc(p.slice(1,-1))+'</code>'
-  :holoEsc(p).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g,'$1<em>$2</em>')).join('');
+  :holoEsc(p).replace(/\[([^\]]+)\]\((https:\/\/[^\s)"'<>]+)\)/g,'<a class="holo-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>')   // https only; text already escaped
+   .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g,'$1<em>$2</em>')).join('');
 }
 const HOLO_KEYWORDS=new Set('def class return if elif else for while in import from as with try except finally raise pass break continue lambda yield and or not is None True False async await const let var function new this null true false switch case default public private static void int string bool'.split(' '));
 function holoHighlight(code){

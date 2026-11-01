@@ -22,3 +22,25 @@ jobs:
           "WHISPER=$cli" | Out-File -Append $env:GITHUB_ENV
       - name: Live check
         run: python tests/ci_live_check.py "${{ env.WHISPER }}" ggml-base.en.bin
+
+  model:
+    # Real Qwen 3.5 on a CPU runner: tool choice with the real prompt + schemas, and reading an image (AGENTS.md §6.6).
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ollama and the model
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          (OLLAMA_CONTEXT_LENGTH=6144 ollama serve > ollama.log 2>&1 &)
+          sleep 5
+          ollama pull qwen3.5:4b
+          ollama --version
+      - name: Model check
+        run: |
+          pip install -r requirements.txt pillow
+          sudo apt-get install -y fonts-dejavu-core > /dev/null
+          python tests/ci_model_check.py qwen3.5:4b

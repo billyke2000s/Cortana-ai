@@ -5,7 +5,7 @@ Run from the repository root:   python -m unittest discover -s tests -v
 Covers the sentence streamer, local storage, tools, calendar parsing, the HTTP API (streaming chat with tools,
 objectives, memory, settings), and the security rules (phone pairing cookie, origin check, private files).
 """
-import base64, http.client, io, json, os, sys, tempfile, threading, time, types, unittest, urllib.request, wave
+import base64, http.client, io, json, os, sys, tempfile, threading, time, types, unittest, urllib.request, wave, zipfile
 from datetime import date, timedelta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +19,7 @@ import fake_ollama  # noqa: E402
 OLLAMA = fake_ollama.start()
 os.environ['CORTANA_OLLAMA_URL'] = f'http://127.0.0.1:{OLLAMA.server_address[1]}'
 
-import hardware, runtime, server, store, tools  # noqa: E402
+import files, hardware, runtime, server, store, tools  # noqa: E402
 
 
 def stream_all(text, chunk=3):
@@ -225,6 +225,248 @@ class CalendarTests(unittest.TestCase):
         self.assertNotIn('Cancelled', day1)
         self.assertIn('Gym, legs day', day8)                           # weekly repeat
         self.assertNotIn('Weekly with exception', day8)                # EXDATE honoured
+
+
+def make_docx(paragraphs):
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, 'w') as z:
+        body = ''.join(f'<w:p><w:r><w:t>{t}</w:t></w:r></w:p>' for t in paragraphs)
+        z.writestr('word/document.xml', '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                                        f'<w:body>{body}</w:body></w:document>')
+    return b.getvalue()
+
+def make_pptx(slides):
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, 'w') as z:
+        for i, text in enumerate(slides, 1):
+            z.writestr(f'ppt/slides/slide{i}.xml', '<p:sld xmlns:p="p" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+                                                    f'<a:p><a:r><a:t>{text}</a:t></a:r></a:p></p:sld>')
+    return b.getvalue()
+
+def make_pdf(pages):
+    """A real minimal PDF (one text line per page) with a correct cross-reference table."""
+    objs = ['<< /Type /Catalog /Pages 2 0 R >>', None, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+    kids = []
+    for text in pages:
+        stream = f'BT /F1 12 Tf 72 720 Td ({text}) Tj ET'.encode()
+        objs.append(f'<< /Length {len(stream)} >>\nstream\n{stream.decode()}\nendstream')
+        objs.append(f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents {len(objs)} 0 R >>')
+        kids.append(f'{len(objs)} 0 R')
+    objs[1] = f'<< /Type /Pages /Kids [{" ".join(kids)}] /Count {len(kids)} >>'
+    out, offsets = b'%PDF-1.4\n', []
+    for i, o in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f'{i} 0 obj\n{o}\nendobj\n'.encode()
+    xref = len(out)
+    out += f'xref\n0 {len(objs) + 1}\n0000000000 65535 f \n'.encode() + b''.join(f'{o:010d} 00000 n \n'.encode() for o in offsets)
+    out += f'trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+    return out
+
+
+class DocumentTests(unittest.TestCase):
+    def setUp(self):
+        self.s = store.Store(os.path.join(tempfile.mkdtemp(), 'd.db'))
+
+    def tearDown(self):
+        self.s.close()
+
+    def add(self, name, data):
+        text, pages = files.extract_text(name, data)
+        return self.s.add_document(name, text, files.chunks(text), pages)
+
+    def test_extracts_pdf_word_powerpoint_and_text(self):
+        text, pages = files.extract_text('brief.pdf', make_pdf(['Coursework brief', 'Deadline is 5 March']))
+        self.assertEqual(pages, 2)
+        self.assertIn('[page 2]', text)
+        self.assertIn('Deadline is 5 March', text)
+        self.assertIn('Word limit 3000', files.extract_text('n.docx', make_docx(['Intro', 'Word limit 3000']))[0])
+        text, slides = files.extract_text('talk.pptx', make_pptx(['Title slide', 'Results']))
+        self.assertEqual(slides, 2)
+        self.assertIn('[slide 2]', text)
+        self.assertEqual(files.extract_text('a.html', b'<p>Hi</p><script>bad()</script>')[0].split(), ['Hi'])
+        for bad in ('virus.exe', 'photo.png'):
+            with self.assertRaises(ValueError):
+                files.extract_text(bad, b'x')
+        with self.assertRaises(ValueError):
+            files.extract_text('broken.docx', b'not a zip')
+
+    def test_search_finds_the_right_passage_with_its_page(self):
+        pages = [f'Chapter {i}. ' + ('Filler text about other topics. ' * 30) for i in range(1, 6)]
+        pages[2] = 'Chapter 3. Photosynthesis turns light into chemical energy in the chloroplast. ' + 'More detail. ' * 30
+        self.add('biology.pdf', make_pdf(pages))
+        self.add('notes.docx', make_docx(['The essay deadline is Friday 14 March at noon.']))
+        out, _ = tools.run('search_documents', {'query': 'what is photosynthesis'}, self.s)
+        self.assertEqual(out['results'][0]['document'], 'biology.pdf')
+        self.assertEqual(out['results'][0]['where'], 'page 3')
+        out, _ = tools.run('search_documents', {'query': 'essay deadline', 'document': 'notes'}, self.s)
+        self.assertIn('14 March', out['results'][0]['text'])
+        self.assertIn('error', tools.run('search_documents', {'query': 'x', 'document': 'nonexistent'}, self.s)[0])
+
+    def test_summary_uses_the_model_per_part_and_is_cached(self):
+        self.add('long.docx', make_docx([f'Paragraph {i}: ' + 'words ' * 120 for i in range(40)]))
+        calls = []
+        llm = lambda prompt, images=None, max_tokens=300: calls.append(prompt) or f'note {len(calls)}'
+        out, _ = tools.run('summarise_document', {}, self.s, llm)    # empty = most recent document
+        self.assertEqual(out['document'], 'long.docx')
+        self.assertEqual(len(calls), 8)                                # at most 8 parts, evenly spaced
+        self.assertIn('note 8', out['section_notes'])
+        self.assertIn('parts of', out['note'])
+        tools.run('summarise_document', {'document': 'long'}, self.s, llm)
+        self.assertEqual(len(calls), 8)                                # cached
+        self.add('short.txt', b'Just one short line.')
+        out, _ = tools.run('summarise_document', {'document': 'short'}, self.s, llm)
+        self.assertIn('short line', out['text'])                       # short files go straight to the model
+
+    def test_no_documents_explains_how_to_add(self):
+        self.assertIn('paperclip', tools.run('search_documents', {'query': 'x'}, self.s)[0]['error'])
+
+    def test_replace_and_remove(self):
+        a = self.add('notes.txt', b'old text')
+        b = self.add('notes.txt', b'new text')
+        self.assertEqual([d['id'] for d in self.s.documents()], [b])
+        self.assertIn('new', self.s.document_text(b))
+        self.s.remove_document(b)
+        self.assertEqual(self.s.documents(), [])
+        self.assertEqual(self.s.document_chunks(), [])
+
+    def test_documents_reach_the_prompt(self):
+        self.add('brief.txt', b'x')
+        self.assertIn('brief.txt', runtime.system_prompt(self.s))
+
+
+class PcAccessTests(unittest.TestCase):
+    def setUp(self):
+        self.s = store.Store(os.path.join(tempfile.mkdtemp(), 'p.db'))
+        self.dir = tempfile.mkdtemp()
+        self._shot, self._clip, self._clipimg, self._setclip, self._roots = files.screenshot, files.clipboard_text, files.clipboard_image, files.set_clipboard_text, files.search_roots
+        files.search_roots = lambda extra=(): [__import__('pathlib').Path(self.dir)]
+
+    def tearDown(self):
+        files.screenshot, files.clipboard_text, files.clipboard_image, files.set_clipboard_text, files.search_roots = self._shot, self._clip, self._clipimg, self._setclip, self._roots
+        self.s.close()
+
+    def touch(self, rel, data=b'x', age_days=0):
+        p = os.path.join(self.dir, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, 'wb').write(data)
+        t = time.time() - age_days * 86400
+        os.utime(p, (t, t))
+        return p
+
+    def test_find_open_and_read_files(self):
+        self.touch('Uni/Coursework Brief.pdf', make_pdf(['Submit by 5 March']), age_days=2)
+        self.touch('Uni/old coursework.docx', make_docx(['Old']), age_days=40)
+        self.touch('Downloads/coursework.exe')
+        self.touch('node_modules/coursework.pdf')                       # skipped folder
+        out, _ = tools.run('find_files', {'query': 'my coursework from last week', 'days': 7}, self.s)
+        self.assertEqual(sorted(f['name'] for f in out['files']), ['Coursework Brief.pdf', 'coursework.exe'])   # not the 40-day-old one
+        card = tools.screen_for('find_files', out)
+        self.assertIn('# Files found', card)
+        out, _ = tools.run('find_files', {'query': 'coursework', 'kind': 'pdf'}, self.s)
+        self.assertEqual([f['name'] for f in out['files']], ['Coursework Brief.pdf'])
+        # the .exe is found but never opened
+        listed = [f['name'] for f in tools.run('find_files', {'query': 'coursework', 'days': 7}, self.s)[0]['files']]
+        exe, pdf = listed.index('coursework.exe') + 1, listed.index('Coursework Brief.pdf') + 1
+        self.assertIn('does not open programs', tools.run('open_file', {'number': exe}, self.s)[0]['error'])
+        self.assertIn('error', tools.run('open_file', {'number': 9}, self.s)[0])
+        self.assertIn('error', tools.run('open_file', {'number': 'C:/Windows/system32/cmd.exe'}, self.s)[0])
+        out, change = tools.run('open_file', {'number': pdf, 'read': True}, self.s)
+        self.assertEqual(change, 'documents')
+        self.assertIn('5 March', out['start'])
+        self.assertEqual(self.s.documents()[0]['name'], 'Coursework Brief.pdf')
+
+    def test_screen_and_clipboard(self):
+        files.screenshot = lambda: 'PNGDATA'
+        seen = {}
+        def llm(prompt, images=None, max_tokens=300):
+            seen.update(prompt=prompt, images=images)
+            return 'NameError on line 3'
+        out, _ = tools.run('look_at_screen', {'question': "what's this error?"}, self.s, llm)
+        self.assertEqual(out['from_screen'], 'NameError on line 3')
+        self.assertEqual(seen['images'], ['PNGDATA'])
+        self.assertIn("what's this error?", seen['prompt'])
+        files.clipboard_text = lambda: 'Dear Sam, ' * 600
+        out, _ = tools.run('clipboard', {'action': 'read'}, self.s, llm)
+        self.assertEqual(len(out['clipboard']), 4000)
+        self.assertIn('cut to 4,000', out['note'])
+        files.clipboard_text, files.clipboard_image = (lambda: None), (lambda: 'IMG')
+        self.assertEqual(tools.run('clipboard', {'action': 'read'}, self.s, llm)[0]['clipboard_image'], 'NameError on line 3')
+        files.clipboard_image = lambda: None
+        self.assertIn('empty', tools.run('clipboard', {'action': 'read'}, self.s, llm)[0]['error'])
+        copied = []
+        files.set_clipboard_text = copied.append
+        self.assertEqual(tools.run('clipboard', {'action': 'write', 'text': 'Hello'}, self.s)[0]['done'], 'copied to the clipboard')
+        self.assertEqual(copied, ['Hello'])
+
+    def test_switch_off(self):
+        self.s.set('pc_access', False)
+        for name, args in (('look_at_screen', {'question': 'x'}), ('clipboard', {'action': 'read'}), ('find_files', {'query': 'x'}), ('open_file', {'number': 1})):
+            self.assertIn('switched off', tools.run(name, args, self.s, lambda *a, **k: 'x')[0]['error'], name)
+
+    def test_not_on_windows_is_a_clear_error(self):
+        if os.name == 'nt':
+            self.skipTest('Windows')
+        files.screenshot = self._shot
+        self.assertIn('Windows', tools.run('look_at_screen', {'question': 'x'}, self.s, lambda *a, **k: 'x')[0]['error'])
+
+
+class EventTests(unittest.TestCase):
+    def setUp(self):
+        self.s = store.Store(os.path.join(tempfile.mkdtemp(), 'e.db'))
+
+    def tearDown(self):
+        self.s.close()
+
+    def test_resolve_day(self):
+        from datetime import datetime as dt
+        thu = dt(2026, 11, 5, 16, 0)                                    # a Thursday, 4 pm
+        self.assertEqual(tools.resolve_day('thursday', '17:00', thu), dt(2026, 11, 5, 17, 0))
+        self.assertEqual(tools.resolve_day('Thursday', '15:00', thu), dt(2026, 11, 12, 15, 0))   # already passed: next week
+        self.assertEqual(tools.resolve_day('mon', '09:30', thu), dt(2026, 11, 9, 9, 30))
+        self.assertEqual(tools.resolve_day('tomorrow', '8:05', thu), dt(2026, 11, 6, 8, 5))
+        self.assertEqual(tools.resolve_day('2026-12-01', '10:00', thu), dt(2026, 12, 1, 10, 0))
+        for day, t in (('someday', '10:00'), ('today', '25:00'), ('today', 'three')):
+            with self.assertRaises(ValueError):
+                tools.resolve_day(day, t, thu)
+
+    def test_add_event_makes_reminder_card_and_google_link(self):
+        out, change = tools.run('add_event', {'title': 'Study time', 'day': 'tomorrow', 'time': '15:00'}, self.s)
+        self.assertEqual(change, 'objectives')
+        self.assertTrue(out['google_link'].startswith('https://calendar.google.com/calendar/render?action=TEMPLATE'))
+        ev = self.s.upcoming_events()[0]
+        self.assertEqual(ev['end'] - ev['start'], 3600)
+        rem = [i for i in self.s.items() if i['kind'] == 'reminder'][0]
+        self.assertEqual(rem['due'], ev['start'] - 600)
+        self.assertIn('starts in 10 minutes', rem['text'])
+        card = tools.screen_for('add_event', out)
+        self.assertIn('[Add to Google Calendar](https://calendar.google.com/', card)
+        day = tools.run('get_calendar', {'day': 'tomorrow'}, self.s)[0]
+        self.assertEqual(day['events'][0]['title'], 'Study time')
+        self.assertEqual(day['events'][0]['source'], 'Cortana')
+        self.assertIn('error', tools.run('add_event', {'title': 'X', 'day': 'today', 'time': '00:00'}, self.s)[0])
+        self.assertIn('error', tools.run('add_event', {'title': '', 'day': 'today', 'time': '23:59'}, self.s)[0])
+
+    def test_google_events_get_a_reminder_once(self):
+        rt = runtime.Runtime(lambda text: None)
+        rt.store.set('calendar_url', 'https://example.com/cal.ics')
+        now = time.time()
+        old = tools.ical_upcoming
+        tools.ical_upcoming = lambda url, hours=12, now=None: [('Lecture', now + 3600), ('Starting now', now + 30)]
+        try:
+            before = len(rt.store.items())
+            self.assertEqual(rt.calendar_tick(now), 1)
+            self.assertEqual(rt.calendar_tick(now), 0)                 # not twice
+            new = [i for i in rt.store.items() if 'Lecture starts in 10 minutes' == i['text']]
+            self.assertEqual(len(rt.store.items()), before + 1)
+            self.assertAlmostEqual(new[0]['due'], now + 3000, delta=1)
+        finally:
+            tools.ical_upcoming = old
+            for i in rt.store.items():
+                rt.store.delete_item(i['id'])
+            rt.store.set('calendar_url', '')
+            rt.store.set('cal_reminded', [])
+            rt.close()
+
 
 
 class WakeWordTests(unittest.TestCase):
@@ -485,7 +727,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 403)
 
     def test_private_files_are_not_served(self):
-        for path in ('/runtime.py', '/server.py', '/store.py', '/tools.py', '/voice.py', '/assets/%2e%2e/runtime.py'):
+        for path in ('/runtime.py', '/server.py', '/store.py', '/tools.py', '/voice.py', '/files.py', '/hardware.py', '/assets/%2e%2e/runtime.py'):
             self.assertEqual(self.request('GET', path)[0], 404, path)
         for path in ('/', '/app.js', '/pages.js', '/avatar.js', '/responsive.css'):
             self.assertEqual(self.request('GET', path)[0], 200, path)
@@ -515,6 +757,52 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.rt.store.get('model'), 'qwen3.5:2b')
         self.request('POST', '/api/models', {'action': 'use', 'tag': 'qwen3.5:9b'})
         self.assertEqual(self.rt.model, 'qwen3.5:9b')
+
+    def test_documents_api(self):
+        data = base64.b64encode(make_docx(['The project is due on 9 May.'])).decode()
+        status, _, raw = self.request('POST', '/api/documents', {'action': 'add', 'name': '../../brief.docx', 'data': data})
+        self.assertEqual(status, 200, raw)
+        added = json.loads(raw)['added']
+        self.assertEqual(added['name'], 'brief.docx')                 # path parts dropped
+        listed = json.loads(self.request('GET', '/api/documents')[2])
+        self.assertIn('brief.docx', [d['name'] for d in listed['documents']])
+        self.assertTrue(listed['canAddFolder'])
+        bad = base64.b64encode(b'MZ').decode()
+        self.assertEqual(self.request('POST', '/api/documents', {'action': 'add', 'name': 'x.exe', 'data': bad})[0], 400)
+        folder = tempfile.mkdtemp()
+        open(os.path.join(folder, 'a.txt'), 'w').write('Alpha notes')
+        os.makedirs(os.path.join(folder, 'sub')); open(os.path.join(folder, 'sub', 'b.md'), 'w').write('# Beta')
+        open(os.path.join(folder, 'c.exe'), 'wb').write(b'MZ')
+        status, _, raw = self.request('POST', '/api/documents', {'action': 'add_folder', 'path': folder})
+        self.assertEqual(json.loads(raw)['added_count'], 2)
+        status, headers, _ = self.request('GET', '/?pair=' + self.rt.token, host=self.TUNNEL)
+        session = headers['Set-Cookie'].split(';')[0]
+        status, _, raw = self.request('POST', '/api/documents', {'action': 'add_folder', 'path': folder}, {'Cookie': session}, host=self.TUNNEL)
+        self.assertEqual(status, 400)
+        self.assertIn('on the PC itself', json.loads(raw)['error'])        # the phone can't index PC folders
+        self.assertFalse(json.loads(self.request('GET', '/api/documents', headers={'Cookie': session}, host=self.TUNNEL)[2])['canAddFolder'])
+        for d in json.loads(self.request('GET', '/api/documents')[2])['documents']:
+            self.request('POST', '/api/documents', {'action': 'remove', 'id': d['id']})
+        self.assertEqual(json.loads(self.request('GET', '/api/documents')[2])['documents'], [])
+
+    def test_events_and_pc_access_setting(self):
+        events = self.chat('Book study time tomorrow at 3')
+        screens = [e['markdown'] for e in events if e['type'] == 'screen']
+        self.assertTrue(screens and screens[0].startswith('# Event added'))
+        listed = json.loads(self.request('GET', '/api/events')[2])['events']
+        self.assertEqual(listed[0]['title'], 'Study time')
+        self.request('POST', '/api/events', {'action': 'remove', 'id': listed[0]['id']})
+        self.assertEqual(json.loads(self.request('GET', '/api/events')[2])['events'], [])
+        self.assertTrue(json.loads(self.request('GET', '/api/settings')[2])['pc_access'])
+        self.request('POST', '/api/settings', {'pc_access': False})
+        self.assertFalse(json.loads(self.request('GET', '/api/settings')[2])['pc_access'])
+        self.request('POST', '/api/settings', {'pc_access': True})
+
+    def test_model_completion_sends_images(self):
+        fake_ollama.COMPLETIONS.clear()
+        self.assertIn('NameError', self.rt.complete('What is on screen?', images=['QUJD']))
+        self.assertEqual(fake_ollama.COMPLETIONS[-1]['images'], ['QUJD'])
+        self.assertEqual(fake_ollama.LAST_REQUEST['stream'], False)
 
     def test_phone_pairing(self):
         # Unpaired phone: friendly 403 page
