@@ -56,7 +56,7 @@ jobs:
         run: pip install -r requirements-build.txt
       - name: Offline tests
         run: python -m unittest discover -s tests -v
-      - name: Native keyword detector and notification process
+      - name: Native notification process
         run: python tests/ci_native_check.py
       - name: Build Cortana.exe
         run: python build/build_cortana.py

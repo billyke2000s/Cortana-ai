@@ -78,7 +78,7 @@ Repository metadata currently reports **public**. The docs previously described 
 - Native reminders now attempt Windows balloons while the launcher runs; visible delivery depends on Windows settings and still requires desktop verification.
 - Keyless search uses unofficial endpoints (Bing RSS, DuckDuckGo HTML): they may change or rate-limit. JavaScript-only pages (e.g. live scores) can't be read, so she answers from snippets there.
 - Neural lip sync uses estimated Rhubarb poses when ready; envelope fallback remains. It is not perfect phoneme alignment.
-- The small keyword detector gates Whisper once ready. Before installation/failure, idle wake requests retain Whisper fallback.
+- Wake word: Whisper checks every speech burst (the 1.5 keyword gate was removed in 1.6.1 because it rejected real "Hey Cortana"s, D-037). Real-room reliability with the owner's microphone is still **[Unverified]**.
 - 9B runs partly on the CPU when other GPU apps (games) are open; switch to Fast (4B) in Systems.
 - Cloudflare Quick Tunnels are a development service with no uptime guarantee; a new QR appears on every launch.
 

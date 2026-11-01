@@ -28,7 +28,7 @@ class Neural:
     def __init__(self,report):
         self.report=report;self.tts=self.kws=None
         self.tts_lock=threading.Lock();self.kws_lock=threading.Lock()
-        self.wake_status='Keyword detector not prepared.'
+        self.wake_status='Whisper listens for Hey Cortana.'   # the keyword spotter below is no longer used for waking (D-037)
 
     def asset(self,name,group):
         target=DATA/'neural'/name
@@ -81,7 +81,7 @@ class Neural:
                 w.writeframes((np.clip(result.samples,-1,1)*32767).astype('<i2').tobytes())
             return output.getvalue()
 
-    def prepare_wake(self):
+    def prepare_wake(self):   # not called by the app since 1.6.1: it rejected clear "Hey Cortana"s (D-037)
         import sherpa_onnx as s
         with self.kws_lock:
             if self.kws:return

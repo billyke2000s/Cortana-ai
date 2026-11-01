@@ -2,6 +2,11 @@
 
 All notable changes. Dates are UK time.
 
+## [1.6.1] - 2026-11-01
+
+### Fixed
+- "Hey Cortana" works again. Since 1.5 a small keyword detector screened every burst first and threw away clear "Hey Cortana"s before Whisper heard them; Whisper decides again, as in 1.4. Interrupting her while she speaks also uses Whisper now.
+
 ## [1.6.0] - 2026-11-01
 
 ### Added (step 2: brain)

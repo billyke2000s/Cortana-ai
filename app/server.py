@@ -110,8 +110,7 @@ class Handler(SimpleHTTPRequestHandler):
                 audio=base64.b64decode(data.get('audio',''),validate=True)
                 if data.get('wake') is True:   # wake-word burst: hint the name, decide here (testable) instead of in the page
                     from runtime import wake_match,WAKE_PROMPT
-                    detected=runtime.neural.detect(audio)
-                    if detected is False or (data.get('interrupt') is True and detected is None):return self.send_json({'text':'','wake':False,'rest':''})
+                    # Whisper decides every burst, as in 1.4. The 1.5 keyword gate rejected real "Hey Cortana"s (D-037).
                     try:text=runtime.transcribe(audio,WAKE_PROMPT)
                     except RuntimeError:return self.send_json({'text':'','wake':False,'rest':''})
                     rest=wake_match(text);return self.send_json({'text':text,'wake':rest is not None,'rest':rest or ''})

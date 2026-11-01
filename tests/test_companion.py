@@ -128,10 +128,13 @@ class CompanionApiTests(unittest.TestCase):
         for path in ['/neural.py','/lips.py','/companion.py','/proactive.py','/work.py','/voice-profile/reference.wav','/voice-profile/voice_profile.json']:
             self.assertEqual(self.request('GET',path)[0],404)
 
-    def test_negative_keyword_burst_never_runs_whisper(self):
-        with patch.object(self.rt.neural,'detect',return_value=False),patch.object(self.rt,'transcribe') as transcribe:
-            data=json.loads(self.request('POST','/api/transcribe',{'wake':True,'audio':base.base64.b64encode(b'placeholder').decode()})[2])
-            self.assertFalse(data['wake']);transcribe.assert_not_called()
+    def test_whisper_decides_every_wake_burst(self):
+        # 1.5 dropped a burst whenever the small keyword detector said no, and it said no to clear "Hey Cortana"s (D-037).
+        with patch.object(self.rt.neural,'detect',return_value=False),patch.object(self.rt,'transcribe',return_value='Hey Cortana, what time is it?') as transcribe:
+            for interrupt in (False,True):
+                data=json.loads(self.request('POST','/api/transcribe',{'wake':True,'interrupt':interrupt,'audio':base.base64.b64encode(b'placeholder').decode()})[2])
+                self.assertEqual((data['wake'],data['rest']),(True,'what time is it?'))
+            self.assertEqual(transcribe.call_count,2)
 
     def test_server_cancellation_prevents_tool_side_effect(self):
         def chunks(payload):

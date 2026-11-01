@@ -136,12 +136,12 @@ The launcher also checks every two seconds and attempts native Windows reminder 
 Off by default; turned on per device in Systems (needs microphone permission and a tap after page load).
 Energy-based detection that adapts to the room: a background-noise level is tracked while nobody speaks; speech starts above
 max(0.012, 3 × noise) RMS (with pre-roll), ends after 0.7 s below max(0.009, 2 × noise) or 7 s total; bursts under 0.4 s are
-ignored. Each burst is checked locally by the small Zipformer keyword spotter before Whisper. While the detector is unavailable, idle wake requests fall back to Whisper. Confirmed bursts get the hint "Cortana is my assistant." (a transcript
+ignored. Every burst is transcribed by the local Whisper with the hint "Cortana is my assistant." (a transcript
 equal to the hint is ignored), and `runtime.wake_match` decides. The name may come after "hey/hi/ok/…" and fillers ("um"), within
 the first 4 words, nothing else before it. Spellings ≥78% similar to "cortana" count (Courtana, Cortona, Gortana, "cor tana");
 weaker sound-alikes (Katana, Quartana, Kortina…) only right after a greeting. 2+ following words → sent as the question;
 otherwise a chime and normal listening. If speech arrives while a burst is being transcribed, the latest burst is kept and checked
-next (not dropped). With wake enabled, echo-cancelled keyword audio remains active while thinking/speaking so the user can interrupt. Recognised playback echo is rejected; interruption requires the small detector to be ready. Manual listening owns the mic. Real-room echo rejection is unverified.
+next (not dropped). With wake enabled, echo-cancelled keyword audio remains active while thinking/speaking so the user can interrupt. Recognised playback echo is rejected (a transcript contained in what she is saying is ignored). Since 1.6.1 there is no keyword-spotter gate (D-037). Manual listening owns the mic. Real-room echo rejection is unverified.
 
 ## 9. Phone
 
