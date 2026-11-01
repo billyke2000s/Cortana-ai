@@ -1,0 +1,48 @@
+name: Build Windows release
+
+# Push a tag like v1.2.0 (or run manually from the Actions tab) to build Cortana.exe on Windows
+# and attach it to a GitHub release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: pip install -r requirements-build.txt
+
+      - name: Offline tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build Cortana.exe
+        run: python build/build_cortana.py
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Cortana ${{ github.event.inputs.tag || github.ref_name }}
+          files: dist/Cortana.exe
+          body: |
+            **Download `Cortana.exe` below and double-click it.** No installation needed.
+
+            - Windows 10/11. An NVIDIA graphics card is recommended (8 GB is ideal).
+            - First launch downloads what's missing (Ollama + the recommended AI model, speech recognition, voice). Keep the small Cortana window open.
+            - Windows SmartScreen may warn because the app isn't code-signed: click **More info → Run anyway**.
+            - Phone: scan the QR code in the Cortana window.
