@@ -5,13 +5,14 @@ from runtime import Runtime,HIDDEN
 import pc_agent
 r=Runtime()
 script=r'''
-Add-Type -AssemblyName System.Windows.Forms
-$f=New-Object System.Windows.Forms.Form;$f.Text='Cortana Agent Test Fixture';$f.TopMost=$true;$f.StartPosition='CenterScreen';$f.Width=500;$f.Height=240
-$t=New-Object System.Windows.Forms.TextBox;$t.Name='FixtureInput';$t.AccessibleName='Fixture input';$t.Top=20;$t.Width=250;$f.Controls.Add($t)
-$b=New-Object System.Windows.Forms.Button;$b.Text='Fixture button';$b.Top=70;$b.Width=200;$f.Controls.Add($b)
-$b.Add_Click({$t.Text='clicked'})
-$f.Add_Shown({$f.Activate();$t.Focus()})
-[System.Windows.Forms.Application]::Run($f)
+Add-Type -AssemblyName PresentationFramework
+$x=@'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="Cortana Agent Test Fixture" Width="500" Height="240" Topmost="True" WindowStartupLocation="CenterScreen">
+ <StackPanel Margin="20"><TextBox Name="FixtureInput" AutomationProperties.Name="Fixture input" Height="30"/><Button Name="FixtureButton" Content="Fixture button" Height="35" Margin="0,15,0,0"/></StackPanel>
+</Window>
+'@
+$f=[Windows.Markup.XamlReader]::Parse($x);$t=$f.FindName('FixtureInput');$b=$f.FindName('FixtureButton')
+$b.Add_Click({$t.Text='clicked'});$f.Add_ContentRendered({$f.Activate();$t.Focus()});$f.ShowDialog()|Out-Null
 '''
 p=subprocess.Popen(['powershell','-NoProfile','-STA','-Command',script],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=HIDDEN)
 try:

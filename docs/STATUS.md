@@ -4,7 +4,7 @@ _Last updated: 1 November 2026._
 
 ## Agent abilities development verification
 
-Implemented on feature/agent-abilities; not yet a released executable. Local checks: **94 offline tests passed** with office/media dependencies, real browser form control/review/stale-reference checks passed, and six UI sizes passed Abilities/Activity preferences plus existing history/rig/memory checks. Local protocol fixtures exercised actual MCP initialization/session/catalog/call and CalDAV REPORT/reviewed PUT. External production accounts/devices are **[Unverified]**.
+Implemented on feature/agent-abilities; not yet a released executable. Local checks: **95 offline tests passed** with office/media dependencies, real browser form control/review/stale-reference checks passed, and six UI sizes passed Abilities/Activity preferences plus existing history/rig/memory checks. Local protocol fixtures exercised actual MCP initialization/session/catalog/call and CalDAV REPORT/reviewed PUT. External production accounts/devices are **[Unverified]**.
 
 Cross-platform CI is in progress. The first pass exposed tmpfs output collection and a Windows fixture accessibility issue; neither is counted as passed. Updated checks also launch the real packaged app and exercise office/PDF vision/browser dependencies. Record final CI outcomes here before claiming a release. Existing voice limitations remain unchanged.
 

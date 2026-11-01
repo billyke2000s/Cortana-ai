@@ -99,7 +99,7 @@ def inspect_media(agent,args):
             if not 0<=seconds<=86400:raise ValueError('Choose a video time from zero to 24 hours.')
             with tempfile.TemporaryDirectory() as tmp:
                 target=Path(tmp)/'frame.jpg'
-                p=subprocess.run([ffmpeg,'-v','error','-nostdin','-ss',str(seconds),'-i',str(path),'-frames:v','1','-vf','scale=1280:-2',str(target)],capture_output=True,timeout=30,creationflags=HIDDEN)
+                p=subprocess.run([ffmpeg,'-v','error','-nostdin','-protocol_whitelist','file,pipe','-f',('mov' if suffix in ('.mp4','.mov') else 'avi' if suffix=='.avi' else 'matroska'),'-ss',str(seconds),'-i',str(path),'-frames:v','1','-vf','scale=1280:-2',str(target)],capture_output=True,timeout=30,creationflags=HIDDEN)
                 if p.returncode or not target.exists():raise RuntimeError('Could not read that video frame.')
                 image=Image.open(target).convert('RGB').copy()
             sources.append(agent.workspace.label(path)+' at '+str(seconds)+' seconds')

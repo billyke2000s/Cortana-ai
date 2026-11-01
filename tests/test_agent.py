@@ -71,6 +71,18 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn('manage_files',[t['function']['name'] for t in payloads[0]['tools']])
         self.assertIn('manage_files',[t['function']['name'] for t in payloads[1]['tools']])
         self.assertTrue(any(e['type']=='activity' and e.get('artifact') for e in events));self.assertEqual(events[-1]['type'],'done')
+    def test_discovery_cannot_masquerade_as_completed_work(self):
+        replies=iter([
+            {'tool_calls':[{'function':{'name':'discover_tools','arguments':{'category':'files'}}}]},
+            {'content':'Done, I have saved the file.'},
+            {'tool_calls':[{'function':{'name':'manage_files','arguments':{'action':'write','path':'verified.txt','text':'actual contents'}}}]},
+            {'content':'The file is now saved.'}])
+        with patch.object(self.r,'ollama_stream',lambda payload:iter([{'message':next(replies)}])):
+            events=list(self.r.chat_stream([{'role':'user','content':'Save these contents to verified.txt'}]))
+        self.assertEqual((self.w.home/'verified.txt').read_text(),'actual contents')
+        self.assertNotIn('Done, I have saved',json.dumps([e for e in events if e['type']=='sentence']))
+        self.assertIn('now saved',events[-1]['reply'])
+
     def test_rejects_unadvertised_or_invalid_tools(self):
         self.assertIn('error',self.a.run('manage_files',{'action':'write','path':'bad.txt'},[])[0])
         self.assertIn('error',self.a.run('discover_tools',{'category':'not_real'},[])[0])

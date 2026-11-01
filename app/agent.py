@@ -14,7 +14,7 @@ from tools import _fn, TOOLS
 S={'type':'string'};N={'type':'integer'};B={'type':'boolean'}
 def choice(*values):return {'type':'string','enum':list(values)}
 def schema(name,description,properties,required=()):return _fn(name,description,properties,list(required))
-LABELS={'discover_tools':'CHOOSING ABILITIES','manage_mission':'UPDATING MISSION','manage_files':'WORKING WITH FILES','create_document':'CREATING DOCUMENT','spreadsheet':'WORKING WITH SPREADSHEET','run_python':'RUNNING ISOLATED PYTHON','browser':'WORKING IN BROWSER','desktop':'WORKING WITH WINDOWS','diagnostics':'CHECKING PC','inspect_media':'READING MEDIA','connected_service':'USING CONNECTION','automation':'UPDATING SCHEDULE'}
+LABELS={'ask_user':'NEED A DETAIL','discover_tools':'CHOOSING ABILITIES','manage_mission':'UPDATING MISSION','manage_files':'WORKING WITH FILES','create_document':'CREATING DOCUMENT','spreadsheet':'WORKING WITH SPREADSHEET','run_python':'RUNNING ISOLATED PYTHON','browser':'WORKING IN BROWSER','desktop':'WORKING WITH WINDOWS','diagnostics':'CHECKING PC','inspect_media':'READING MEDIA','connected_service':'USING CONNECTION','automation':'UPDATING SCHEDULE'}
 GROUPS={
  'essentials':TOOLS,
  'files':[schema('manage_files','Read/create/edit/copy/move/trash files in approved folders; duplicates and organisation proposals; every file change has undo.',{'action':choice('roots','list','read','mkdir','write','append','move','copy','trash','undo','duplicates','organise'),'path':S,'destination':S,'text':S,'change_id':S},['action'])],
@@ -25,10 +25,10 @@ GROUPS={
  'desktop':[schema('desktop','Inspect Windows apps and accessibility controls, focus a window, invoke a control or set its text using a previously observed reference. Action needs a fresh snapshot and explicit review.',{'action':choice('windows','inspect','focus','invoke','set_value'),'window':S,'ref':S,'revision':S,'text':S},['action'])],
  'diagnostics':[schema('diagnostics','Inspect actual PC disk, hardware, processes or recent Windows application/system error logs. Read only; no invented diagnostics.',{'action':choice('summary','processes','logs'),'log':choice('Application','System')},['action'])],
  'vision':[schema('inspect_media','Read/compare images, diagrams, scanned PDF pages or sampled video frames with local vision. Paths must be inside approved folders. Up to three images/pages/frames per call; page numbers start at one.',{'paths':{'type':'array','items':S},'question':S,'page':N,'seconds':{'type':'number'}},['paths','question'])],
- 'connections':[schema('connected_service','Use configured email/calendar/music/smart-home services or installable MCP tools. First list connections or discover a server tool catalog; then call its exact tool name/arguments. External writes need review.',{'action':choice('list','tools','call','email_list','email_read','email_draft','email_send','calendar_list','calendar_add','home_states','home_service'),'connection':S,'tool':S,'arguments':{'type':'object'},'id':S,'to':S,'subject':S,'body':S,'entity_id':S,'domain':S,'service':S},['action'])],
- 'automations':[schema('automation','Schedule a natural-language goal once or repeatedly, or watch an approved folder for changes. The AI chooses the tools when the goal runs. Jobs run only while Cortana is open. Use UNIX timestamp at, interval_seconds >=60, or folder+watch; inspect/list/pause jobs.',{'action':choice('create','list','pause','resume','remove'),'id':S,'goal':S,'at':{'type':'number'},'interval_seconds':N,'folder':S,'watch':B},['action'])],
+ 'connections':[schema('connected_service','Use configured email/calendar/music/smart-home services or installable MCP tools. First list connections or discover a server tool catalog; then call its exact tool name/arguments. External writes need review.',{'action':choice('list','tools','call','email_list','email_read','email_draft','email_send','calendar_list','calendar_add','home_states','home_service'),'connection':S,'tool':S,'arguments':{'type':'object','description':'Exact MCP tool arguments; calendar_add uses title, day (today/tomorrow/weekday/date), time (HH:MM), minutes; home_service uses service data.'},'id':S,'to':S,'subject':S,'body':S,'entity_id':S,'domain':S,'service':S},['action'])],
+ 'automations':[schema('automation','Schedule a natural-language goal once or repeatedly, or watch an approved folder for changes. The AI chooses the tools when the goal runs. Jobs run only while Cortana is open. Use local date/time at, interval_seconds >=60, or folder+watch; inspect/list/pause jobs.',{'action':choice('create','list','pause','resume','remove'),'id':S,'goal':S,'at':{'type':'string','description':'Local HH:MM or YYYY-MM-DD HH:MM; no UNIX arithmetic needed.'},'interval_seconds':N,'folder':S,'watch':B},['action'])],
 }
-CORE=[schema('discover_tools','Discover more abilities when needed: essentials (timers/memory/search/weather/calendar), files, documents (Word/PDF), spreadsheets (CSV/XLSX/charts), code (isolated Python), browser (websites/forms), desktop (Windows apps), diagnostics, vision (images/scans/video), connections (email/calendar/music/smart home/MCP), automations (scheduled/folder goals). Choose categories from meaning; no required user phrases.',{'category':choice(*GROUPS)},['category']),
+CORE=[schema('ask_user','Ask a necessary clarification when the intended target, content or timing is genuinely ambiguous. Do not ask for information already present in the request/context.',{'question':S},['question']),schema('discover_tools','Discover more abilities when needed: essentials (timers/memory/search/weather/calendar), files, documents (Word/PDF), spreadsheets (CSV/XLSX/charts), code (isolated Python), browser (websites/forms), desktop (Windows apps), diagnostics, vision (images/scans/video), connections (email/calendar/music/smart home/MCP), automations (scheduled/folder goals). Choose categories from meaning; no required user phrases.',{'category':choice(*GROUPS)},['category']),
  schema('manage_mission','Keep a plan for multi-step work and record progress with evidence. A plan alone is not completion. Use blocked when waiting on setup or approval, failed on errors. Do not mark complete without successful action/verification results.',{'action':choice('plan','progress','complete','blocked','failed','list'),'id':S,'title':S,'steps':{'type':'array','items':S},'evidence':S},['action'])]
 
 def validate(args,definition):
@@ -76,7 +76,8 @@ class Agent:
                 if category in groups:groups.remove(category)
                 groups.append(category)
                 while len(groups)>2:groups.pop(0)
-                return {'category':category,'abilities':[s['function']['name'] for s in GROUPS[category]],'available_next_turn':True},None
+                return {'category':category,'abilities':[s['function']['name'] for s in GROUPS[category]],'available_now':True,'status':'Discovery only; no requested action has run. Call a loaded tool now to carry out the task, or ask_user if essential information is missing.'},None
+            if name=='ask_user':return {'waiting_for_user':True,'question':args['question'][:500]},None
             if name=='manage_mission':return self.mission(args),None
             if not self.store.get('pc_access',True):raise ValueError('PC access is switched off in Systems.')
             if name in ('desktop','browser','connected_service','run_python') and not self.store.get('pc_controls',True):raise ValueError('PC controls are switched off in Systems.')
@@ -147,7 +148,9 @@ class Agent:
         if action=='create':
             goal=str(args.get('goal','')).strip()[:2000]
             if not goal:raise ValueError('Describe what the scheduled job should do.')
-            interval=int(args.get('interval_seconds',0));at=float(args.get('at',0));watch=bool(args.get('watch',False));folder=args.get('folder','')
+            interval=int(args.get('interval_seconds',0));
+            from tools import parse_local_time
+            at=parse_local_time(args['at']) if args.get('at') else 0;watch=bool(args.get('watch',False));folder=args.get('folder','')
             if interval and not 60<=interval<=31536000:raise ValueError('Repeat intervals must be from one minute to one year.')
             if watch:
                 p=self.workspace.path(folder,True)
