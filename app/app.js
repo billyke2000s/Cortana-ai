@@ -82,6 +82,7 @@ async function send(text){
  const handle=ev=>{
   if(ev.type==='sentence'){spoken+=(spoken?' ':'')+ev.text;out.textContent=spoken;out.scrollTop=out.scrollHeight;q.add(ev.text);turn.text=spoken;chatChanged();}
   else if(ev.type==='tool'){if(state==='thinking')label.textContent=ev.label+'…';turn.working=ev.label;chatChanged();}
+  else if(ev.type==='activity'||ev.type==='approval'){if(ev.type==='approval'){turn.approval=ev.id;turn.working='Review needed in Activity';}else{turn.artifacts=[...(turn.artifacts||[]),...(ev.artifact?[ev.artifact]:[]),...(ev.artifacts||[])];}chatChanged();document.dispatchEvent(new CustomEvent('cortana:activity',{detail:ev}));}
   else if(ev.type==='screen'){turn.screen=ev.markdown;holoLast=ev.markdown;if(holoPage==='chat')chatChanged();else showScreen(ev.markdown);}   // in Chat, the card goes inline
   else if(ev.type==='refresh')document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:ev.what}}));
   else if(ev.type==='done')history=[...messages,{role:'assistant',content:ev.raw||ev.reply}].slice(-18);

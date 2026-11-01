@@ -2,6 +2,17 @@
 
 All notable changes. Dates are UK time.
 
+## [Unreleased] Agent abilities
+
+- Qwen chooses tools semantically, including weather; removes the production weather keyword pre-router (supersedes D-027).
+- Dynamic tool discovery, longer bounded missions, current file/page context, progress and exact-once reviewed external actions.
+- Approved-folder file creation/edit/move/duplicates/organisation with guarded undo; real DOCX/PDF/CSV/XLSX/chart deliverables and authenticated downloads.
+- Isolated offline Python in Docker; visible dedicated browser automation; observed Windows accessibility controls; actual PC diagnostics.
+- Multiple local images, scanned PDF pages and optional FFmpeg video frames; configured email, CalDAV, Home Assistant/music and MCP HTTP connections.
+- Local scheduled/folder-change goals; Fast/Deep reasoning and conservative hardware context limits; Abilities/Activity pages.
+- Added dependencies/build collection and cross-platform, browser, Docker, Windows, real-model and packaged-feature checks. Verification is recorded in docs/STATUS.md.
+- Limits: external accounts need setup; MCP supports the 2025 HTTP family, not stdio/2026-only endpoints; OAuth tokens do not auto-refresh; Windows control coverage depends on accessibility support. Jobs require the launcher open. Formula calculation remains Excel's responsibility.
+
 ## [1.5.0] - 2026-11-01
 
 ### Added

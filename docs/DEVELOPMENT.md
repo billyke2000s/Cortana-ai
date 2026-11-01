@@ -75,3 +75,9 @@ Close Cortana and delete `%LOCALAPPDATA%\CortanaAI\cortana.db*` (settings, memor
 Requirements now include sherpa-onnx 2.0.1 and NumPy (CPU ONNX, no PyTorch), in addition to the existing packages. PyInstaller collects sherpa-onnx and its core shared libraries and bundles `voice-profile`; downloaded model weights stay outside Git. `neural.py`, `lips.py`, and `companion.py` are hidden imports.
 
 `tests/browser_check.py` requires Playwright 1.51 + Chromium. `tests/ci_context_check.py qwen3.5:4b` (and `:9b`) needs local Ollama with the named model. `tests/ci_native_check.py` exercises Windows SAPI → keyword detection and the notification process. `tests/release_voice_check.py URL` tests real speech and cues from the built exe, not just Python imports. See the release workflow.
+
+## Agent dependencies and setup
+
+Install all of requirements.txt before testing office/browser/media abilities. The build collects Playwright (including its driver), python-docx templates, ReportLab, PDFium native libraries, openpyxl and Pillow. New backend modules are explicit hidden imports; `agent-pages.js` is in both build and HTTP whitelists. Runtime browser automation uses installed Edge on Windows; Linux testing needs `python -m playwright install --with-deps chromium`.
+
+Python sandbox setup: Docker Desktop in Linux container mode, then `docker pull python:3.12-slim`. No Docker means no generated-code execution. Video sampling optionally uses FFmpeg on PATH. Service configuration is PC-only and write-only; see [ABILITIES.md](ABILITIES.md).

@@ -39,7 +39,7 @@ Escape or the stop button returns to `idle` from any state and cancels requests 
 
 ## 3. Abilities (tools)
 
-Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are truncated to 2,500 characters (3,500 for `web_search`, which carries page text).
+Up to 18 model rounds per message, with a 15-minute between-call deadline; up to 4 tool calls per round. Tool results are truncated to 2,500 characters (3,500 for `web_search`, which carries page text).
 
 | Tool | Behaviour |
 |---|---|
@@ -50,7 +50,7 @@ Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are
 | `complete_objective(match)` | Completes up to 3 open items whose text contains all words (>2 letters) of `match`. |
 | `remember(fact)` | Saves a fact (≤300 chars, case-insensitive de-duplication, ≤200 kept). |
 | `forget(match)` | Deletes facts containing all words of `match`. |
-| `get_weather(place?)` | **Weather questions are fetched by the app before the model answers** (`runtime.weather_question`: place after in/for/at/near, else the home town; D-027). Open-Meteo geocoding + forecast (now + 3 days). Empty place → home town; neither → asks the user. **Always** shows a forecast card (`tools.weather_screen`: now, then Today/Tomorrow/weekday with sky, high/low, rain chance), built from the data, not by the model; it replaces any model-written screen for that reply. |
+| `get_weather(place?)` | **Qwen decides when to call weather from the conversation** (D-031 supersedes D-027); no Python phrase routing. Open-Meteo geocoding + forecast (now + 3 days). Empty place → home town; neither → asks the user. **Always** shows a forecast card (`tools.weather_screen`: now, then Today/Tomorrow/weekday with sky, high/low, rain chance), built from the data, not by the model; it replaces any model-written screen for that reply. |
 | `web_search(query)` | **No key needed.** Brave (if a key is saved), else Bing's RSS results feed, else DuckDuckGo's HTML results page (ads skipped) → ≤5 results (title, snippet, source site). Then the first of the top 3 result pages that yields ≥200 characters of text is read: scripts/nav/header/footer dropped, the blocks most related to the query kept (≤1,400 chars), marked untrusted. Wikipedia fills in if fewer than 2 results. Only public http(s) addresses are fetched (redirects checked too). |
 | `pc_control(action, target?, steps?)` | `play_pause`, `next_track`, `previous_track`, `volume_up/down` (1–25 × 2%), `mute`, `open_app` (allow-list: notepad, calculator, file explorer, settings, browser, spotify, task manager, paint, snipping tool), `open_website` (http/https only). Off when **PC controls** is unticked. Windows only. |
 | `get_calendar(day?)` | `today`, `tomorrow` or `YYYY-MM-DD`. Cortana's own events plus the private iCal URL (if connected); expands repeats (RRULE), honours EXDATE, skips cancelled, converts time zones; all-day events first. |
@@ -144,3 +144,13 @@ explains how to add one and everything else works.
 After model choice, first setup asks Normal (the former Expressive, strength 1.3) or Expressive (1.8), plus Piper/reference/Windows voice. Both have previews, persist on the PC, and remain changeable in Systems. Expression previews temporarily override status syncing. Reactions are deterministic from sentence wording (focused/curious/playful/concerned), with eye contact, smirks and brief gestures; no claim of original Halo animation data. Reduced motion suppresses head/hand movement.
 
 Systems displays measured transcription, first-token, speech preparation, whole reply and send-to-playback times. These are last observed timings, not a performance guarantee; they contain no conversation text.
+
+## 12. Agent work
+
+[ABILITIES.md](ABILITIES.md) specifies the new domains, setup and limits. Initial schemas contain discovery, missions and clarification only; essentials exposes the existing 18 tools. Discovery exposes one selected domain at a time, so small contexts do not carry every schema. The AI can switch domains repeatedly. Conversation trimming accounts for actual schema/message character sizes and preserves the system prompt/current user request; it is an estimate rather than a tokenizer guarantee.
+
+Activity records actual finished/failed/pending calls and file downloads. Mission completion needs evidence and an observed finished action after planning. A plan is not a completed job. After discovery/planning, unverified completion text is withheld; the model gets a protocol correction to act or request a necessary clarification. If it still fails to act, the reply explicitly reports that no action completed. External submission, email sends, CalDAV writes, home actions, untrusted MCP calls and Windows actions require a concrete review. No model-supplied confirmation flag can grant it. Approved action results become follow-up context; continuation does not require a special phrase.
+
+Fast uses `think:false`, 1200 output tokens; Deep uses `think:true`, up to 2400. Output is reduced when estimated prompt/schema usage leaves less room. Context choices: 6144 baseline; 8192 with ≥10 GB VRAM/16 GB RAM; 16384 with ≥12/24; 32768 with ≥20/32. These are conservative estimates, not guarantees under other GPU loads.
+
+Scheduled goals use the same AI/tool loop, pause when abilities/PC access is off, defer during foreground work, and still require external-action review. Folder goals wait for a stable fingerprint; jobs run only while the launcher stays open. Changing a connection invalidates its existing pending approval.

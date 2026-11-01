@@ -12,15 +12,17 @@
 <img src="https://img.shields.io/badge/voice-Piper-7fd4ff?style=flat-square" alt="Piper">
 <img src="https://img.shields.io/badge/ears-Whisper.cpp-7fd4ff?style=flat-square" alt="Whisper.cpp">
 <img src="https://img.shields.io/badge/3D-Three.js-7fd4ff?style=flat-square&logo=threedotjs&logoColor=white" alt="Three.js">
-<img src="https://img.shields.io/badge/offline%20tests-80%20passing-3df58a?style=flat-square" alt="80 offline tests passing">
+<img src="https://img.shields.io/badge/offline%20tests-95%20passing-3df58a?style=flat-square" alt="95 offline tests passing">
 <img src="https://img.shields.io/badge/AI%20agents-read%20AGENTS.md-ffb35c?style=flat-square" alt="AI agents: read AGENTS.md">
 
 ### Your PC is the core. Your phone is the display.
 
+The agent-abilities update adds model-selected browser/file/office/code tools, missions, diagnostics, media inspection, service connections and scheduled goals. See [abilities and setup](docs/ABILITIES.md).
+
 1.5 adds expression/voice setup, saved chat restoration, relevant editable memories, Windows reminders and snooze, and local keyword detection. The reference voice is experimental, slower than Piper, and may skip words. See [release verification](docs/STATUS.md).
 
 **A holographic voice assistant that thinks, listens, speaks and remembers, entirely on your own computer.**<br>
-No cloud AI. No subscription. No account. Your conversations never leave your PC.
+No cloud AI. No subscription. No account. AI inference stays on your PC; connected services receive the requests you choose to make.
 
 [**Quick start**](#-quick-start) · [**Features**](#-what-she-can-do) · [**How it works**](#-how-it-works) · [**Docs**](#-documentation) · [**For AI agents**](AGENTS.md)
 
@@ -71,10 +73,11 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 | 📅 | **Calendar** | *"What's on today?"* · *"Book study time Thursday at 3."* | Mission Briefing · event card with **Add to Google Calendar** · reminder 10 min before every event |
 | 🎵 | **PC controls** | *"Pause the music."* · *"Volume up."* · *"Open calculator."* | Acts on your PC (fixed allow-list) |
 | 💻 | **Code & tables** | *"How do I build a table in Python?"* | Display panel with **Copy** |
+| 🛠️ | **Agent abilities** | Describe a whole task naturally; Qwen discovers and combines browser, file, Word/PDF, spreadsheet, Python, desktop, vision and service tools | Chat · Systems → Abilities · Activity |
 | 🎛️ | **Model picker** | **Systems** → pick from models rated *Fast / Good / Slow / Too big* for your GPU | Recommended model ★, one-click download |
 | 📰 | **Daily briefing** | Tap **Mission Briefing → Read my briefing** | Weather, events and objectives, spoken |
 
-> Abilities can be switched off in **Systems** (*Screen, clipboard and file access* has its own switch). She never runs programs, scripts or shortcuts, opens only files she just found for you, and screenshots go only to the AI on your PC.
+> Abilities and PC access have switches in **Systems**. Generated Python runs only in an isolated Docker container. Add work folders and service connections on the PC; review external sends in Activity. See [all new abilities, setup and limitations](docs/ABILITIES.md).
 
 ---
 
@@ -184,9 +187,9 @@ Google Calendar → **Settings** → your calendar → **Integrate calendar** �
 | | |
 |---|---|
 | 🏠 **Local by default** | AI, speech recognition, voice, memory and settings all run and stay on your PC (`%LOCALAPPDATA%\CortanaAI`). |
-| 🌐 **What goes online** | Only the abilities you use: weather (Open-Meteo), search (Bing / DuckDuckGo results and the top result page, Wikipedia; no key needed, Brave optional), your calendar address, first-run downloads, and the phone link. |
+| 🌐 **What goes online** | Only the abilities you use: weather (Open-Meteo), search (Bing / DuckDuckGo results and the top result page, Wikipedia; no key needed, Brave optional), your calendar address, browser websites, explicitly configured services/MCP providers, first-run downloads, and the phone link. |
 | 📱 **Phone access** | HTTPS only, paired with a per-launch secret in the QR code (`HttpOnly; Secure; SameSite=Lax` cookie). Unpaired devices see a pairing page. |
-| 🛡️ **Hardening** | Origin check on every POST, a fixed whitelist of served files, all AI output HTML-escaped, PC controls limited to a fixed list, files opened only from her own search results (never programs), whole folders addable only on the PC, and secrets never returned by the API. |
+| 🛡️ **Hardening** | Origin check on every POST, a fixed whitelist of served files, all AI output HTML-escaped, typed tools, approved work folders, isolated code, observed browser/Windows controls, concrete external-action review, configuration only on the PC, and secrets never returned by the API. |
 
 Full threat model and rules: [SECURITY.md](SECURITY.md).
 
@@ -241,7 +244,7 @@ cortana-ai/
 ## 🧪 Tests
 
 ```bash
-python -m unittest discover -s tests -v     # 80 offline tests, about 3 seconds, no GPU or internet needed
+python -m unittest discover -s tests -v     # 95 offline tests, about 5 seconds, no GPU or internet needed
 ```
 
 They cover the sentence streamer, storage, every tool, model recommendations, calendar parsing, the whole HTTP API (streaming chat with tool calls, objectives, memory, settings) and the security rules, including a regression test for phone QR pairing. See [TESTING.md](docs/TESTING.md).
@@ -257,6 +260,7 @@ Point it at **[AGENTS.md](AGENTS.md)** first. It's a strict rulebook (security i
 ## 🙏 Credits & disclaimer
 
 - **AI:** [Qwen 3.5](https://qwenlm.github.io/) via [Ollama](https://ollama.com) · **Speech recognition:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) · **Voice:** [Piper](https://github.com/rhasspy/piper) · **3D:** [three.js](https://threejs.org) (MIT) · **Weather:** [Open-Meteo](https://open-meteo.com) · **QR:** python-qrcode · **PDF text:** [pypdf](https://github.com/py-pdf/pypdf) (BSD-3-Clause) · **Phone link:** Cloudflare Quick Tunnels / Tailscale.
+- **Agent dependencies:** Playwright (Apache-2.0), python-docx (MIT), ReportLab (BSD), openpyxl (MIT), Pillow (HPND), pypdfium2/PDFium (Apache-2.0/BSD with bundled third-party notices). Docker and FFmpeg are optional separately installed runtimes.
 - **CPU speech:** [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) / [ZipVoice](https://github.com/k2-fsa/ZipVoice) (Apache-2.0), [Vocos](https://github.com/gemelo-ai/vocos) (MIT), [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) (MIT). Voice notices are bundled; downloaded distributions retain their notices.
 - **Cortana**, **Halo**, **UNSC** and **Master Chief** are trademarks of Microsoft. This is an unofficial, non-commercial fan project, not affiliated with or endorsed by Microsoft, 343 Industries or Bungie.
 - **Repository visibility:** GitHub reported this repo public on 1 November 2026. This release does not change visibility. It contains the supplied character model and reference profile; see AGENTS.md for contributor restrictions.

@@ -59,7 +59,10 @@ class Handler(BaseHTTPRequestHandler):
         user = [m for m in messages if m['role'] == 'user'][-1]['content'].lower()
         last = messages[-1]
         words = lambda text: [{'message': {'content': w + ' '}} for w in text.split()] + [{'done': True}]
-        if last['role'] == 'tool':
+        available={t['function']['name'] for t in body.get('tools',[])}
+        if body.get('tools') and 'set_timer' not in available and any(w in user for w in ('timer','find my','book','weather','remember')):
+            return self._stream([{'message':{'tool_calls':[{'function':{'name':'discover_tools','arguments':{'category':'essentials'}}}]}},{'done':True}])
+        if last['role'] == 'tool' and last.get('tool_name')!='discover_tools':
             reply = {'set_timer': 'Done, Chief. Your pasta timer is running.',
                      'remember': "Got it. I'll remember that.",
                      'get_weather': "It's 12 degrees and cloudy in London, with rain likely tomorrow.",
@@ -77,7 +80,7 @@ class Handler(BaseHTTPRequestHandler):
                 {'function': {'name': 'add_event', 'arguments': {'title': 'Study time', 'day': 'tomorrow', 'time': '15:00'}}}]}}, {'done': True}])
         if 'weather' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
-                {'function': {'name': 'get_weather', 'arguments': {'place': 'London'}}}]}}, {'done': True}])
+                {'function': {'name': 'get_weather', 'arguments': {'place': 'Paris' if 'paris' in user else 'London'}}}]}}, {'done': True}])
         if 'remember' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'remember', 'arguments': {'fact': "The user's dog is called Max"}}}]}}, {'done': True}])

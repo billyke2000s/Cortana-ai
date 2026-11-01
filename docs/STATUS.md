@@ -2,6 +2,12 @@
 
 _Last updated: 1 November 2026._
 
+## Agent abilities development verification
+
+Implemented on feature/agent-abilities; not yet a released executable. Local checks: **95 offline tests passed** with office/media dependencies, real browser form control/review/stale-reference checks passed, and six UI sizes passed Abilities/Activity preferences plus existing history/rig/memory checks. Local protocol fixtures exercised actual MCP initialization/session/catalog/call and CalDAV REPORT/reviewed PUT. External production accounts/devices are **[Unverified]**.
+
+Cross-platform CI is in progress. The first pass exposed tmpfs output collection and a Windows fixture accessibility issue; neither is counted as passed. Updated checks also launch the real packaged app and exercise office/PDF vision/browser dependencies. Record final CI outcomes here before claiming a release. Existing voice limitations remain unchanged.
+
 ## 1.5 current verification
 
 **Released:** [v1.5.0](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.5.0). All release jobs passed in [Actions run 41308294155](https://github.com/billyke2000s/Cortana-ai/actions/runs/41308294155). The published executable is built from `b85d9b48231b0f1cb321a06cc6f60f073bc2ee8e`; later documentation/screenshot updates do not change the app. Download SHA-256: `0735727b2f96e55f7ee1ddec0afecef9ef572378906b3bda7a83f75fb02eb841`.

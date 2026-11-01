@@ -1,5 +1,5 @@
 """Cortana's local storage on this PC (SQLite): settings, remembered facts, conversation log, timers, reminders and tasks."""
-import sqlite3, threading, time, json, re, math
+import sqlite3, threading, time, json, re, math, uuid
 
 SCHEMA = '''
 PRAGMA journal_mode=WAL;
@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS documents(
   id INTEGER PRIMARY KEY, name TEXT NOT NULL, path TEXT, pages INTEGER, chars INTEGER NOT NULL, summary TEXT, added REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS doc_chunks(doc_id INTEGER NOT NULL, idx INTEGER NOT NULL, page TEXT, text TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS doc_chunks_doc ON doc_chunks(doc_id);
+CREATE TABLE IF NOT EXISTS agent_records(id TEXT PRIMARY KEY, kind TEXT NOT NULL, data TEXT NOT NULL, updated REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, title TEXT NOT NULL, start REAL NOT NULL, end REAL NOT NULL, created REAL NOT NULL);
 '''
 MAX_DOCUMENTS = 200
@@ -265,3 +266,21 @@ class Store:
 
     def remove_event(self, event_id):
         self.q('DELETE FROM events WHERE id=?', (int(event_id),))
+
+    # Agent metadata is additive; credentials stay in settings and never enter these records.
+    def agent_put(self,kind,data,record_id=None):
+        record_id=record_id or uuid.uuid4().hex
+        self.q('INSERT INTO agent_records(id,kind,data,updated) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,updated=excluded.updated',
+               (record_id,kind,json.dumps(data,default=str),time.time()))
+        return record_id
+
+    def agent_get(self,record_id,kind=None):
+        rows=self.q('SELECT * FROM agent_records WHERE id=?',(str(record_id),))
+        if not rows or (kind and rows[0]['kind']!=kind):return None
+        return {'id':rows[0]['id'],**json.loads(rows[0]['data'])}
+
+    def agent_list(self,kind,limit=100):
+        return [{'id':r['id'],**json.loads(r['data'])} for r in self.q('SELECT * FROM agent_records WHERE kind=? ORDER BY updated DESC LIMIT ?',(kind,int(limit)))]
+
+    def agent_artifact(self,path,name,size):
+        return self.agent_put('artifact',{'path':path,'name':name,'bytes':size,'created':time.time()})

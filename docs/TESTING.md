@@ -91,3 +91,15 @@ and nav; add/complete/delete objectives; memory add/forget; settings save; displ
 - Manual: compare Normal/Expressive, try voice previews and arbitrary paragraphs, interrupt with speakers and with headphones, close the browser before a reminder, reopen/snooze, restart while a reminder is overdue. Voice identity and real-room echo cannot be established by silent/browser or synthetic tests.
 
 Hosted CPU model checks allow 900 seconds per local Ollama transport operation (the shipped app retains 180 seconds). This only changes the test deadline, not prompts or responses. The test refuses silent 9B → 4B fallback. Both models run on separate CPU runners.
+
+## Agent checks
+
+- `tests/test_agent.py`: real files/undo, boundaries/symlinks, actual office outputs/charts, model-selected discovery with unfamiliar wording, approval replay/denial, switches, scheduling/config/context limits, actual local MCP/CalDAV protocol fixtures and authenticated artifact endpoints. Install requirements for all office/media checks.
+- `tests/agent_browser_check.py`: real browser navigate/inspect/fill/review/form-submit and stale-reference guard against a disposable local fixture. Its private URL allowance is injected only in that fixture, never enabled in the app.
+- `tests/agent_sandbox_check.py`: actual Docker code, blocked host writes/network and retrieved output. Needs Docker and python:3.12-slim.
+- `tests/agent_windows_check.py`: disposable native Windows form, actual accessibility edit after review, actual diagnostics. No user application is changed.
+- `tests/ci_agent_model_check.py MODEL`: real runtime and real 4B/9B semantic selection; external actions are explicit fixtures, office/file actions are real. Does not prove every possible paraphrase. Run alongside the existing six context regressions.
+- `tests/agent_exe_check.py dist/Cortana.exe`: launches the real bundle with scripted Ollama, generates/downloads DOCX/PDF/XLSX, renders a PDF to local vision and operates installed Edge. This verifies packaging, not model intelligence.
+- `tests/browser_check.py` additionally exercises Abilities/Activity preferences at all six viewport sizes.
+
+Manual checks still needed: provider sign-in/refresh and actual email/calendar/home devices; real apps that expose custom accessibility trees; real microphone/phone/GPU; large work folders; subjective voice/animation quality. Never turn a failed check into a pass by substituting a simulated action.
