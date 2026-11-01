@@ -17,9 +17,9 @@ Escape or the stop button returns to `idle` from any state and cancels requests 
 
 ## 2. Conversation
 
-- History: the page keeps the last 18 messages; the server uses the last 16 within ~6,000 characters (newest kept).
+- History restores the last 60 saved entries on reload. Last 18 are sent, last 16 fit within 6,000 characters, including up to 800 characters of older-turn excerpts (extractive recap, not a semantic summary).
 - Every exchange is also saved to the local conversation log (Memory page; ≤2,000 messages kept).
-- System prompt = personality and rules + current local date/time + home town + up to 40 remembered facts.
+- System prompt = personality and rules + current local date/time + home town + up to 12 query-ranked facts within 1,800 characters.
 - Replies stream: each complete sentence (≥18 characters, or ending a line) is spoken while later ones are still being generated.
 - **Speech vs screen:** the spoken part is a short summary; code, tables, steps, commands, search results and long lists go to
   the display panel. Trigger: the `[[SCREEN]]` marker, or (fallback) the first fenced code block or Markdown table row.
@@ -73,7 +73,9 @@ All tools are disabled when **Abilities** is unticked in Systems.
   (Relaxed 1.15, Normal 1.0, Brisk 0.88). Default voice `en_US-hfc_female-medium`; 8 stock voices offered; any
   `*.onnx` + `*.onnx.json` in the voices folder appears as a selectable voice.
 - If Piper isn't ready or fails, that sentence uses the Windows voice (first installed female voice) and the status explains why.
-- Lip sync: Windows voice → its viseme events; Piper → 45 ms loudness/zero-crossing windows mapped to mouth shapes.
+- Reference voice (`zipvoice`): CPU-only ZipVoice-Distill int8 + Vocos, 8 steps, using the private supplied reference profile; downloads roughly 185 MB of model files. No pitch shifting. Experimental: can skip words and is slower than Piper.
+- Lip sync: Windows voice → native visemes; Piper/reference → local Rhubarb phonetic audio alignment. It estimates nine mouth poses, not an exact phoneme transcript. Alignment unavailable/timeout → envelope fallback.
+- Stop cancels the request ID on the server, stops playback and aborts queued speech HTTP calls. Native synthesis may finish its current chunk, but its output is discarded; completed tool effects are not undone.
 
 ## 5. Display panel (CORTANA // DISPLAY)
 
@@ -91,7 +93,7 @@ typing indicator with the current ability (e.g. "SEARCHING…"); code, tables an
 errors shown in the bubble. Composer pinned at the bottom: 📎 adds files (PDF, Word, PowerPoint, text; ≤12 MB each, also by
 dropping them on the panel; a note bubble confirms "added (N pages)"), Enter sends, Shift+Enter new line, grows to ~5 lines.
 Cards have **Copy** (plain text, links as "text: url") and **Expand**. Links in cards open in a new tab and only https links are made clickable.
-The conversation is kept for this browser tab (last 60 entries). The caption under her face shows the latest spoken reply in a matching holo card.
+The last 60 conversation entries restore from the PC after a page reload. The caption under her face shows the latest spoken reply in a matching holo card.
 
 **Mission Briefing:** date; **Read my briefing** (spoken summary of weather, today's events and open objectives, composed on
 the page, no AI call); weather card + 3 days (needs home town); today's events (Cortana's own, with ✕ to remove, and Google's if connected); up to 6 open objectives.
@@ -99,7 +101,7 @@ the page, no AI call); weather card + 3 days (needs home town); today's events (
 **Objectives:** add To-do / Timer (minutes) / Reminder (date-time); grouped Timers, Reminders, To-do; live countdown for
 running timers; ✓ completes, ✕ deletes; reminders that have fired are highlighted until completed. Re-renders when the AI changes items.
 
-**Memory:** remembered facts (✕ forget, add your own); **Documents I can read** (name, pages/slides, size, ✕ remove;
+**Memory:** remembered facts (edit in place, Save, ✕ forget, add your own; possible same-subject conflicts flagged for review); **Documents I can read** (name, pages/slides, size, ✕ remove;
 **Add files…**; on the PC only, **Add folder** by path: up to 80 readable files, 4 levels deep); last 30 conversation lines; **Clear conversation history** needs two
 taps within 4 s. Facts are not cleared by clearing history.
 
@@ -112,19 +114,19 @@ pace and the phone QR (original Settings dialog). **Save** applies changes.
 
 Checked on every status poll (4 s). The first due, unannounced item is acknowledged, a three-note chime plays, and after
 0.7 s she says "Chief, your <label> timer is done." or "Reminder, Chief: <text>." Only while she's idle; one at a time.
-Alerts need a Cortana page open (PC or phone).
+The launcher also checks every two seconds and attempts native Windows reminder balloons while the browser is closed. Notification delivery has its own `notified` flag and does not consume a browser alert. Overdue alerts survive restarts. Systems can disable native reminders. Keep the launcher running; Windows notification settings control visibility. Objectives offers +10m snooze; recent acknowledged timers remain snoozable for 24 hours.
 
 ## 8. Wake word
 
 Off by default; turned on per device in Systems (needs microphone permission and a tap after page load).
 Energy-based detection that adapts to the room: a background-noise level is tracked while nobody speaks; speech starts above
 max(0.012, 3 × noise) RMS (with pre-roll), ends after 0.7 s below max(0.009, 2 × noise) or 7 s total; bursts under 0.4 s are
-ignored. Each burst is sent to `/api/transcribe` with `wake: true`: Whisper gets the hint "Cortana is my assistant." (a transcript
+ignored. Each burst is checked locally by the small Zipformer keyword spotter before Whisper. While the detector is unavailable, idle wake requests fall back to Whisper. Confirmed bursts get the hint "Cortana is my assistant." (a transcript
 equal to the hint is ignored), and `runtime.wake_match` decides. The name may come after "hey/hi/ok/…" and fillers ("um"), within
 the first 4 words, nothing else before it. Spellings ≥78% similar to "cortana" count (Courtana, Cortona, Gortana, "cor tana");
 weaker sound-alikes (Katana, Quartana, Kortina…) only right after a greeting. 2+ following words → sent as the question;
 otherwise a chime and normal listening. If speech arrives while a burst is being transcribed, the latest burst is kept and checked
-next (not dropped). Audio is ignored while she's thinking/speaking/listening.
+next (not dropped). With wake enabled, echo-cancelled keyword audio remains active while thinking/speaking so the user can interrupt. Recognised playback echo is rejected; interruption requires the small detector to be ready. Manual listening owns the mic. Real-room echo rejection is unverified.
 
 ## 9. Phone
 
@@ -136,3 +138,9 @@ The PC window shows a QR for the phone link. Scanning pairs the phone for that l
 The model loads from `assets/cortana.glb` + `rig.json`; textures are validated and the model reloaded (up to 3 attempts) if any
 are missing; graphics-context loss is recovered; Back/Forward restores keep the animation running. Without a model, a message
 explains how to add one and everything else works.
+
+## 11. Character and voice setup
+
+After model choice, first setup asks Normal (the former Expressive, strength 1.3) or Expressive (1.8), plus Piper/reference/Windows voice. Both have previews, persist on the PC, and remain changeable in Systems. Expression previews temporarily override status syncing. Reactions are deterministic from sentence wording (focused/curious/playful/concerned), with eye contact, smirks and brief gestures; no claim of original Halo animation data. Reduced motion suppresses head/hand movement.
+
+Systems displays measured transcription, first-token, speech preparation, whole reply and send-to-playback times. These are last observed timings, not a performance guarantee; they contain no conversation text.

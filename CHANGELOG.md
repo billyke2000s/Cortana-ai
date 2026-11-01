@@ -2,6 +2,24 @@
 
 All notable changes. Dates are UK time.
 
+## [1.5.0] - 2026-11-01
+
+### Added
+- First setup asks for Normal/Expressive movement and PC voice, with previews and saved choices in Systems.
+- Normal uses the old Expressive strength; Expressive adds stronger semantic expressions, asymmetric smirks and brief hand emphasis.
+- Optional experimental reference voice: CPU ZipVoice-Distill int8 + Vocos; fast Piper and Windows fallback remain available.
+- Rhubarb phonetic audio alignment for neural voices; SAPI retains its native visemes; envelope fallback remains available.
+- Request IDs, server cancellation and queued speech abort; opt-in wake interruption while thinking/speaking with echo rejection.
+- Restore saved chat on reload; bounded older-turn excerpts; relevant memory retrieval, editing and possible-conflict review.
+- Windows reminder balloons with the browser closed, missed alerts on reopening, ten-minute snooze and recent timer alerts.
+- Small CPU keyword spotter before Whisper; transcription, first-token, speech-preparation and playback latency measurements.
+- 16 regression tests (80 total); browser, real 4B/9B, native Windows and packaged voice release checks.
+
+### Limits
+- Reference speech is experimental, can skip/mispronounce words, and is slower than Piper. No exact-match claim.
+- Native synthesis may finish its current chunk after Stop; cancelled output is discarded. Already executed tools are not undone.
+- Keep the launcher running for reminders. Windows notification settings and real-room microphone echo require desktop testing.
+
 ## [1.4.0] - 2026-11-01
 
 ### Added

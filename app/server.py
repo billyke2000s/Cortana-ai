@@ -9,7 +9,7 @@ UNPAIRED_PAGE=('<!doctype html><meta name=viewport content="width=device-width,i
  '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#020814;color:#e8f4ff;font:16px system-ui;text-align:center;padding:24px">'
  '<div><h1 style="color:#9fe2ff;letter-spacing:.12em">CORTANA</h1><p>This phone isn\'t paired with this session.</p>'
  '<p style="color:#a9c6e6">Scan the QR code shown in the Cortana window on your PC.<br>Each time Cortana restarts it shows a new QR code, so old links stop working.</p></div>').encode()
-SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access')
+SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications')
 _weather_cache={'at':0,'key':None,'value':None}
 class AppServer(ThreadingHTTPServer):
     daemon_threads=True
@@ -56,13 +56,15 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header('Set-Cookie',f'cortana_session={runtime.token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000');self.send_header('Cache-Control','no-store');self.send_header('Content-Length','0');self.end_headers();return
         if not self.authorised():return self.send_data(UNPAIRED_PAGE,'text/html; charset=utf-8',403)
         if parsed.path=='/api/status':
-            alerts=[{'id':i['id'],'kind':i['kind'],'text':i['text']} for i in runtime.store.due_alerts()]
-            return self.send_json({'timedSpeech':os.name=='nt','ai':runtime.ai_ready,'transcription':runtime.stt_ready,'model':runtime.model,'status':runtime.status,'canPair':self.local,'phoneReady':bool(runtime.phone_url),'error':runtime.error,'voice':runtime.voice.status,'alerts':alerts,'chooseModel':runtime.awaiting_choice})
-        if parsed.path=='/api/objectives':return self.send_json({'items':runtime.store.items()})
-        if parsed.path=='/api/memory':return self.send_json({'facts':runtime.store.facts(),'messages':runtime.store.recent_messages(60)})
+            alerts=[{'id':i['id'],'kind':i['kind'],'text':i['text'],'due':i['due']} for i in runtime.store.due_alerts()]
+            return self.send_json({'timedSpeech':os.name=='nt','ai':runtime.ai_ready,'transcription':runtime.stt_ready,'model':runtime.model,'status':runtime.status,'canPair':self.local,'phoneReady':bool(runtime.phone_url),'error':runtime.error,'voice':runtime.voice.status,'alerts':alerts,'chooseModel':runtime.awaiting_choice,'choosePersonality':not runtime.store.get('setup_complete',False),'expressionMode':runtime.store.get('expression_mode','normal'),'latency':runtime.jobs.snapshot(),'wakeDetector':runtime.neural.wake_status,'lipSync':runtime.lips.status})
+        if parsed.path=='/api/conversation':return self.send_json({'messages':runtime.store.recent_messages(60),'summary':runtime.store.conversation_summary()})
+        if parsed.path=='/api/objectives':return self.send_json({'items':runtime.store.items(),'recent_alerts':runtime.store.recent_alerts()})
+        if parsed.path=='/api/memory':return self.send_json({'facts':runtime.store.facts(),'conflicts':runtime.store.fact_conflicts(),'messages':runtime.store.recent_messages(60)})
         if parsed.path=='/api/settings':
             store=runtime.store
             return self.send_json({**{k:store.get(k) for k in SETTINGS_PUBLIC},'model':runtime.model,'voice':store.get('voice','en_US-hfc_female-medium'),
+                'expression_mode':store.get('expression_mode','normal'),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
                 'voice_engine':store.get('voice_engine','piper'),'pc_controls':store.get('pc_controls',True),'tools_enabled':store.get('tools_enabled',True),'pc_access':store.get('pc_access',True),
                 'phone_access':store.get('phone_access','cloudflare'),'calendar_connected':bool(store.get('calendar_url')),'brave_connected':bool(store.get('brave_key')),
                 'voices':runtime.voice.catalog(),'models':runtime.installed_models(),'voice_status':runtime.voice.status})
@@ -92,10 +94,21 @@ class Handler(SimpleHTTPRequestHandler):
             data=json.loads(self.rfile.read(size))
             if not isinstance(data,dict):raise ValueError('Invalid request.')
             runtime=self.server.runtime
+            if self.path=='/api/cancel':
+                key=runtime.jobs.key(data.get('request_id'))
+                if not key:raise ValueError('Request ID required.')
+                runtime.jobs.cancel(key);return self.send_json({'ok':True})
+            if self.path=='/api/metrics':
+                value=data.get('playback_ms')
+                if not isinstance(value,(int,float)) or not 0<=value<=600000:raise ValueError('Invalid playback timing.')
+                with runtime.jobs.lock:runtime.jobs.metrics['playback_ms']=round(value)
+                return self.send_json({'ok':True})
             if self.path=='/api/transcribe':
                 audio=base64.b64decode(data.get('audio',''),validate=True)
                 if data.get('wake') is True:   # wake-word burst: hint the name, decide here (testable) instead of in the page
                     from runtime import wake_match,WAKE_PROMPT
+                    detected=runtime.neural.detect(audio)
+                    if detected is False or (data.get('interrupt') is True and detected is None):return self.send_json({'text':'','wake':False,'rest':''})
                     try:text=runtime.transcribe(audio,WAKE_PROMPT)
                     except RuntimeError:return self.send_json({'text':'','wake':False,'rest':''})
                     rest=wake_match(text);return self.send_json({'text':text,'wake':rest is not None,'rest':rest or ''})
@@ -107,11 +120,14 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path=='/api/speech':
                 text=data.get('text','')
                 if not isinstance(text,str) or not text.strip() or len(text)>3000:raise ValueError('Enter between 1 and 3000 characters.')
-                return self.send_json(runtime.voice.speak(text,max(-1,min(1,int(data.get('rate',0))))))
+                with runtime.jobs.scope(data.get('request_id')):
+                    return self.send_json(runtime.voice.speak(text,max(-1,min(1,int(data.get('rate',0))))))
             if self.path=='/api/chat-stream':
                 messages=data.get('messages',[])
                 if not isinstance(messages,list) or len(messages)>20 or not all(isinstance(m,dict) for m in messages):raise ValueError('Invalid conversation.')
-                return self.stream_events(runtime.chat_stream(messages))
+                def events():
+                    with runtime.jobs.scope(data.get('request_id')):yield from runtime.chat_stream(messages)
+                return self.stream_events(events())
             if self.path=='/api/objectives':return self.send_json(objectives_action(runtime.store,data))
             if self.path=='/api/memory':return self.send_json(memory_action(runtime.store,data))
             if self.path=='/api/settings':return self.send_json(settings_action(runtime,data))
@@ -141,6 +157,7 @@ def objectives_action(store,data):
         elif kind=='reminder':due=tools.parse_local_time(data.get('at',''))
         elif kind!='task':raise ValueError('Unknown type.')
         store.add_item(kind,text,due)
+    elif action=='snooze':store.snooze(int(data['id']),data.get('minutes',10))
     elif action in ('complete','delete','ack'):
         getattr(store,{'complete':'complete_item','delete':'delete_item','ack':'acknowledge'}[action])(int(data['id']))
     else:raise ValueError('Unknown action.')
@@ -149,6 +166,7 @@ def memory_action(store,data):
     action=data.get('action')
     if action=='forget':store.forget_fact(fact_id=int(data['id']))
     elif action=='add':store.add_fact(data.get('text',''))
+    elif action=='edit':store.edit_fact(int(data['id']),data.get('text',''))
     elif action=='clear_history':store.clear_messages()
     else:raise ValueError('Unknown action.')
     return {'facts':store.facts(),'messages':store.recent_messages(60)}
@@ -164,10 +182,18 @@ def settings_action(runtime,data):
         if url and not re.fullmatch(r'https://\S{10,800}',url):raise ValueError('The calendar address must start with https://')
         store.set('calendar_url',url)
     if 'brave_key' in data:store.set('brave_key',str(data['brave_key']).strip()[:120])
+    if 'expression_mode' in data:
+        if data['expression_mode'] not in ('normal','expressive'):raise ValueError('Choose Normal or Expressive.')
+        store.set('expression_mode',data['expression_mode'])
+    for key in ('setup_complete','native_notifications'):
+        if key in data:
+            if not isinstance(data[key],bool):raise ValueError('Use true or false for '+key+'.')
+            store.set(key,data[key])
+    if 'voice_engine' in data and data['voice_engine'] not in ('piper','windows','zipvoice'):raise ValueError('Unknown voice engine.')
     for key in ('pc_controls','tools_enabled','pc_access'):
         if key in data:store.set(key,bool(data[key]))
     if data.get('phone_access') in ('cloudflare','tailscale'):store.set('phone_access',data['phone_access'])
-    if data.get('voice_engine') in ('piper','windows') or data.get('voice'):
+    if data.get('voice_engine') in ('piper','windows','zipvoice') or data.get('voice'):
         voice=data.get('voice')
         if voice and voice not in [v['name'] for v in runtime.voice.catalog()]:raise ValueError('Unknown voice.')
         runtime.voice.switch(data.get('voice_engine'),voice)

@@ -1,56 +1,98 @@
 name: Build Windows release
-
-# Push a tag like v1.2.0 (or run manually from the Actions tab) to build Cortana.exe on Windows
-# and attach it to a GitHub release.
 on:
   push:
     tags: ['v*']
+    branches: ['release/companion-voice']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v1.2.0)'
+        description: Release tag
         required: true
-
+        default: v1.5.0
 permissions:
   contents: write
-
 jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt playwright==1.51.0
+      - run: python -m playwright install --with-deps chromium
+      - run: python tests/browser_check.py
+  models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Start local Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          (OLLAMA_CONTEXT_LENGTH=6144 ollama serve > /tmp/ollama.log 2>&1 &)
+          sleep 5
+      - name: Check real 4B and 9B models with retrieved memory and recap
+        run: |
+          ollama pull qwen3.5:4b
+          python tests/ci_context_check.py qwen3.5:4b
+          ollama stop qwen3.5:4b
+          ollama pull qwen3.5:9b
+          python tests/ci_context_check.py qwen3.5:9b
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install build tools
         run: pip install -r requirements-build.txt
-
       - name: Offline tests
         run: python -m unittest discover -s tests -v
-
+      - name: Native keyword detector and notification process
+        run: python tests/ci_native_check.py
       - name: Build Cortana.exe
         run: python build/build_cortana.py
-
-      - name: Smoke test the built exe
+      - name: Smoke test the built exe including the reference voice
         shell: pwsh
         run: |
           $env:CORTANA_DATA_DIR = "$env:RUNNER_TEMP\cortana-smoke"
           $p = Start-Process dist\Cortana.exe -ArgumentList '--headless','--no-open','--no-tunnel','--port','8777' -PassThru
-          try { python tests/exe_smoke.py http://127.0.0.1:8777; $code = $LASTEXITCODE } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          try {
+            python tests/exe_smoke.py http://127.0.0.1:8777
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            python tests/release_voice_check.py http://127.0.0.1:8777
+            $code = $LASTEXITCODE
+          } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           exit $code
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Cortana ${{ github.event.inputs.tag || github.ref_name }}
+          name: cortana-windows
+          path: dist/Cortana.exe
+          retention-days: 7
+  publish:
+    needs: [ui, models, build]
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'Release Cortana 1.5.0')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cortana-windows
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.5.0' }}
+          target_commitish: ${{ github.sha }}
+          name: Cortana 1.5.0
           files: dist/Cortana.exe
           body: |
-            **Download `Cortana.exe` below and double-click it.** No installation needed.
+            Download Cortana.exe and run it on Windows 10/11. Keep the launcher open.
 
-            - Windows 10/11. An NVIDIA graphics card is recommended (8 GB is ideal).
-            - First launch downloads what's missing (Ollama + the recommended AI model, speech recognition, voice). Keep the small Cortana window open.
-            - Windows SmartScreen may warn because the app isn't code-signed: click **More info → Run anyway**.
-            - Phone: scan the QR code in the Cortana window.
+            New: Normal/Expressive setup and previews; experimental reference voice on PC alongside fast Piper; audio-aligned mouth cues; request cancellation; restored conversation and older-turn recap; relevant editable memories; Windows reminders and snooze; small local keyword detector; latency measurements.
+
+            The reference voice is experimental, slower than Piper, and can skip or mispronounce words. It is not a 1:1 recreation. Native speech can finish its current synthesis chunk after Stop; cancelled audio is discarded. Real microphone echo rejection, animation quality and visible notification delivery need checking on your own Windows desktop.

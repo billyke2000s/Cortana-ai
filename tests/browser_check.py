@@ -1,0 +1,41 @@
+"""Real browser + real gateway with fake Ollama and silent speech."""
+import os
+import sys
+import tempfile
+import threading
+sys.path[:0]=['tests','app']
+import test_offline as b
+from playwright.sync_api import sync_playwright
+r=b.runtime.Runtime();r.store.close();r.store=b.store.Store(':memory:');r.ai_ready=True;r.stt_ready=True
+r.tag_exists={m['tag']:True for m in b.hardware.CATALOG};r.voice.speak=b.silent_voice
+r.voice.switch=lambda engine=None,voice=None:r.store.set('voice_engine',engine) if engine else None
+srv=b.server.AppServer(('127.0.0.1',0),r);threading.Thread(target=srv.serve_forever,daemon=True).start()
+url='http://127.0.0.1:'+str(srv.server_address[1])
+try:
+    with sync_playwright() as p:
+        browser=p.chromium.launch(headless=True,args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'],env={k:v for k,v in os.environ.items() if 'proxy' not in k.lower()})
+        page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+        for width,height in [(320,568),(360,640),(390,844),(430,932),(844,390),(1280,900)]:
+            page.set_viewport_size({'width':width,'height':height});page.goto(url)
+            page.wait_for_function('window.CortanaPages !== undefined')
+            if width==320:
+                page.evaluate("window.CortanaPages.open('setup')");page.wait_for_selector('#setupExpression')
+                page.select_option('#setupExpression','expressive');page.click('[data-act=setup-save]');page.wait_for_selector('#chatInput')
+            page.evaluate("window.CortanaPages.open('settings')");page.wait_for_selector('#sExpression')
+            page.select_option('#sExpression','expressive');page.click('[data-act=save]')
+            page.wait_for_function("document.getElementById('sMsg')?.textContent==='Saved.'")
+            panel=page.locator('#holoPanel').bounding_box();nav=page.locator('.nav-wrap').bounding_box()
+            assert panel['y']+panel['height']<=nav['y']+1,(width,panel,nav)
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'),width
+            print('LAYOUT',width,height,'OK',flush=True)
+        page.evaluate("window.CortanaPages.open('chat')");page.fill('#chatInput','Remember my dog is called Max')
+        page.click('#chatForm [type=submit]')
+        page.wait_for_function("window.Cortana.chat.some(m=>m.role==='assistant'&&!m.pending&&m.text)")
+        page.reload();page.wait_for_function("window.Cortana?.chat.some(m=>m.text.includes('Max'))")
+        page.evaluate("window.CortanaPages.open('memory')");page.wait_for_selector('[data-fact]')
+        page.locator('[data-fact]').first.fill('My dog is called Rex');page.locator('[data-act=edit-fact]').first.click()
+        page.wait_for_function("document.querySelector('[data-fact]')?.value==='My dog is called Rex'")
+        assert not errors,errors
+        print('HISTORY RESTORE / MEMORY EDIT / CONSOLE OK',flush=True)
+        browser.close()
+finally:srv.shutdown();srv.server_close();r.store.close()

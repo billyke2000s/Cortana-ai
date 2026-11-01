@@ -131,3 +131,17 @@ phrasing falls back to the model's own tool choice.
 
 ### D-018: No voice cloning of third parties
 The project supports training a Piper voice only from the owner's (or a consenting person's) recordings.
+
+### D-028: Optional reference speech, fast Piper retained
+
+The owner requested the supplied experimental Halo-style reference candidate in this private repo/release. This scopes an exception to D-018 and AGENTS voice/recording rules for the existing `app/voice-profile/reference.wav`; it does not change the trainer consent requirement or authorise unrelated recordings. It does not assert an official licence or endorsement. No trained weights or source recording collection is committed.
+
+ZipVoice-Distill int8 + Vocos (roughly 185 MB model files) is the closer tested candidate, CPU only, 8 steps. It can skip words, is slower than Piper and is not claimed to be 1:1. Stock Piper remains the fast default; Windows remains a fallback. A Piper training pilot was unfinished and is not shipped as a completed model. Source: https://k2-fsa.github.io/sherpa/onnx/tts/zipvoice.html . ZipVoice and sherpa-onnx are Apache-2.0; Vocos is MIT (notices bundled).
+
+### D-029: Local audio alignment and keyword gate
+
+Rhubarb 1.14 phonetic recognition supplies nine audio-aligned mouth poses; it is an estimate, not perfect phoneme alignment. Envelope fallback remains usable without the download. The 3.3M English sherpa keyword model gates Whisper; negative speech no longer needs a full transcription. Interruption requires the detector, plus browser echo cancellation and recognised-echo rejection. Real-room false triggers remain unverified.
+
+### D-030: Bounded memory, cancellable turns, background reminders
+
+Rank up to 12 facts/1,800 chars by query terms and recency. Keep fact conflicts visible for explicit editing instead of deleting facts heuristically. Recap is extractive (≤800 chars) and reduces the existing history allowance, so context does not grow. IDs group chat/speech cancellation; active native chunks may finish but output is discarded. Reminders have a native-delivery flag separate from browser acknowledgement. Clear History increments a version checked atomically when saving an exchange.

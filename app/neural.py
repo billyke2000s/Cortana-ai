@@ -68,7 +68,7 @@ class Neural:
             if self.kws:return
             extract(self.asset(KWS_NAME+'.tar.bz2','kws-models'),DATA/'neural');m=DATA/'neural'/KWS_NAME
             keywords=DATA/'neural'/'cortana-keywords.txt'
-            keywords.write_text('▁HE Y ▁C OR T AN A :2.0 #0.35 @HEY_CORTANA\n',encoding='utf8')
+            keywords.write_text('▁HE Y ▁C OR T AN A :2.0 #0.35 @HEY_CORTANA\n▁C OR T AN A :1.5 #0.45 @CORTANA\n',encoding='utf8')
             self.kws=s.KeywordSpotter(tokens=str(m/'tokens.txt'),encoder=str(next(m.glob('encoder*.int8.onnx'))),
               decoder=str(next(m.glob('decoder*.int8.onnx'))),joiner=str(next(m.glob('joiner*.int8.onnx'))),
               keywords_file=str(keywords),num_threads=2,keywords_threshold=.35)

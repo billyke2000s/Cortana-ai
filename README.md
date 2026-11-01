@@ -12,10 +12,12 @@
 <img src="https://img.shields.io/badge/voice-Piper-7fd4ff?style=flat-square" alt="Piper">
 <img src="https://img.shields.io/badge/ears-Whisper.cpp-7fd4ff?style=flat-square" alt="Whisper.cpp">
 <img src="https://img.shields.io/badge/3D-Three.js-7fd4ff?style=flat-square&logo=threedotjs&logoColor=white" alt="Three.js">
-<img src="https://img.shields.io/badge/offline%20tests-37%20passing-3df58a?style=flat-square" alt="32 offline tests passing">
+<img src="https://img.shields.io/badge/offline%20tests-80%20passing-3df58a?style=flat-square" alt="80 offline tests passing">
 <img src="https://img.shields.io/badge/AI%20agents-read%20AGENTS.md-ffb35c?style=flat-square" alt="AI agents: read AGENTS.md">
 
 ### Your PC is the core. Your phone is the display.
+
+1.5 adds expression/voice setup, saved chat restoration, relevant editable memories, Windows reminders and snooze, and local keyword detection. The reference voice is experimental, slower than Piper, and may skip words. See [release verification](docs/STATUS.md).
 
 **A holographic voice assistant that thinks, listens, speaks and remembers, entirely on your own computer.**<br>
 No cloud AI. No subscription. No account. Your conversations never leave your PC.
@@ -37,14 +39,14 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 ### ⚡ At a glance
 
 - 🗣️ **Talk naturally.** Tap the mic or just say *"Hey Cortana"*.
-- 🌊 **She answers while she's still thinking.** Replies stream sentence by sentence, so she starts speaking within about a second.
+- 🌊 **She answers while she's still thinking.** Replies stream sentence by sentence, with latency depending on your PC and selected voice.
 - 🧠 **Smart and private.** Qwen 3.5 runs on your graphics card through Ollama. She **detects your GPU and recommends the best model it can run**, greys out ones that are too big, and downloads your pick with a progress bar.
 - 📚 **She works with your PC.** Reads your PDFs, Word docs and slides ("summarise this", "quiz me on chapter 3"), looks at your screen ("what's this error?"), uses your clipboard, finds files, and books calendar events with reminders. All on your PC.
 - 🛠️ **She can actually do things:** timers, reminders, a to-do list, long-term memory, weather, web search (no key needed), your calendar, and media/volume/app control on your PC.
 - 🖥️ **Holographic display panel.** Code, tables and step-by-step answers slide up on screen instead of being read aloud, with syntax colours and a **Copy** button.
 - 📱 **Your phone becomes the screen.** Scan a QR code and the same interface runs on your phone, still powered by your PC.
 - 🌀 **A living hologram.** A fully rigged 3D Cortana blinks, looks around, reacts while listening and thinking, and lip-syncs to her voice.
-- 🎙️ **Natural voice.** Piper neural voices, swappable for **your own trained voice**, with lip sync driven by the audio.
+- 🎙️ **PC voices.** Fast Piper, Windows fallback, or the experimental reference voice. Setup offers Normal/Expressive movement and previews. Neural speech uses local audio-aligned mouth cues.
 
 </td>
 </tr>
@@ -238,7 +240,7 @@ cortana-ai/
 ## 🧪 Tests
 
 ```bash
-python -m unittest discover -s tests -v     # 37 offline tests, about 1 second, no GPU or internet needed
+python -m unittest discover -s tests -v     # 80 offline tests, about 3 seconds, no GPU or internet needed
 ```
 
 They cover the sentence streamer, storage, every tool, model recommendations, calendar parsing, the whole HTTP API (streaming chat with tool calls, objectives, memory, settings) and the security rules, including a regression test for phone QR pairing. See [TESTING.md](docs/TESTING.md).
@@ -254,6 +256,7 @@ Point it at **[AGENTS.md](AGENTS.md)** first. It's a strict rulebook (security i
 ## 🙏 Credits & disclaimer
 
 - **AI:** [Qwen 3.5](https://qwenlm.github.io/) via [Ollama](https://ollama.com) · **Speech recognition:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) · **Voice:** [Piper](https://github.com/rhasspy/piper) · **3D:** [three.js](https://threejs.org) (MIT) · **Weather:** [Open-Meteo](https://open-meteo.com) · **QR:** python-qrcode · **PDF text:** [pypdf](https://github.com/py-pdf/pypdf) (BSD-3-Clause) · **Phone link:** Cloudflare Quick Tunnels / Tailscale.
+- **CPU speech:** [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) / [ZipVoice](https://github.com/k2-fsa/ZipVoice) (Apache-2.0), [Vocos](https://github.com/gemelo-ai/vocos) (MIT), [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) (MIT). Voice notices are bundled; downloaded distributions retain their notices.
 - **Cortana**, **Halo**, **UNSC** and **Master Chief** are trademarks of Microsoft. This is an unofficial, non-commercial fan project, not affiliated with or endorsed by Microsoft, 343 Industries or Bungie.
 - **Private repository.** It contains the Cortana 3D model and is kept private; don't make it public.
 - **Licence:** none has been chosen yet, so by default all rights are reserved by the author. Add a `LICENSE` file to change that.

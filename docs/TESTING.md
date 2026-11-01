@@ -80,3 +80,12 @@ and nav; add/complete/delete objectives; memory add/forget; settings save; displ
 - [ ] Wake word: "Hey Cortana, what time is it?" answers; no self-trigger while she speaks.
 - [ ] Reload several times: hair and textures always correct.
 - [ ] Close the window: Piper, cloudflared and an Ollama the app started all exit.
+
+## Companion release checks (1.5)
+
+- Offline: `tests/test_companion.py` covers old-schema migration, fact retrieval/edit/conflicts, recap budget, history-clear race, snooze delivery state, cancellation isolation, tar traversal/links, mouth cues, and all new endpoint guards.
+- Browser: `python tests/browser_check.py` checks six sizes, setup/Systems preferences, restored chat and memory edits with the real HTTP service and fake Ollama/silent voice.
+- Real models: `python tests/ci_context_check.py qwen3.5:4b`, then `qwen3.5:9b` (already pulled into Ollama). Exercises timer, memory, code screen, clock reminder, joke and old-fact recall with recap enabled.
+- Windows: `python tests/ci_native_check.py`; synthetic SAPI wake/no-wake examples plus notification subprocess success. This cannot prove visual balloon delivery.
+- Built exe: `tests/exe_smoke.py URL`, then `tests/release_voice_check.py URL`; reference voice must generate real audio and aligned poses, cancelled IDs must be rejected, Windows fallback must still speak. Publication waits for all CI jobs.
+- Manual: compare Normal/Expressive, try voice previews and arbitrary paragraphs, interrupt with speakers and with headphones, close the browser before a reminder, reopen/snooze, restart while a reminder is overdue. Voice identity and real-room echo cannot be established by silent/browser or synthetic tests.

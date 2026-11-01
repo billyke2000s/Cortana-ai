@@ -58,7 +58,7 @@ With `"wake": true` (wake-word bursts): Whisper gets a hint for the name and the
 
 ### `POST /api/speech`
 `{"text": str (1–3000 chars), "rate": -1|0|1}` → `{"audio": "<base64 WAV>", "voice": str, "visemes": [{"time": s, "duration": s, "id": 0-21}]}`.
-`visemes` is `[]` for Piper (the client derives mouth movement from the audio).
+`visemes` contains Rhubarb audio-aligned mouth poses for Piper/reference when alignment is ready, or `[]` for the envelope fallback; Windows uses SAPI events.
 
 ## Objectives (timers, reminders, tasks)
 
@@ -95,7 +95,7 @@ Returns the open items list.
 Secrets (`calendar_url`, `brave_key`, tokens) are **never** returned.
 
 ### `POST /api/settings`
-Any subset of: `model` (`[\w.:/-]{1,80}`), `voice_engine` (`piper`|`windows`), `voice` (must be in the catalog),
+Any subset of: `model` (`[\w.:/-]{1,80}`), `voice_engine` (`piper`|`windows`|`zipvoice`), `voice` (must be in the catalog),
 `home_location` (≤80 chars), `calendar_url` (`https://…` or `""` to disconnect), `brave_key`, `pc_controls` (bool),
 `tools_enabled` (bool), `pc_access` (bool: screen, clipboard, file search/open), `phone_access` (`cloudflare`|`tailscale`, applies next launch). → `{"ok": true}`.
 
@@ -146,3 +146,15 @@ Weather is cached for 10 minutes; the calendar for 5. `events` merges Cortana's 
 
 Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js`, `/responsive.css`, `/manifest.webmanifest`,
 `/app-icon.svg`, `/assets/*`, `/vendor/*`. Anything else, and any path containing `..`, returns `404`.
+
+## Companion additions (1.5.0)
+
+- `GET /api/conversation` → `{messages:[{id,role,content,created}],summary:str}`; last 60 messages and an extractive older-turn recap (≤800 characters).
+- `POST /api/chat-stream` and `/api/speech` accept optional `request_id` (1–100 ASCII letters/digits/underscore/hyphen). Existing payloads remain supported.
+- `POST /api/cancel {request_id}` → `{ok:true}`. A cancelled ID stays cancelled for one hour, including queued speech. Streaming ends with an error; cancelled speech returns 503. Completed tools are not rolled back.
+- `POST /api/metrics {playback_ms:number}` (0–600000) → `{ok:true}`. Status adds `latency` (milliseconds), `wakeDetector`, `lipSync`, `expressionMode`, `choosePersonality`; alerts add `due`.
+- `POST /api/transcribe` with `wake:true` runs the small keyword detector first. A negative burst avoids Whisper. `interrupt:true` additionally requires the detector (no Whisper-only interruption fallback).
+- Settings GET/POST add `expression_mode` (`normal` default / `expressive`), `setup_complete` (boolean, false default), `native_notifications` (boolean, true default); `voice_engine` adds `zipvoice`. Unknown values are rejected.
+- `GET /api/memory` adds `conflicts`, an array of potentially conflicting fact-ID groups. `POST /api/memory {action:"edit",id,text}` replaces one existing fact (1–300 chars).
+- `POST /api/objectives {action:"snooze",id,minutes:10}` re-arms a timer/reminder for 1–1440 minutes. GET adds `recent_alerts`: at most 20 acknowledged timers from the last day. Items have additive `notified` state.
+- `voice-profile/*`, Python modules, downloaded weights and temporary audio are never static web files. All additions keep the existing auth/origin/JSON/size guards.

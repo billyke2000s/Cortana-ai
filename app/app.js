@@ -1,12 +1,14 @@
 const $=id=>document.getElementById(id);
 const app=$('app'),out=$('transcript'),label=$('listenLabel'),mic=$('mic');
+const clientId=crypto.randomUUID?.().replaceAll('-','')||Math.random().toString(36).slice(2);
+let activeJob=null,turnStarted=0,playingText='',restorePromise=null,restored=false,modePreviewUntil=0;
 const wake={on:false,stream:null,input:null,node:null,busy:false,pending:null};
 let queue=null,state='idle',audioContext=null,source=null,requestId=0,controller=null,recording=null,workletReady=false,capabilities={ai:false,timedSpeech:false},history=[];
 const avatar=()=>window.CortanaAvatar;
 function setState(s,text){state=s;app.classList.toggle('idle',s==='idle');app.classList.toggle('speaking',s==='speaking');mic.setAttribute('aria-pressed',String(s==='listening'));mic.setAttribute('aria-label',s==='listening'?'Finish listening':'Start listening');label.textContent=text;avatar()?.setState(s);document.dispatchEvent(new CustomEvent('cortana:state',{detail:{state:s}}));}
 function idleLabel(){return wake.on?'SAY “HEY CORTANA”':'TAP THE MIC TO SPEAK';}
 function error(message){out.textContent=message;out.classList.add('err');setState('idle','READY WHEN YOU ARE');}
-function stop(){requestId++;controller?.abort();controller=null;queue?.stop();queue=null;if(source){source.onended=null;try{source.stop();}catch{}source=null;}recording?.cancel();recording=null;avatar()?.stopSpeech();setState('idle',idleLabel());}
+function stop(){if(activeJob)api('/api/cancel',{request_id:activeJob}).catch(()=>{});activeJob=null;playingText='';requestId++;controller?.abort();controller=null;queue?.stop();queue=null;if(source){source.onended=null;try{source.stop();}catch{}source=null;}recording?.cancel();recording=null;avatar()?.stopSpeech();setState('idle',idleLabel());}
 async function unlockAudio(){audioContext??=new AudioContext();await audioContext.resume();}
 async function api(path,data,signal){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal});const value=await r.json();if(!r.ok)throw Error(value.error||'Service unavailable.');return value;}
 /* ---- Speech: each sentence is voiced as soon as it arrives and played back-to-back ---- */
@@ -23,24 +25,27 @@ function envelopeCues(buffer){
  levels.forEach((l,i)=>{
   const v=l.rms/peak;let id;
   if(v<.10)id=0;else if(l.zcr>.25&&v<.6)id=15;else if(v<.30)id=13;else if(v<.55)id=i%3?5:6;else if(v<.8)id=i%2?4:3;else id=2;
-  if(id!==last){cues.push({time:i*win/rate,duration:win/rate,id});last=id;}
+  if(id!==last){cues.push({time:i*win/rate,duration:win/rate,id});last=id;}else cues[cues.length-1].duration+=win/rate;
  });
  return cues;
 }
 class SpeechQueue{
- constructor(id){this.id=id;this.chain=Promise.resolve();this.sources=[];this.cues=[];this.t0=null;this.end=0;this.count=0;this.finished=0;this.closed=false;this.failure=null;}
+ constructor(id){this.id=id;this.job=activeJob??=clientId+'_'+id;this.abort=new AbortController();this.chain=Promise.resolve();this.sources=[];this.cues=[];this.t0=null;this.end=0;this.count=0;this.finished=0;this.closed=false;this.failure=null;}
  add(text){
-  const id=this.id,audio=api('/api/speech',{text,rate:Number($('rate').value)}).catch(e=>({error:e.message}));  // synthesis starts now, overlapping playback
+  const id=this.id;
   this.count++;
   this.chain=this.chain.then(async()=>{
-   const result=await audio;if(id!==requestId)return;
+   if(id!==requestId)return;
+   const result=await api('/api/speech',{text,rate:Number($('rate').value),request_id:this.job},this.abort.signal);if(id!==requestId)return;
    if(result.error){this.failure=result.error;this.finished++;return this.check();}
    const buffer=await audioContext.decodeAudioData(Uint8Array.from(atob(result.audio),c=>c.charCodeAt(0)).buffer);if(id!==requestId)return;
    const node=audioContext.createBufferSource();node.buffer=buffer;node.connect(audioContext.destination);
    const start=Math.max(audioContext.currentTime+.05,this.end);
-   if(this.t0===null){this.t0=start;avatar()?.startSpeech(this.cues,()=>audioContext.currentTime-this.t0,0,'warm');setState('speaking','CORTANA IS SPEAKING…');}
+   if(this.t0===null){this.t0=start;avatar()?.startSpeech(this.cues,()=>audioContext.currentTime-this.t0,0,performanceFor(text));setState('speaking','CORTANA IS SPEAKING…');}
    for(const c of (result.visemes?.length?result.visemes:envelopeCues(buffer)))this.cues.push({time:c.time+start-this.t0,duration:c.duration,id:c.id});
    this.end=start+buffer.duration;avatar()?.extendSpeech?.(this.end-this.t0);
+   playingText+=' '+text;setTimeout(()=>{if(id===requestId)avatar()?.setPerformance?.(performanceFor(text));},Math.max(0,(start-audioContext.currentTime)*1000));
+   if(!this.sources.length&&turnStarted)api('/api/metrics',{playback_ms:performance.now()-turnStarted+Math.max(0,(start-audioContext.currentTime)*1000)}).catch(()=>{});
    node.onended=()=>{this.finished++;this.check();};node.start(start);this.sources.push(node);
    $('voiceInfo').textContent=result.voice||'Local voice';
   }).catch(e=>{this.failure=e.message;this.finished++;this.check();});
@@ -51,10 +56,11 @@ class SpeechQueue{
   this.done=true;avatar()?.stopSpeech();queue=null;
   if(this.failure&&!this.sources.length)error(this.failure);else setState('idle',idleLabel());
  }
- stop(){for(const s of this.sources){s.onended=null;try{s.stop();}catch{}}this.sources=[];}
+ stop(){this.abort.abort();for(const s of this.sources){s.onended=null;try{s.stop();}catch{}}this.sources=[];}
 }
+function performanceFor(text){return /\b(sorry|difficult|worried|careful|danger|warning)\b/i.test(text)?'concerned':/\b(joke|funny|nice|clever|kidding|of course|chief)\b/i.test(text)?'playful':text.includes('?')?'curious':'focused';}
 async function speak(text){
- stop();const id=requestId;out.classList.remove('err');out.textContent=text;
+ stop();turnStarted=performance.now();const id=requestId;out.classList.remove('err');out.textContent=text;
  try{await unlockAudio();}catch{}
  if(id!==requestId)return;
  setState('thinking','PREPARING VOICE…');queue=new SpeechQueue(id);queue.add(text);queue.close();
@@ -63,8 +69,9 @@ async function speak(text){
 const chatLog=[];
 function chatChanged(){document.dispatchEvent(new CustomEvent('cortana:chat'));}
 async function send(text){
+ await restoreConversation();
  const inChat=holoPage==='chat';
- stop();if(!inChat)hideScreen();holoLast='';holoReopen.hidden=true;
+ stop();turnStarted=performance.now();activeJob=clientId+'_'+requestId;if(!inChat)hideScreen();holoLast='';holoReopen.hidden=true;
  chatLog.push({role:'user',text});const turn={role:'assistant',text:'',pending:true};chatLog.push(turn);if(chatLog.length>60)chatLog.splice(0,chatLog.length-60);chatChanged();out.classList.remove('err');out.textContent='You: '+text;
  const id=requestId;
  try{await unlockAudio();}catch{}
@@ -81,11 +88,11 @@ async function send(text){
   else if(ev.type==='error')throw Error(ev.error);
  };
  try{
-  const r=await fetch('/api/chat-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages}),signal:controller.signal});
+  const r=await fetch('/api/chat-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,request_id:activeJob}),signal:controller.signal});
   if(!r.ok){const v=await r.json().catch(()=>({}));throw Error(v.error||'Service unavailable.');}
   const reader=r.body.getReader(),decoder=new TextDecoder();let buf='';
   for(;;){
-   const {value,done}=await reader.read();if(id!==requestId)return;if(done)break;
+   const {value,done}=await reader.read();if(id!==requestId){turn.pending=false;chatChanged();return;}if(done)break;
    buf+=decoder.decode(value,{stream:true});let i;
    while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);if(line)handle(JSON.parse(line));}
   }
@@ -140,9 +147,9 @@ function openDialog(id){$(id).showModal();}
 for(const d of document.querySelectorAll('dialog')){d.querySelector('.close-dialog').addEventListener('click',()=>d.close());}
 function preference(key,fallback){try{return localStorage.getItem('cortana.'+key)??fallback;}catch{return fallback;}}
 function savePreference(key,value){try{localStorage.setItem('cortana.'+key,value);}catch{}}
-$('character').value=preference('character','1');$('rate').value=preference('rate','0');$('hologramView').value=preference('view','portrait');
+$('character').value=preference('character','1.3')==='1.8'?'1.8':'1.3';$('rate').value=preference('rate','0');$('hologramView').value=preference('view','portrait');
 function applySettings(){avatar()?.setCharacter($('character').value);avatar()?.setFull($('hologramView').value==='full');}
-$('character').addEventListener('change',()=>{savePreference('character',$('character').value);applySettings();});
+$('character').addEventListener('change',()=>{savePreference('character',$('character').value);applySettings();api('/api/settings',{expression_mode:$('character').value==='1.8'?'expressive':'normal'}).catch(()=>{});});
 $('rate').addEventListener('change',()=>savePreference('rate',$('rate').value));
 $('hologramView').addEventListener('change',()=>{savePreference('view',$('hologramView').value);applySettings();});
 applySettings();document.addEventListener('cortana:avatar-ready',applySettings);
@@ -174,12 +181,14 @@ let statusBusy=false,shownQR=false;
 async function refreshStatus(){
  if(statusBusy)return;statusBusy=true;
  try{const r=await fetch('/api/status');if(!r.ok)throw Error('Connection lost');capabilities=await r.json();
+  if(performance.now()>modePreviewUntil)applyMode(capabilities.expressionMode);
   $('connectionNote').textContent=capabilities.ai?'Connected to your PC':capabilities.status||'Starting assistant...';
   $('aiInfo').textContent=capabilities.ai?'Local assistant: '+capabilities.model:capabilities.status;
   $('statusText').textContent=capabilities.ai?'ONLINE':'STARTING';
   announceAlerts(capabilities.alerts||[]);
   // First launch: keep the model chooser up (Systems also contains it) until a model is picked.
   if(capabilities.chooseModel&&capabilities.canPair&&window.CortanaDisplay?.page!=='settings')window.CortanaPages?.open('choose-model');
+  if(!capabilities.chooseModel&&capabilities.choosePersonality&&capabilities.canPair&&window.CortanaDisplay?.page!=='setup')window.CortanaPages?.open('setup');
   $('phoneSection').hidden=!capabilities.canPair;
   if(capabilities.canPair&&capabilities.phoneReady&&!shownQR){$('phoneQR').src='/api/phone-qr';$('phoneQR').hidden=false;shownQR=true;$('phoneHelp').textContent='Scan with your phone camera. Keep the PC launcher open.';}
   if(capabilities.canPair&&!capabilities.phoneReady){$('phoneQR').hidden=true;shownQR=false;$('phoneHelp').textContent=capabilities.error||'Preparing your secure phone connection...';}
@@ -190,7 +199,7 @@ refreshStatus();setInterval(refreshStatus,4000);
 addEventListener('keydown',e=>{if(e.key==='Escape')stop();});
 addEventListener('pagehide',stop);
 // An existing assistant can provide replies using this API without replacing the UI.
-window.Cortana={speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
+window.Cortana={applyMode,restoreConversation,clearConversation(){stop();history=[];chatLog.length=0;chatChanged();},speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
  note(text,error=false){chatLog.push({role:'system',text,error});chatChanged();}};
 
 /* ---- Timer and reminder alerts (checked with every status poll) ---- */
@@ -200,12 +209,12 @@ function chime(){
   g.gain.setValueAtTime(0,t+at);g.gain.linearRampToValueAtTime(.18,t+at+.02);g.gain.exponentialRampToValueAtTime(.001,t+at+.5);o.connect(g).connect(audioContext.destination);o.start(t+at);o.stop(t+at+.55);}}catch{}
 }
 async function announceAlerts(alerts){
- const next=alerts.find(a=>!announced.has(a.id));
+ const next=alerts.find(a=>!announced.has(a.id+':'+a.due));
  if(!next||state!=='idle')return;
- announced.add(next.id);
+ announced.add(next.id+':'+next.due);
  api('/api/objectives',{action:'ack',id:next.id}).then(()=>document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:'objectives'}}))).catch(()=>{});
  try{await unlockAudio();chime();}catch{}
- setTimeout(()=>speak(next.kind==='timer'?`Chief, your ${next.text.replace(/\s*timer$/i,'')} timer is done.`:`Reminder, Chief: ${next.text}.`),700);
+ const alertRequest=requestId;setTimeout(()=>{if(state!=='idle'||requestId!==alertRequest)return;speak(next.kind==='timer'?`Chief, your ${next.text.replace(/\s*timer$/i,'')} timer is done.`:`Reminder, Chief: ${next.text}.`);},700);
 }
 
 /* ---- "Hey Cortana" wake word: listens locally for speech, transcribes short bursts on this PC, reacts to the name ---- */
@@ -222,15 +231,18 @@ async function setWake(on){
   let chunks=[],pre=[],talking=false,lastVoice=0,startedAt=0,floor=.006;
   const check=audio=>{   // the PC transcribes the burst (with a hint for the name) and decides if it was "Hey Cortana"
    wake.busy=true;
-   api('/api/transcribe',{audio:encodeWav(audio,audioContext.sampleRate),wake:true}).then(r=>{
-    if(!r.wake||state!=='idle'||recording)return;
+   api('/api/transcribe',{audio:encodeWav(audio,audioContext.sampleRate),wake:true,interrupt:state==='speaking'||state==='thinking'}).then(r=>{
+    if(!wake.on||!r.wake||recording||state==='listening')return;
+    const norm=t=>t.toLowerCase().replace(/[^a-z0-9 ]/g,'').trim();
+    if(state==='speaking'&&norm(playingText).includes(norm(r.text)))return;
+    stop();
     wake.pending=null;
     if(r.rest.split(/\s+/).filter(Boolean).length>=2)send(r.rest);else{chime();listen();}
-   }).catch(()=>{}).finally(()=>{wake.busy=false;const next=wake.pending;wake.pending=null;if(next&&state==='idle'&&!recording)check(next);});
+   }).catch(()=>{}).finally(()=>{wake.busy=false;const next=wake.pending;wake.pending=null;if(next&&wake.on&&state!=='listening'&&!recording)check(next);});
   };
   wake.node.port.onmessage=e=>{
    const c=e.data,now=performance.now();let rms=0;for(const v of c)rms+=v*v;rms=Math.sqrt(rms/c.length);
-   if(state!=='idle'||recording){chunks=[];talking=false;pre=[];wake.pending=null;return;}   // never react to her own voice
+   if(state==='listening'||recording){chunks=[];talking=false;pre=[];wake.pending=null;return;}   // echo-cancelled wake audio stays active during playback
    const start=Math.max(.012,floor*3),keep=Math.max(.009,floor*2);
    if(!talking){
     if(rms<start)floor=floor*.97+rms*.03;
@@ -344,3 +356,22 @@ holo.addEventListener('click',async e=>{
  setTimeout(()=>{b.textContent='Copy';},1600);
 });
 window.CortanaDisplay={show:showScreen,hide:hideScreen,render:holoMarkdown,panel:showPanel,esc:holoEsc,get page(){return holo.hidden?null:holoPage;},body:()=>$('holoBody')};
+
+function applyMode(mode,preview=false){
+ if(preview)modePreviewUntil=performance.now()+20000;
+ if(!['normal','expressive'].includes(mode))return;
+ $('character').value=mode==='expressive'?'1.8':'1.3';applySettings();
+}
+async function restoreConversation(){
+ if(restored)return;
+ if(restorePromise)return restorePromise;
+ restorePromise=(async()=>{
+  try{
+   const r=await fetch('/api/conversation');if(!r.ok)throw Error('History unavailable');
+   const data=await r.json();history=data.messages.slice(-18).map(({role,content})=>({role,content}));
+   chatLog.splice(0,chatLog.length,...data.messages.map(m=>{const [text,screen]=m.content.split('[[SCREEN]]');return {role:m.role,text:text.trim(),screen:screen?.trim()};}));
+   restored=true;chatChanged();
+  }catch{}finally{restorePromise=null;}
+ })();return restorePromise;
+}
+restoreConversation();

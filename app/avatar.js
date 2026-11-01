@@ -16,7 +16,7 @@ let speech=null;
 let stateSince=0,arrivedAt=0,nextIdle=0,idleGesture=null,ackAt=-100;
 let nextLook=0,eyeLook={x:0,y:0},eyeTarget={x:0,y:0};
 let expression={smile:.06,brow:.025,squint:0,smirk:0,tilt:0,pitch:0,yaw:0};
-let characterStrength=1,performanceStyle='warm',lastPointer=0;
+let characterStrength=1.3,performanceStyle='warm',lastPointer=0;
 const lights=[];
 const vec=new THREE.Vector3(),q=new THREE.Quaternion();
 function bell(t,start,duration){const u=(t-start)/duration;return u>0&&u<1?Math.sin(Math.PI*u)**2:0;}
@@ -73,7 +73,7 @@ function targetPose(){
  while(i+1<cues.length&&cues[i+1].time<=t)i++;
  speech.index=i;
  const cue=cues[i];
- if(!cue||t<cue.time||t>speech.duration)return poseFor(0);
+ if(!cue||t<cue.time||t>speech.duration||(cue.duration>0&&t>cue.time+cue.duration+.065))return poseFor(0);
  const p=poseFor(cue.id),next=cues[i+1];
  if(next){
   const anticipation=Math.min(.065,Math.max(.015,(next.time-cue.time)*.3));
@@ -100,9 +100,9 @@ function frame(now){
  const blink=bt<.075?bt/.075:bt<.20?1-(bt-.075)/.125:0;
  shape('Eyes-Blink',Math.max(0,Math.min(1,blink)));
  // Occasional eye shifts precede the much slower head response.
- if(t>=nextLook){eyeTarget={x:(Math.random()-.5)*.25,y:(Math.random()-.5)*.12};nextLook=t+2+Math.random()*3;}
+ if(t>=nextLook){eyeTarget={x:(Math.random()-.5)*.25,y:(Math.random()-.5)*.12};nextLook=t+(state==='listening'||state==='speaking'?4:2)+Math.random()*3;}
  eyeLook.x=THREE.MathUtils.damp(eyeLook.x,eyeTarget.x,13,dt);eyeLook.y=THREE.MathUtils.damp(eyeLook.y,eyeTarget.y,13,dt);
- const recent=t-lastPointer<3;
+ const recent=t-lastPointer<3&&state!=='speaking';
  let attentionX=recent?pointer.x:0,attentionY=recent?pointer.y:0;
  if(state==='thinking'){attentionX=-.45;attentionY=-.2;}
  gaze.x=THREE.MathUtils.damp(gaze.x,attentionX,1.8,dt);gaze.y=THREE.MathUtils.damp(gaze.y,attentionY,1.8,dt);
@@ -114,11 +114,13 @@ function frame(now){
  const speakingTime=speech?Math.max(0,speech.clock()):0;
  const phraseGesture=speech?bell(speakingTime,0,1.2)+.65*bell(speakingTime,2.7,1.1)+.5*bell(speakingTime,5.4,1.0):0;
  const ack=bell(t,ackAt,.85);
+ const extra=Math.max(0,characterStrength-1.3)/.5;
+ const concern=speech&&performanceStyle==='concerned',curious=speech&&performanceStyle==='curious';
  const targets={
-  smile:speech?(performanceStyle==='playful'?.12:.065):state==='listening'?.10:.075+(idleGesture?.kind===0?idleAmount*.12:0),
-  brow:state==='listening'?.15:state==='thinking'?.11:.035+phraseGesture*.12,
+  smile:speech?(concern?.025:performanceStyle==='playful'?.12+extra*.035:.065):state==='listening'?.10:.075+(idleGesture?.kind===0?idleAmount*.12:0),
+  brow:state==='listening'?.15:state==='thinking'?.11:.035+phraseGesture*(curious?.19:.12),
   squint:performanceStyle==='playful'&&speech?.08:idleGesture?.kind===0?idleAmount*.06:0,
-  smirk:performanceStyle==='playful'&&speech?phraseGesture*.13:0,
+  smirk:performanceStyle==='playful'&&speech?phraseGesture*(.13+extra*.09):0,
   tilt:state==='listening'?.045:state==='thinking'?-.025:(idleGesture?.kind===1?idleAmount*.035:0),
   pitch:ack*.025-phraseGesture*.013,
   yaw:idleGesture?.kind===2?idleAmount*.035:0
@@ -134,7 +136,10 @@ function frame(now){
   model.position.y=Math.sin(t*.8)*.0012*strength;
  }
  shape('Eyebrows-Up',expression.brow*characterStrength);
- shape('Eyebrows-Worried',state==='thinking'?.035:0);
+ shape('Eyebrows-Worried',concern?.12:state==='thinking'?.035:0);
+ shape('Eyebrows-Up-L',curious?phraseGesture*.12*characterStrength:0);
+ if(!motion.matches){rotate('bip_forearm_L','y',-extra*phraseGesture*(performanceStyle==='focused'?.055:.11));
+ rotate('bip_hand_L','x',extra*phraseGesture*.08);}
  shape('Eyes-Squint',expression.squint*characterStrength);
  // Keep emotional mouth controls small while speaking so visemes stay readable.
  shape('Mouth-Smile',expression.smile*characterStrength);
@@ -158,8 +163,9 @@ function frame(now){
  renderer.render(scene,camera);
 }
 window.CortanaAvatar={ready:false,setState:changeState,setFull(v){full=v;framing();},
- setCharacter(value){characterStrength=THREE.MathUtils.clamp(Number(value)||1,.5,1.4);},
+ setCharacter(value){characterStrength=THREE.MathUtils.clamp(Number(value)||1.3,.5,1.8);},
  startSpeech(cues,clock,duration,style='warm'){performanceStyle=style;speech={cues,index:0,clock,duration};},
+ setPerformance(style){performanceStyle=style;},
  stopSpeech(){speech=null;},
  extendSpeech(duration){if(speech)speech.duration=duration;},   // streamed replies add audio as they go
  inspect(){return {ready:!!model,bones:bones.size,morphMeshes:morphs.length,speaking:!!speech,pose:{...mouth},calls:renderer?.info.render.calls,triangles:renderer?.info.render.triangles};}

@@ -2,7 +2,16 @@
 
 _Last updated: 1 November 2026._
 
-## Verified
+## 1.5 current verification
+
+- Recovered source: 80 offline tests passed on Linux; JavaScript syntax checks passed.
+- Earlier implementation in this session: browser layout passed at 320×568, 360×640, 390×844, 430×932, 844×390, 1280×900; saved chat and memory edit passed. Re-run required after recovery.
+- Actual CPU reference speech produced 24 kHz audio and 11/30 Rhubarb mouth cues in two test sentences. One sentence skipped the name Cortana. Warm long-sentence render was 7.36 s; cold shorter render including model load was 31.21 s. These are observations, not guarantees.
+- A separately generated Piper “Hey Cortana” sample triggered the small keyword detector; an unrelated reference sentence did not.
+- Windows rebuilt-exe speech/alignment/cancellation, native keyword checks and real 4B/9B context regression are release gates; pending until their Actions run succeeds.
+- **[Unverified]** real microphone/speaker echo rejection, subjective voice/animation quality, visible Windows balloon delivery and phone microphone. Native synthesis may finish its current chunk after Stop.
+
+## Previously verified (through 1.4)
 
 | Area | How it was verified |
 |---|---|
@@ -41,10 +50,10 @@ _Last updated: 1 November 2026._
 
 ## Known issues / limitations
 
-- Alerts only fire while a Cortana page is open (PC or phone). No Windows toast notifications yet.
+- Native reminders now attempt Windows balloons while the launcher runs; visible delivery depends on Windows settings and still requires desktop verification.
 - Keyless search uses unofficial endpoints (Bing RSS, DuckDuckGo HTML): they may change or rate-limit. JavaScript-only pages (e.g. live scores) can't be read, so she answers from snippets there.
-- Piper lip sync is loudness-based, not phoneme-accurate.
-- The wake word transcribes every speech burst with Whisper on the CPU, so expect CPU use in noisy rooms.
+- Neural lip sync uses estimated Rhubarb poses when ready; envelope fallback remains. It is not perfect phoneme alignment.
+- The small keyword detector gates Whisper once ready. Before installation/failure, idle wake requests retain Whisper fallback.
 - 9B runs partly on the CPU when other GPU apps (games) are open; switch to Fast (4B) in Systems.
 - Cloudflare Quick Tunnels are a development service with no uptime guarantee; a new QR appears on every launch.
 

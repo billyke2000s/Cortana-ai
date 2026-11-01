@@ -25,9 +25,9 @@ if not (app / 'assets' / 'cortana.glb').exists():
 WEB_FILES = ['index.html', 'app.js', 'pages.js', 'avatar.js', 'responsive.css', 'mic-worklet.js', 'speech.ps1', 'manifest.webmanifest', 'app-icon.svg']
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onefile', '--windowed', '--name', 'Cortana',
         '--distpath', str(dist), '--workpath', str(work / 'pyinstaller'), '--specpath', str(work), '--paths', str(app)]
-for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'sherpa_onnx', 'sherpa_onnx_core', 'numpy']:
+for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'sherpa_onnx', 'numpy']:
     args += ['--hidden-import', name]
-args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx', '--collect-all', 'sherpa_onnx_core']
+args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx', '--collect-all']
 for name in ['PIL', 'torch', 'cv2', 'matplotlib', 'scipy', 'pandas']:
     args += ['--exclude-module', name]
 for name in WEB_FILES:

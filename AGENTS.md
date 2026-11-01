@@ -101,8 +101,9 @@ Keys the client relies on: `ai`, `transcription`, `timedSpeech`, `model`, `statu
 
 ### 3.5 Settings keys (SQLite `settings` table)
 
-`model`, `voice_engine` (`piper`|`windows`), `voice`, `voice_engine_failed`, `home_location`, `calendar_url` (**secret**),
+`model`, `voice_engine` (`piper`|`windows`|`zipvoice`), `voice`, `voice_engine_failed`, `home_location`, `calendar_url` (**secret**),
 `brave_key` (**secret**), `pc_controls`, `pc_access` (screen, clipboard, file search/open; default true), `tools_enabled`, `phone_access` (`cloudflare`|`tailscale`), `phone_token` (**secret**, Tailscale mode only), `port`, `doc_folders` (folders added to Documents), `cal_reminded` (Google events already given a reminder).
+`expression_mode` (`normal`|`expressive`, default normal), `setup_complete` (false), `native_notifications` (true), and internal `conversation_version` are additive settings.
 `GET /api/settings` MUST NEVER return a secret; it returns booleans (`calendar_connected`, `brave_connected`).
 
 ### 3.6 Speech
@@ -131,7 +132,7 @@ Don't rename them; other modules and tests use them.
 9. **Network access** only to: Ollama (local), the download sources in `runtime.py`/`voice.py` (GitHub releases, Hugging Face `rhasspy/piper-voices`, whisper.cpp model), Open-Meteo, Bing (RSS results feed), DuckDuckGo (instant answers + HTML results page), Wikipedia, the public pages of search results (read by `tools.fetch`, which refuses private/loopback addresses and redirects to them), Brave Search (only with a key), the user's calendar URL, and the tunnel. Adding a host = update `SECURITY.md` and ask the user.
 10. **Downloads** MUST be verified (SHA-256 from the release digest, or the MD5 from `voices.json` for voices) when a checksum exists, and archives MUST be extracted with `extract()` (path-traversal check).
 12. **PC access (`files.py`)**: screenshots and copied images go **only** to the local Ollama and are deleted immediately; never saved, logged or sent anywhere else. `open_file` opens **only** paths from the last `find_files` result (by number), never executables/scripts/shortcuts (`files.EXECUTABLE`). Adding a whole folder is **PC-only** (`self.local`); paired phones can upload single files. All of it obeys the `pc_access` switch. Document and page text is untrusted input to the model.
-11. **The wake word only processes audio locally** and ignores audio while Cortana is speaking. Never send audio anywhere except the local `/api/transcribe`.
+11. **The wake word only processes audio locally** allows opt-in keyword interruptions during speech with echo cancellation and recognised-playback rejection; Whisper-only fallback cannot interrupt. Never send audio anywhere except the local `/api/transcribe`.
 
 ---
 
@@ -307,3 +308,9 @@ Don't duplicate content between docs; link instead. Keep README claims true (e.g
 - [ ] Checklists (§10) completed for anything added.
 - [ ] Docs updated (§12), `CHANGELOG.md` entry added.
 - [ ] Report to the user: what changed, what you ran (results), what you could **not** verify, known issues.
+
+## 16. Scoped 1.5 owner request and new modules
+
+The owner's explicit request to implement the new supplied reference voice, dependencies and verbal interruption governs this release. The single private `app/voice-profile/reference.wav` is the scoped exception to §0.5/§5.2/§13 and D-018. Keep the repository private, the existing trainer consent checkbox, and all other recordings/model weights excluded. This is not blanket permission to add unrelated reference recordings.
+
+`neural.py`: CPU reference TTS/KWS. `lips.py`: Rhubarb audio alignment. `companion.py`: request cancellation, timings, Windows notification process. Additive API contracts are in docs/API.md. All are bundled hidden imports and must never be served. New settings require the same validation/UI/docs/tests checklist. First-setup choices and existing settings must survive upgrades. Native synthesis may finish its current chunk; never play or save a cancelled result. Do not claim exact voice identity or perfect lip sync.

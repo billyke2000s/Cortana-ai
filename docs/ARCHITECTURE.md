@@ -6,7 +6,7 @@
 
 Cortana is a **local web app with a desktop launcher**. One Windows process (`Cortana.exe`, or `python app/launcher.py`)
 hosts everything: a Tk window, an HTTP server bound to `127.0.0.1`, and background threads that manage the AI (Ollama),
-speech recognition (whisper.cpp), the voice (Piper / Windows SAPI), storage (SQLite) and an optional phone tunnel.
+speech recognition (whisper.cpp), the voice (Piper / CPU ZipVoice / Windows SAPI), storage (SQLite) and an optional phone tunnel.
 The interface is a static HTML/JS page served by that process and opened in the user's browser, or on a paired phone.
 
 ```text
@@ -62,7 +62,7 @@ Errors in startup set `runtime.error`, are shown in the window and page, and the
    - Tool calls → `tools.run()` → `tool` (+ `refresh`) events → results appended as `role: tool` → next round (max 4 rounds).
    - At the end: optional `screen` event, then `done`. The exchange is logged to SQLite.
 4. **Voice:** each `sentence` is immediately sent to `POST /api/speech` (`SpeechQueue.add`); the server synthesises with Piper (one process, serialised by a lock). The client schedules buffers back to back on the `AudioContext` clock.
-5. **Lip sync:** cues come from SAPI visemes (Windows voice) or `envelopeCues()` (loudness + zero-crossing for Piper), shifted to the shared timeline; `avatar.js` blends mouth poses per frame.
+5. **Lip sync:** cues come from SAPI visemes or Rhubarb phonetic audio alignment (envelope fallback if unavailable), shifted to the shared timeline; `avatar.js` blends mouth poses per frame.
 6. **Display:** a `screen` event renders Markdown (escaped first) into the holographic panel.
 
 GPU/RAM detection and model ratings live in `hardware.py` (see D-019); `GET /api/models` exposes them to the Systems page.
@@ -103,3 +103,11 @@ reminder item 10 minutes before. Alerts = `done=0 AND announced=0 AND due<=now`.
 `build/build_cortana.py` runs PyInstaller `--onefile --windowed` on `app/launcher.py`, bundling the web files, `assets/`,
 `vendor/`, hidden imports (`store`, `tools`, `voice`, `qrcode`, `dateutil`, `tzdata`) and tzdata's zone files. At runtime
 `RESOURCES` points at PyInstaller's `_MEIPASS` (or `app/` from source).
+
+## Companion services (1.5)
+
+`neural.py` owns persistent, locked CPU sherpa-onnx TTS and keyword models. `lips.py` runs Rhubarb per sentence with a 20-second timeout. An auxiliary startup thread prepares the keyword spotter and alignment separately from the AI. Model weights are SHA-256 verified GitHub downloads under `DATA/neural`; Rhubarb lives under `DATA/rhubarb`. Only the small private reference profile is bundled under `voice-profile`, outside the HTTP whitelist.
+
+`companion.Jobs` tracks bounded per-client request IDs, cancellation events, active Ollama sockets and text-free last-request timings. The browser synthesises sentences in order while previously prepared audio plays. Stop closes active Ollama reads, aborts queued calls and rejects cancelled output before/after native synthesis. Native chunks and already executing tools may finish.
+
+The reminder loop checks every two seconds; calendar refresh stays at five minutes. A fixed PowerShell notification program receives reminder text on stdin. `items.notified` is an additive migration separate from browser `announced`; snooze clears both. `Store.log_exchange` atomically checks a history version so Clear History cannot be undone by a stale reply. Recap consumes part of the existing 6,000-character history allowance; query-ranked facts have a separate 1,800-character cap.

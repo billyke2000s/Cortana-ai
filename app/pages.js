@@ -17,12 +17,13 @@ function itemRow(i){
  const due=i.due?(i.kind==='timer'&&!i.announced?`<span class="pg-due" data-timer="${i.due}">${left(i.due)}</span>`:`<span class="pg-due">${esc(when(i.due))}</span>`):'';
  const flag=i.announced&&!i.done?' pg-fired':'';
  return `<li class="pg-item${flag}"><span class="pg-ico">${ICON[i.kind]||''}</span><span class="pg-text">${esc(i.text)}${due}</span>
+  ${i.due?`<button type="button" class="pg-btn" data-act="snooze" data-id="${i.id}" aria-label="Snooze ten minutes">+10m</button>`:''}
   <button type="button" class="pg-btn" data-act="complete" data-id="${i.id}" aria-label="Done">✓</button>
   <button type="button" class="pg-btn pg-del" data-act="delete" data-id="${i.id}" aria-label="Delete">✕</button></li>`;
 }
 async function objectives(){
  try{
-  const {items}=await get('/api/objectives');
+  const {items,recent_alerts=[]}=await get('/api/objectives');
   const groups=[['timer','Timers'],['reminder','Reminders'],['task','To-do']].map(([k,t])=>{const list=items.filter(i=>i.kind===k);return list.length?`<h3>${t}</h3><ul class="pg-list">${list.map(itemRow).join('')}</ul>`:'';}).join('');
   page('tasks','Objectives',`
    <form class="pg-add" id="pgAdd">
@@ -32,7 +33,7 @@ async function objectives(){
     <input id="pgAt" type="datetime-local" aria-label="When" hidden>
     <button type="submit" class="pg-primary">Add</button>
    </form>
-   ${groups||'<p class="pg-muted">Nothing open. Ask Cortana to set a timer, a reminder or add something to your list.</p>'}`,'CORTANA // OBJECTIVES');
+   ${groups||'<p class="pg-muted">Nothing open. Ask Cortana to set a timer, a reminder or add something to your list.</p>'}${recent_alerts.length?'<h3>Recent timer alerts</h3><ul class="pg-list">'+recent_alerts.map(itemRow).join('')+'</ul>':''}`,'CORTANA // OBJECTIVES');
   const kind=document.getElementById('pgKind'),sync=()=>{document.getElementById('pgMinutes').hidden=kind.value!=='timer';document.getElementById('pgAt').hidden=kind.value!=='reminder';};
   kind.onchange=sync;sync();
   document.getElementById('pgAdd').onsubmit=async e=>{e.preventDefault();
@@ -48,10 +49,11 @@ async function objectives(){
 /* ---------------- Memory ---------------- */
 async function memory(){
  try{
-  const [{facts,messages},docs]=await Promise.all([get('/api/memory'),get('/api/documents')]);
+  const [{facts,messages,conflicts=[]},docs]=await Promise.all([get('/api/memory'),get('/api/documents')]);
   page('memory','Memory',`
    <h3>What I remember about you</h3>
-   ${facts.length?`<ul class="pg-list">${facts.map(f=>`<li class="pg-item"><span class="pg-text">${esc(f.text)}</span><button type="button" class="pg-btn pg-del" data-act="forget" data-id="${f.id}" aria-label="Forget">✕</button></li>`).join('')}</ul>`:'<p class="pg-muted">Nothing yet. Tell me things like “remember my dog is called Max”.</p>'}
+   ${conflicts.length?'<p class="pg-muted">Some memories may conflict. Edit the matching facts to keep them current.</p>':''}
+   ${facts.length?`<ul class="pg-list">${facts.map(f=>`<li class="pg-item"><input class="pg-text" data-fact="${f.id}" value="${esc(f.text)}" maxlength="300" aria-label="Memory"><button type="button" class="pg-btn" data-act="edit-fact" data-id="${f.id}">Save</button><button type="button" class="pg-btn pg-del" data-act="forget" data-id="${f.id}" aria-label="Forget">✕</button></li>`).join('')}</ul>`:'<p class="pg-muted">Nothing yet. Tell me things like “remember my dog is called Max”.</p>'}
    <form class="pg-add" id="pgFact"><input id="pgFactText" placeholder="Add something to remember" maxlength="300" required aria-label="Fact"><button type="submit" class="pg-primary">Remember</button></form>
    <h3>Documents I can read</h3>
    ${docs.documents.length?`<ul class="pg-list">${docs.documents.map(d=>`<li class="pg-item"><span class="pg-ico">📄</span><span class="pg-text">${esc(d.name)}<span class="pg-due">${d.pages?esc(d.pages)+(/\.pptx$/i.test(d.name)?' slides':' pages')+' · ':''}${d.chars<1000?esc(d.chars)+' characters':esc(Math.round(d.chars/1000))+'k characters'}</span></span><button type="button" class="pg-btn pg-del" data-act="doc-remove" data-id="${d.id}" aria-label="Remove">✕</button></li>`).join('')}</ul>`:'<p class="pg-muted">None yet. Add PDFs, Word, PowerPoint or text files, then ask “summarise this” or “quiz me on chapter 3”.</p>'}
@@ -196,10 +198,16 @@ async function systems(){
    <label class="pg-check"><input type="checkbox" id="sTools"${s.tools_enabled?' checked':''}> Abilities (timers, memory, weather, search, calendar)</label>
    <label class="pg-check"><input type="checkbox" id="sPC"${s.pc_controls?' checked':''}> PC controls (media, volume, open allowed apps)</label>
    <label class="pg-check"><input type="checkbox" id="sAccess"${s.pc_access!==false?' checked':''}> Screen, clipboard and file access (only when you ask; nothing leaves this PC)</label>
+   <h3>Character</h3>
+   <label>Expression<select id="sExpression">${opt('normal','Normal',s.expression_mode!=='expressive')}${opt('expressive','Expressive',s.expression_mode==='expressive')}</select></label>
+   <button type="button" class="pg-btn pg-wide" data-act="expression-preview">Preview expression</button>
    <h3>Voice</h3>
-   <label>Engine<select id="sEngine">${opt('piper','Natural (Piper)',s.voice_engine==='piper')}${opt('windows','Windows voice',s.voice_engine==='windows')}</select></label>
+   <label>Engine<select id="sEngine">${opt('zipvoice','Reference voice (experimental, closer, slower)',s.voice_engine==='zipvoice')}${opt('piper','Natural (Piper)',s.voice_engine==='piper')}${opt('windows','Windows voice',s.voice_engine==='windows')}</select></label>
    <label>Natural voice<select id="sVoice">${s.voices.map(v=>opt(v.name,v.name+(v.stock?'':' — your voice')+(v.installed?'':' (downloads)'),v.name===s.voice)).join('')}</select></label>
    <p class="pg-muted">${esc(s.voice_status)} Trained voices: put the .onnx and .onnx.json in %LOCALAPPDATA%\\CortanaAI\\voices, then restart.</p>
+   <button type="button" class="pg-btn pg-wide" data-act="voice-preview">Save and preview voice</button>
+   <label class="pg-check"><input type="checkbox" id="sNotifications"${s.native_notifications!==false?' checked':''}> Windows reminders while the browser is closed (keep the launcher running)</label>
+   <p class="pg-muted">${Object.entries((await get('/api/status')).latency||{}).map(([k,v])=>esc(({tts_ms:'Speech preparation',first_token_ms:'First model token',transcription_ms:'Transcription',playback_ms:'Send to playback',reply_ms:'Full reply'})[k]||k)+': '+esc(v)+' ms').join(' · ')||'Timings appear after your first conversation.'}</p>
    <label class="pg-check"><input type="checkbox" id="sWake"${C.wake?' checked':''}> “Hey Cortana” wake word (this device; listens locally)</label>
    <h3>Briefing</h3>
    <label>Home town (for weather)<input id="sHome" value="${esc(s.home_location||'')}" maxlength="80" placeholder="e.g. London"></label>
@@ -222,11 +230,12 @@ async function saveSystems(){
  data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;data.pc_access=v('sAccess').checked;
  if(v('sEngine').value!==s.voice_engine)data.voice_engine=v('sEngine').value;
  if(v('sVoice').value!==s.voice)data.voice=v('sVoice').value;
+ data.expression_mode=v('sExpression').value;data.native_notifications=v('sNotifications').checked;
  data.home_location=v('sHome').value.trim();
  if(v('sCal').value.trim())data.calendar_url=v('sCal').value.trim();
  if(v('sBrave').value.trim())data.brave_key=v('sBrave').value.trim();
  data.phone_access=v('sPhone').value;
- try{await post('/api/settings',data);v('sMsg').textContent='Saved.';setTimeout(systems,700);}catch(e){v('sMsg').textContent=e.message;}
+ try{await post('/api/settings',data);C.applyMode(data.expression_mode);v('sMsg').textContent='Saved.';setTimeout(systems,700);}catch(e){v('sMsg').textContent=e.message;}
 }
 
 /* ---------------- shared ---------------- */
@@ -236,12 +245,17 @@ D.body().addEventListener('click',async e=>{
  const btn=e.target.closest('[data-act]');if(!btn)return;
  const act=btn.dataset.act,id=btn.dataset.id;
  try{
-  if(act==='complete'||act==='delete'){await post('/api/objectives',{action:act,id:Number(id)});objectives();}
+  if(act==='complete'||act==='delete'||act==='snooze'){await post('/api/objectives',{action:act,id:Number(id)});objectives();}
+  else if(act==='edit-fact'){await post('/api/memory',{action:'edit',id:Number(id),text:document.querySelector('[data-fact="'+Number(id)+'"]').value});memory();}
   else if(act==='forget'){await post('/api/memory',{action:'forget',id:Number(id)});memory();}
   else if(act==='clear'){if(!confirmClear.armed){confirmClear.armed=true;btn.textContent='Tap again to clear everything';setTimeout(()=>{confirmClear.armed=false;},4000);return;}
-   await post('/api/memory',{action:'clear_history'});memory();}
+   await post('/api/memory',{action:'clear_history'});C.clearConversation();memory();}
   else if(act==='read'&&lastBriefing)C.speak(briefingSpeech(lastBriefing));
   else if(act==='save')saveSystems();
+  else if(act==='expression-preview'){C.applyMode(document.getElementById('sExpression').value,true);C.speak('Still with me, Chief? Of course you are. What is our next move?');}
+  else if(act==='voice-preview'){await post('/api/settings',{voice_engine:document.getElementById('sEngine').value,voice:document.getElementById('sVoice').value});C.speak('Systems online, Chief. I am ready when you are.');}
+  else if(act==='setup-preview'){C.applyMode(document.getElementById('setupExpression').value,true);await post('/api/settings',{voice_engine:document.getElementById('setupVoice').value});C.speak('Still with me, Chief? Of course you are. What is our next move?');}
+  else if(act==='setup-save'){const mode=document.getElementById('setupExpression').value;await post('/api/settings',{expression_mode:mode,voice_engine:document.getElementById('setupVoice').value,setup_complete:true});C.applyMode(mode);chat();}
   else if(act==='get-model'||act==='use-model'){btn.disabled=true;await post('/api/models',{action:act==='get-model'?'download':'use',tag:btn.dataset.tag});renderModels();}
   else if(act==='disconnect'){await post('/api/settings',{calendar_url:''});systems();}
   else if(act==='attach')pickFiles();
@@ -260,5 +274,16 @@ document.addEventListener('cortana:refresh',e=>{
  if(e.detail.what==='objectives'&&D.page==='tasks')objectives();
  if((e.detail.what==='memory'||e.detail.what==='documents')&&D.page==='memory')memory();
 });
-const PAGES={chat,tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
+async function setup(){
+ try{
+ const s=await get('/api/settings');
+ page('setup','Meet Cortana',`<p>Choose how she moves and speaks. You can change both later in Systems.</p>
+ <label>Expression<select id="setupExpression"><option value="normal"${s.expression_mode==='normal'?' selected':''}>Normal — the previous Expressive</option><option value="expressive"${s.expression_mode==='expressive'?' selected':''}>Expressive — stronger reactions and gestures</option></select></label>
+ <label>PC voice<select id="setupVoice"><option value="piper"${s.voice_engine==='piper'?' selected':''}>Piper — fast and light</option><option value="zipvoice"${s.voice_engine==='zipvoice'?' selected':''}>Reference voice — closer, experimental, slower CPU speech</option><option value="windows"${s.voice_engine==='windows'?' selected':''}>Windows fallback</option></select></label>
+ <p class="pg-muted">The reference voice downloads roughly 185 MB. It is experimental and can skip words; there is no pitch shifting or promise of an exact match.</p>
+ <button type="button" class="pg-btn pg-wide" data-act="setup-preview">Preview</button>
+ <button type="button" class="pg-primary pg-wide" data-act="setup-save">Save and continue</button>`,'CORTANA // FIRST SETUP');
+ }catch(e){failed('setup','Meet Cortana',e);}
+}
+const PAGES={setup,chat,tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
 window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;}};

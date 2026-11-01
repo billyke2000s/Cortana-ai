@@ -32,7 +32,7 @@ if enabled) rather than in a public issue.
 | The model opens or runs something harmful | `open_file` takes a **number** from the last search results, never a path; programs, scripts and shortcuts are refused (`files.EXECUTABLE`). |
 | A paired phone reads arbitrary PC folders | Adding folders to Documents is allowed only from the PC itself; phones can upload single files they already have. |
 | Malicious document text (prompt injection) | Treated as data; the tools that change things are limited to the fixed allow-lists above. |
-| Wake word sends audio elsewhere | Audio goes only to the local `/api/transcribe`; nothing is processed while she speaks. |
+| Wake word sends audio elsewhere | Audio goes only to the local `/api/transcribe`; opt-in interruptions use echo-cancelled audio and require the small local keyword detector; recognised playback echo is rejected. |
 | Large or malformed requests | Size limits (64 KB, 1.5 MB for audio), JSON validation, message count and length limits. |
 
 ## Known residual risks
@@ -47,3 +47,9 @@ if enabled) rather than in a public issue.
 
 See [AGENTS.md §4](AGENTS.md#4-security-rules-non-negotiable). Any change touching `server.py` auth, cookies, the whitelist,
 tools or downloads must keep the corresponding tests in `tests/test_offline.py` passing and update this file.
+
+## 1.5 speech and reminder additions
+
+Downloads add only fixed GitHub release URLs for k2-fsa/sherpa-onnx TTS/vocoder/KWS and DanielSWolf/rhubarb-lip-sync, pinned by SHA-256 in `neural.py`/`lips.py`. Tar extraction rejects traversal, links and special files. No audio or reference is sent to a remote inference service. The bundled reference lives outside the static whitelist.
+
+Cancellation IDs are random per browser and validated; authenticated clients retain the existing access model. Telemetry holds only bounded timing numbers, no text. Native notification text is passed on stdin to fixed PowerShell source, never interpolated into commands. Notification delivery can be suppressed by Windows. Wake echo rejection is best effort and needs testing with the user's speakers/microphone.

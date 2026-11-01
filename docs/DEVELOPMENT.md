@@ -69,3 +69,9 @@ Close Cortana and delete `%LOCALAPPDATA%\CortanaAI\cortana.db*` (settings, memor
 ## Voice trainer
 
 `tools/voice-trainer/` trains a Piper voice from **your own** recordings (WSL2 Ubuntu + NVIDIA GPU). See its [README](../tools/voice-trainer/README.md).
+
+## Companion runtime
+
+Requirements now include sherpa-onnx 2.0.1 and NumPy (CPU ONNX, no PyTorch), in addition to the existing packages. PyInstaller collects sherpa-onnx and its core shared libraries and bundles `voice-profile`; downloaded model weights stay outside Git. `neural.py`, `lips.py`, and `companion.py` are hidden imports.
+
+`tests/browser_check.py` requires Playwright 1.51 + Chromium. `tests/ci_context_check.py qwen3.5:4b` (and `:9b`) needs local Ollama with the named model. `tests/ci_native_check.py` exercises Windows SAPI → keyword detection and the notification process. `tests/release_voice_check.py URL` tests real speech and cues from the built exe, not just Python imports. See the release workflow.
