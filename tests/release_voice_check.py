@@ -13,9 +13,9 @@ def call(path,body=None):
     with urllib.request.urlopen(req,timeout=300) as r:return json.load(r)
 for _ in range(180):
     status=call('/api/status')
-    if 'ready' in status['lipSync'].lower() and 'ready' in status['wakeDetector'].lower():break
+    if 'ready' in status['lipSync'].lower():break   # the keyword spotter is no longer prepared (D-037)
     time.sleep(1)
-else:raise RuntimeError('Packaged alignment / keyword spotter did not prepare: '+str(status))
+else:raise RuntimeError('Packaged lip alignment did not prepare: '+str(status))
 call('/api/settings',{'voice_engine':'zipvoice'});start=time.perf_counter()
 speech=call('/api/speech',{'text':'I am ready when you are, Chief. What is our next move?','request_id':'release_smoke'})
 assert 'ZipVoice' in speech['voice'],speech['voice']
