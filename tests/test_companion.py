@@ -461,3 +461,50 @@ class TimerGuardTests(unittest.TestCase):
         self.assertIn({'type':'tool','name':'set_timer','label':'SETTING TIMER'},events)
         timers=[i for i in rt.store.items() if i['kind']=='timer'];self.assertEqual(len(timers),1)
         self.assertEqual(timers[0]['text'],'pasta');self.assertAlmostEqual(timers[0]['due']-time.time(),600,delta=5)
+
+class ActionGuardTests(unittest.TestCase):
+    """D-036 continued: clear reminders are set in code, and an action she only *said* she did gets one retry."""
+    def test_reminder_requests_are_parsed(self):
+        r=base.runtime.reminder_request
+        self.assertEqual(r('Remind me to call mum at 6pm.'),{'text':'call mum','at':'18:00'})
+        self.assertEqual(r('remind me in 20 minutes to check the oven'),{'text':'check the oven','in_minutes':20})
+        self.assertEqual(r('Remind me at 18:30 to take the bins out'),{'text':'take the bins out','at':'18:30'})
+        self.assertEqual(r('remind me to stretch in an hour'),{'text':'stretch','in_minutes':60})
+        self.assertEqual(r('Remind me about the dentist at 12am'),{'text':'the dentist','at':'00:00'})
+        tomorrow=r('remind me to pay rent tomorrow at 9am');self.assertEqual(tomorrow['text'],'pay rent');self.assertTrue(tomorrow['at'].endswith(' 09:00'))
+        for no in ['Remind me to call mum at 6','remind me on Friday at 3pm to call','What did you remind me about?','Cancel the reminder to call mum',
+                   'remind me at 6pm','Set a reminder']:
+            self.assertIsNone(r(no),no)
+
+    def make_runtime(self):
+        rt=base.runtime.Runtime();rt.store.close();rt.store=base.store.Store(':memory:');rt.ai_ready=True;self.addCleanup(rt.store.close)
+        return rt
+
+    def test_clear_reminder_is_set_once_even_if_the_model_only_talks(self):
+        rt=self.make_runtime()
+        def talker(payload):
+            self.assertNotIn('set_reminder',[t['function']['name'] for t in payload.get('tools',[])])
+            yield {'message':{'content':"Got it! I'll set a reminder for you to call Mum at 6pm."}}
+        with patch.object(rt,'ollama_stream',talker):list(rt.chat_stream([{'role':'user','content':'Remind me to call mum at 6pm.'}]))
+        rem=[i for i in rt.store.items() if i['kind']=='reminder'];self.assertEqual(len(rem),1);self.assertEqual(rem[0]['text'],'call mum')
+
+    def test_claimed_but_not_done_gets_one_retry(self):
+        rt=self.make_runtime();calls=[]
+        def model(payload):
+            calls.append([m['content'] for m in payload['messages'] if m['role']=='user'][-1])
+            if len(calls)==1:yield {'message':{'content':"Got it, I'll remember that."}}             # claims, calls nothing
+            elif len(calls)==2:yield {'message':{'content':'','tool_calls':[{'function':{'name':'remember','arguments':{'fact':"The user's favourite colour is cyan"}}}]}}
+            else:yield {'message':{'content':'Done.'}}
+        with patch.object(rt,'ollama_stream',model):events=list(rt.chat_stream([{'role':'user','content':'Remember that my favourite colour is cyan.'}]))
+        self.assertEqual(len(calls),3);self.assertIn('App check',calls[1])
+        self.assertEqual([f['text'] for f in rt.store.facts()],["The user's favourite colour is cyan"])
+        self.assertIn({'type':'refresh','what':'memory'},events)
+
+    def test_questions_and_stubborn_models_are_not_retried_forever(self):
+        rt=self.make_runtime();calls=[]
+        def model(payload):calls.append(1);yield {'message':{'content':'Your dog is called Max.'}}
+        with patch.object(rt,'ollama_stream',model):list(rt.chat_stream([{'role':'user','content':"Do you remember my dog's name?"}]))
+        self.assertEqual(len(calls),1)   # a question, not a request: no retry
+        calls.clear()
+        with patch.object(rt,'ollama_stream',model):list(rt.chat_stream([{'role':'user','content':'Add milk to my list'}]))
+        self.assertEqual(len(calls),2)   # exactly one retry, then she stops

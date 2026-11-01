@@ -44,7 +44,7 @@ Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are
 | Tool | Behaviour |
 |---|---|
 | `set_timer(minutes, label?)` | 0 < minutes ≤ 1,440. Creates a timer item. **A plain request with a length ("set a 10 minute timer for the pasta") is set by the app before the model answers** (`runtime.timer_request`, D-036); the model only confirms it. |
-| `set_reminder(text, at? \| in_minutes?)` | `in_minutes` relative; `at` as `HH:MM` → next occurrence (today or tomorrow), or `YYYY-MM-DD HH:MM`. Refuses times more than 60 s in the past. |
+| `set_reminder(text, at? \| in_minutes?)` | **A plain request with a clear time ("remind me to call mum at 6pm", "in 20 minutes", "at 18:30 tomorrow") is set by the app first** (D-036). Otherwise: | `in_minutes` relative; `at` as `HH:MM` → next occurrence (today or tomorrow), or `YYYY-MM-DD HH:MM`. Refuses times more than 60 s in the past. |
 | `add_task(text)` | To-do item, no due time. |
 | `list_objectives()` | Open items with times. |
 | `complete_objective(match)` | Completes up to 3 open items whose text contains all words (>2 letters) of `match`. |

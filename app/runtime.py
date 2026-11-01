@@ -67,6 +67,51 @@ def timer_request(text):
     if re.search(r"\b(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b",label,re.I):label=''
     return {'minutes':round(total,4),'label':label}
 
+_REMIND=re.compile(r"\bremind me\b",re.I)
+_IN=re.compile(r"\bin\s+(\d+(?:\.\d+)?|an?|half an?)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b",re.I)
+_AT=re.compile(r"\b(?:at\s+)?(?:(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)|([01]?\d|2[0-3])[:.](\d{2})(?!\s*(?:am|pm))|(noon|midday|midnight))\b",re.I)
+def reminder_request(text):
+    """{'text', 'in_minutes'|'at'} when the message plainly asks for a reminder with a clear time ("remind me to call mum at
+    6pm", "remind me in 20 minutes to check the oven", "remind me at 18:30 tomorrow to ..."), else None. "at 6" (am or pm?),
+    weekdays and dates are left to the model."""
+    text=(text or '').strip()
+    if not _REMIND.search(text) or re.search(r"\b(cancel|delete|remove|what|when|which|list|did|change|move)\b",text,re.I):return None
+    rest=text[_REMIND.search(text).end():];found={}
+    m=_IN.search(rest)
+    if m:
+        a=m.group(1).lower();n=.5 if a.startswith('half') else 1.0 if a in ('a','an') else float(a)
+        found['in_minutes']=round(n*_TIMER_UNITS[re.sub(r's$','',m.group(2).lower())],4)
+    else:
+        m=_AT.search(rest)
+        if not m:return None
+        if m.group(6):hour,minute={'midnight':(0,0)}.get(m.group(6).lower(),(12,0))
+        elif m.group(3):
+            hour,minute=int(m.group(1)),int(m.group(2) or 0)
+            if not 1<=hour<=12 or minute>59:return None
+            hour=hour%12+(12 if m.group(3).lower().startswith('p') else 0)
+        else:hour,minute=int(m.group(4)),int(m.group(5))
+        if minute>59:return None
+        if re.search(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|next|on the|\d{1,2}(st|nd|rd|th))\b",rest,re.I):return None
+        if re.search(r"\btomorrow\b",rest,re.I):
+            from datetime import datetime,timedelta
+            found['at']=(datetime.now()+timedelta(days=1)).strftime('%Y-%m-%d ')+f'{hour:02d}:{minute:02d}'
+        else:found['at']=f'{hour:02d}:{minute:02d}'
+    task=(rest[:m.start()]+' '+rest[m.end():])
+    task=re.sub(r"\b(tomorrow|today|tonight|please|thanks?)\b",' ',task,flags=re.I)
+    task=re.sub(r"^\W*(to|that|about)\s+",'',' '.join(task.split()),flags=re.I).strip(' ,.!?')
+    task=re.sub(r"\s+(to|at|in|and)$",'',task,flags=re.I)
+    if len(task)<2 or 'in_minutes' in found and not 0<found['in_minutes']<=7*24*60:return None
+    return {'text':task,**found}
+
+# The user asked her to *do* something that has a tool. If a turn ends without any tool call, she only said it (D-036).
+_ACTION_ASK=re.compile(r"\b(remind me|remember (that|my|i|to|this)|add .{1,60} to (my |the )?(list|to-?do|objectives|calendar)|put .{1,60} on my (list|to-?do|calendar)|set (a |an )?(timer|reminder|alarm)|book .{1,40} (on|at|for))\b",re.I)
+def wants_action(text):
+    """A request to do something with a tool, not a question about it ("do you remember my dog's name?")."""
+    return bool(_ACTION_ASK.search(text or '')) and not re.match(r"\s*(do|does|did|what|when|where|who|whom|how|why|is|are|was|were|have|has)\b",text or '',re.I)
+
+_NUDGE=("(App check, not from the user: your last reply said you did it, but you called no tool, so nothing happened. "
+        "Call the right tool now. After it runs, reply only 'Done.')")
+
 def weather_question(text):
     """None if not a weather question, else the place named in it ('' = home town)."""
     text=text or ''
@@ -565,13 +610,23 @@ class Runtime:
             if change:yield {'type':'refresh','what':change}
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'set_timer','arguments':args}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'set_timer'}]
+        reminder=reminder_request(clean[-1]['content']) if use_tools and clean and not timer else None
+        if reminder:   # same for a reminder with a clear time (D-036)
+            yield {'type':'tool','name':'set_reminder','label':tools.TOOL_LABELS['set_reminder']}
+            result,change=tools.run('set_reminder',reminder,self.store,llm)
+            if change:yield {'type':'refresh','what':change}
+            convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'set_reminder','arguments':reminder}}]},
+                    {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'set_reminder'}]
         offered=tools.tools_for(clean[-1]['content'],ctx);rounds=6 if think else 4   # deep thinking may chain more steps
-        if timer:offered=[t for t in offered if t['function']['name']!='set_timer']   # never a second, duplicate timer
-        for round_ in range(rounds):
+        done_in_code={n for n,v in (('set_timer',timer),('set_reminder',reminder)) if v}
+        offered=[t for t in offered if t['function']['name'] not in done_in_code]   # never a second, duplicate timer/reminder
+        any_calls=bool(done_in_code) or place is not None;nudged=False
+        for round_ in range(rounds+1):   # +1: room for one "you didn't actually do it" retry
+            if round_==rounds and not nudged:break
             self.jobs.check()
             payload={'model':self.model,'messages':convo,'stream':True,'think':think,'keep_alive':'15m',
                      'options':{'num_ctx':ctx,'num_predict':predict,'temperature':.45}}
-            if use_tools and round_<rounds-1:payload['tools']=offered
+            if use_tools and (round_<rounds-1 or nudged):payload['tools']=offered
             content='';calls=[]
             try:
                 for chunk in self.ollama_stream(payload):
@@ -590,7 +645,11 @@ class Runtime:
                 self.report(f'{self.model} failed ({str(e)[:80]}); using {FAST_MODEL}.')
                 self.model=FAST_MODEL;fell_back=True;continue
             raw+=content
-            if not calls:break
+            if not calls:
+                if use_tools and not any_calls and not nudged and wants_action(clean[-1]['content']):
+                    nudged=True;convo+=[{'role':'assistant','content':content},{'role':'user','content':_NUDGE}];continue
+                break
+            any_calls=True
             convo.append({'role':'assistant','content':content,'tool_calls':calls})
             for call in calls[:4]:
                 fn=call.get('function') or {};name=fn.get('name','');args=fn.get('arguments') or {}

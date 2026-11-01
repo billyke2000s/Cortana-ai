@@ -19,7 +19,7 @@ All notable changes. Dates are UK time.
 
 ### Fixed
 - Long documents are split at line ends where possible, so table rows stay whole.
-- Timers can't be faked: a plain "set a 10 minute timer…" is set by the app first, then she confirms it (the 9B model was caught saying it had set one without doing it).
+- Timers and reminders can't be faked: a plain "set a 10 minute timer…" or "remind me to … at 6pm" is set by the app first, then she confirms it; for any other action she claims without doing (remember, add to list…), the app sends the model back once to actually do it. The 9B model was caught twice in release checks saying it had done things it hadn't.
 - CSV files made on Windows no longer get doubled line breaks (blank rows in Excel); caught by the Windows CI run.
 - Browser check waits on requests instead of a 0.7-second "Saved." message (it was flaky).
 
