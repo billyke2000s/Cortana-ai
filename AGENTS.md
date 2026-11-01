@@ -53,7 +53,7 @@ storage, tools); a phone can open the same page through a paired HTTPS tunnel. S
 | `app/speech.ps1` | Windows SAPI voice with viseme (mouth) events. | n/a |
 | `app/index.html` | Markup + base CSS for the main screen and dialogs. Loads `avatar.js`, `app.js`, `pages.js` as modules **in that order**. | Inline scripts with logic |
 | `app/app.js` | Core client: state machine, `send()` (stream reader), `SpeechQueue`, `envelopeCues`, mic `listen()`, wake word, alerts, display panel (`showPanel`/`showScreen`, Markdown renderer), navigation, status polling. Exposes `window.Cortana`, `window.CortanaDisplay`. | Page-specific UI |
-| `app/pages.js` | Mission Briefing, Objectives, Memory, Systems pages, rendered into the display panel. Exposes `window.CortanaPages`. | Core state logic |
+| `app/pages.js` | Chat, Mission Briefing, Objectives, Memory, Systems and first-launch model chooser pages, rendered into the display panel. Exposes `window.CortanaPages`. | Core state logic |
 | `app/avatar.js` | three.js scene, model load + texture validation/retry, rig animation, visemes → mouth. Exposes `window.CortanaAvatar`. | Network calls other than the model/rig |
 | `app/responsive.css` | Phone-first layout overrides, display panel, pages styling. | n/a |
 | `app/mic-worklet.js` | AudioWorklet that posts 2048-sample Float32 chunks. | n/a |
@@ -125,7 +125,7 @@ Don't rename them; other modules and tests use them.
 6. **Never put untrusted text into `innerHTML`.** Model output, tool results, settings and memory MUST go through `holoEsc`/`CortanaDisplay.esc` or `textContent`. The Markdown renderer escapes first, then adds tags. Don't add raw-HTML passthrough.
 7. **Tools never execute arbitrary input.** No `subprocess`/`os.system`/`eval` with model-provided strings. PC controls are a fixed map (`APPS`, `VK`); websites must be `http(s)` and opened with `webbrowser.open`. Adding an app means adding a fixed entry.
 8. **Secrets** (`calendar_url`, `brave_key`, `phone_token`, pairing token) MUST NEVER be logged, returned by the API, put in URLs other than their own request, committed, or shown in screenshots.
-9. **Network access** only to: Ollama (local), the download sources in `runtime.py`/`voice.py` (GitHub releases, Hugging Face `rhasspy/piper-voices`, whisper.cpp model), Open-Meteo, DuckDuckGo API, Wikipedia, Brave Search (only with a key), the user's calendar URL, and the tunnel. Adding a host = update `SECURITY.md` and ask the user.
+9. **Network access** only to: Ollama (local), the download sources in `runtime.py`/`voice.py` (GitHub releases, Hugging Face `rhasspy/piper-voices`, whisper.cpp model), Open-Meteo, Bing (RSS results feed), DuckDuckGo (instant answers + HTML results page), Wikipedia, the public pages of search results (read by `tools.fetch`, which refuses private/loopback addresses and redirects to them), Brave Search (only with a key), the user's calendar URL, and the tunnel. Adding a host = update `SECURITY.md` and ask the user.
 10. **Downloads** MUST be verified (SHA-256 from the release digest, or the MD5 from `voices.json` for voices) when a checksum exists, and archives MUST be extracted with `extract()` (path-traversal check).
 11. **The wake word only processes audio locally** and ignores audio while Cortana is speaking. Never send audio anywhere except the local `/api/transcribe`.
 

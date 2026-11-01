@@ -17,6 +17,9 @@ python -m unittest discover -s tests -v
 | `ToolTests` | every tool's success and failure paths, `HH:MM` reminders, past times refused, unknown tools never raise, PC control switch |
 | `CalendarTests` | iCal parsing: escaped text, all-day, weekly RRULE, EXDATE, cancelled events, ordering |
 | `HardwareTests` | model recommendation per card size, too-big models unselectable, low RAM blocks spilling, unknown tags hidden |
+| `WakeWordTests` | Whisper's spellings of the name trigger; ordinary speech and look-alikes ("Montana", "contain") don't |
+| `WebSearchTests` | Bing RSS + DuckDuckGo HTML parsing (ads skipped, links decoded), fallback order, page text extraction, size budget, private addresses refused |
+| `WeatherDisplayTests` | every weather answer yields the forecast card; spoken part has no table symbols |
 | `ApiTests` | status, streaming with and without tools, screen events, memory reaching the prompt, objectives API, settings validation, **secrets never returned**, **cross-origin POST blocked**, **private files not served**, **phone pairing (SameSite=Lax regression)**, model download/use guards and progress |
 
 ## 2. Live check (Windows, real services)
@@ -27,6 +30,11 @@ python tests/live_check.py          # CORTANA_URL=http://127.0.0.1:8777 by defau
 ```
 Checks the real Ollama, Whisper, voice, tunnel pairing and the new endpoints. Writes `live-check-report.json`.
 Needs the phone tunnel to be up (don't use `--no-tunnel`). The transcription round-trip is skipped when Piper is the voice (22 kHz ≠ 16 kHz).
+
+## 2b. Live check on GitHub (Windows, internet, no GPU)
+
+Actions → **Live check (search + wake word)** → Run workflow. Runs `tests/ci_live_check.py`: real keyless searches, and
+"Hey Cortana" phrases spoken by Windows text-to-speech into the real whisper.cpp. Fails if an engine returns nothing or a phrase is misjudged.
 
 ## 3. Real-model prompt check (whenever the prompt or tool schemas change)
 

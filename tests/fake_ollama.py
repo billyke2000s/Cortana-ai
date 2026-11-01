@@ -51,11 +51,15 @@ class Handler(BaseHTTPRequestHandler):
         words = lambda text: [{'message': {'content': w + ' '}} for w in text.split()] + [{'done': True}]
         if last['role'] == 'tool':
             reply = {'set_timer': 'Done, Chief. Your pasta timer is running.',
-                     'remember': "Got it. I'll remember that."}.get(last.get('tool_name'), 'Done.')
+                     'remember': "Got it. I'll remember that.",
+                     'get_weather': "It's 12 degrees and cloudy in London, with rain likely tomorrow."}.get(last.get('tool_name'), 'Done.')
             return self._stream(words(reply))
         if 'timer' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'set_timer', 'arguments': {'minutes': 10, 'label': 'pasta'}}}]}}, {'done': True}])
+        if 'weather' in user and body.get('tools'):
+            return self._stream([{'message': {'content': '', 'tool_calls': [
+                {'function': {'name': 'get_weather', 'arguments': {'place': 'London'}}}]}}, {'done': True}])
         if 'remember' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'remember', 'arguments': {'fact': "The user's dog is called Max"}}}]}}, {'done': True}])

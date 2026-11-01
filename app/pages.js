@@ -1,4 +1,4 @@
-/* Cortana pages: Mission Briefing, Objectives, Memory and Systems, shown in the holographic display panel.
+/* Cortana pages: Chat, Mission Briefing, Objectives, Memory and Systems, shown in the holographic display panel.
    All text from the server is escaped before it is put on the page. */
 const D=window.CortanaDisplay,C=window.Cortana,esc=s=>D.esc(s??'');
 const get=async path=>{const r=await fetch(path);const v=await r.json();if(!r.ok)throw Error(v.error||'Service unavailable.');return v;};
@@ -91,6 +91,36 @@ function briefingSpeech(b){
  return parts.join(' ');
 }
 
+/* ---------------- Chat ---------------- */
+/* Same holo panel as the other pages. Displays (code, tables, weather) appear as cards inside the conversation. */
+function chatMsg(m,i){
+ if(m.role==='user')return `<div class="chat-msg chat-you"><small>YOU</small><p>${esc(m.text)}</p></div>`;
+ const card=m.screen?(()=>{const r=D.render(m.screen);return `<div class="chat-card"><div class="chat-card-head">◆ ${esc(r.title)}<button type="button" class="pg-btn" data-act="chat-display" data-i="${i}">Expand</button></div>${r.html}</div>`;})():'';
+ const body=m.text?`<p>${esc(m.text)}</p>`:m.pending?`<p class="chat-typing">${esc(m.working?m.working+'…':'Thinking')}<i></i><i></i><i></i></p>`:'';
+ return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
+}
+function renderChatLog(){
+ const log=document.getElementById('chatLog');if(!log)return;
+ const box=D.body(),atEnd=box.scrollHeight-box.scrollTop-box.clientHeight<80;
+ const msgs=C.chat||[];
+ log.innerHTML=msgs.length?msgs.map(chatMsg).join(''):`<p class="pg-muted chat-empty">Ask anything: “What's the weather tomorrow?”, “Set a 10 minute timer”, “How do I build a table in Python?”</p>`;
+ if(atEnd)box.scrollTop=box.scrollHeight;
+}
+function chat(){
+ page('chat','Chat',`<div id="chatLog" class="chat-log" aria-live="polite"></div>
+  <form id="chatForm" class="chat-compose"><label class="sr-only" for="chatInput">Message</label>
+   <textarea id="chatInput" rows="1" maxlength="3000" placeholder="Message Cortana…" enterkeyhint="send"></textarea>
+   <button type="submit" class="pg-primary" aria-label="Send">Send</button></form>`,'CORTANA // COMMS');
+ renderChatLog();const b=D.body();b.scrollTop=b.scrollHeight;
+ const input=document.getElementById('chatInput'),form=document.getElementById('chatForm');
+ const grow=()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,110)+'px';};
+ input.addEventListener('input',grow);
+ input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
+ form.addEventListener('submit',e=>{e.preventDefault();const text=input.value.trim();if(!text)return;input.value='';grow();C.send(text);});
+ if(matchMedia('(pointer:fine)').matches)input.focus();
+}
+document.addEventListener('cortana:chat',()=>{if(D.page==='chat')renderChatLog();});
+
 /* ---------------- Systems (settings) ---------------- */
 /* AI model picker: rated for this PC's graphics card; models that are too big can't be chosen. */
 const RATING={fast:['FAST','pg-r-fast'],good:['GOOD','pg-r-good'],slow:['SLOW','pg-r-slow'],too_big:['TOO BIG','pg-r-big']};
@@ -179,6 +209,7 @@ D.body().addEventListener('click',async e=>{
   else if(act==='save')saveSystems();
   else if(act==='get-model'||act==='use-model'){btn.disabled=true;await post('/api/models',{action:act==='get-model'?'download':'use',tag:btn.dataset.tag});renderModels();}
   else if(act==='disconnect'){await post('/api/settings',{calendar_url:''});systems();}
+  else if(act==='chat-display'){const m=(C.chat||[])[Number(btn.dataset.i)];if(m?.screen)C.showScreen(m.screen);}
   else if(act==='display'){D.hide();document.getElementById('settingsDialog').showModal();}
  }catch(err){alertIn(err.message);}
 });
@@ -186,5 +217,5 @@ document.addEventListener('cortana:refresh',e=>{
  if(e.detail.what==='objectives'&&D.page==='tasks')objectives();
  if(e.detail.what==='memory'&&D.page==='memory')memory();
 });
-const PAGES={tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
+const PAGES={chat,tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
 window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;}};

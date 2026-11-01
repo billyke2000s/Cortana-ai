@@ -107,6 +107,21 @@ def weather(place, home):
                     'feels_like_c': round(c['apparent_temperature']), 'wind_kmh': round(c['wind_speed_10m'])},
             'days': days, 'source': 'Open-Meteo'}
 
+def weather_screen(w):
+    """The forecast card shown on the display for every weather answer (built here, so it never depends on the model)."""
+    if not w or w.get('error'):
+        return ''
+    today = date.today()
+    def day_name(d):
+        d = date.fromisoformat(d)
+        return 'Today' if d == today else 'Tomorrow' if d == today + timedelta(days=1) else d.strftime('%A')
+    n = w['now']
+    rows = '\n'.join(f"| {day_name(d['date'])} | {d['summary'].capitalize()} | {d['high_c']}° / {d['low_c']}° | {d['rain_chance_pct']}% |"
+                     for d in w['days'])
+    return (f"# Weather · {w['place'].split(',')[0]}\n"
+            f"**Now: {n['temp_c']}°C, {n['summary']}** (feels like {n['feels_like_c']}°C) · wind {n['wind_kmh']} km/h\n\n"
+            f"| Day | Sky | High / Low | Rain |\n|---|---|---|---|\n{rows}\n\n{w['place']} · {w.get('source', 'Open-Meteo')}")
+
 # ------------------------------------------------------------------ web search
 # Keyless web search (see DECISIONS D-020): Bing's RSS results feed first, DuckDuckGo's HTML results page as a fallback,
 # then the top result page is read so answers can come from the page itself, not only a one-line snippet.

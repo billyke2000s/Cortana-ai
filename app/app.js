@@ -59,8 +59,13 @@ async function speak(text){
  if(id!==requestId)return;
  setState('thinking','PREPARING VOICE…');queue=new SpeechQueue(id);queue.add(text);queue.close();
 }
+/* Conversation shown on the Chat page: [{role:'user'|'assistant', text, screen?, error?}] (this tab only, newest last). */
+const chatLog=[];
+function chatChanged(){document.dispatchEvent(new CustomEvent('cortana:chat'));}
 async function send(text){
- stop();hideScreen();holoLast='';holoReopen.hidden=true;out.classList.remove('err');out.textContent='You: '+text;
+ const inChat=holoPage==='chat';
+ stop();if(!inChat)hideScreen();holoLast='';holoReopen.hidden=true;
+ chatLog.push({role:'user',text});const turn={role:'assistant',text:'',pending:true};chatLog.push(turn);if(chatLog.length>60)chatLog.splice(0,chatLog.length-60);chatChanged();out.classList.remove('err');out.textContent='You: '+text;
  const id=requestId;
  try{await unlockAudio();}catch{}
  if(id!==requestId)return;
@@ -68,9 +73,9 @@ async function send(text){
  controller=new AbortController();setState('thinking','CORTANA IS THINKING…');
  const messages=[...history,{role:'user',content:text}].slice(-18),q=queue=new SpeechQueue(id);let spoken='';
  const handle=ev=>{
-  if(ev.type==='sentence'){spoken+=(spoken?' ':'')+ev.text;out.textContent=spoken;out.scrollTop=out.scrollHeight;q.add(ev.text);}
-  else if(ev.type==='tool'){if(state==='thinking')label.textContent=ev.label+'…';}
-  else if(ev.type==='screen')showScreen(ev.markdown);
+  if(ev.type==='sentence'){spoken+=(spoken?' ':'')+ev.text;out.textContent=spoken;out.scrollTop=out.scrollHeight;q.add(ev.text);turn.text=spoken;chatChanged();}
+  else if(ev.type==='tool'){if(state==='thinking')label.textContent=ev.label+'…';turn.working=ev.label;chatChanged();}
+  else if(ev.type==='screen'){turn.screen=ev.markdown;holoLast=ev.markdown;if(holoPage==='chat')chatChanged();else showScreen(ev.markdown);}   // in Chat, the card goes inline
   else if(ev.type==='refresh')document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:ev.what}}));
   else if(ev.type==='done')history=[...messages,{role:'assistant',content:ev.raw||ev.reply}].slice(-18);
   else if(ev.type==='error')throw Error(ev.error);
@@ -85,9 +90,11 @@ async function send(text){
    while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);if(line)handle(JSON.parse(line));}
   }
   if(buf.trim())handle(JSON.parse(buf));
-  q.close();
+  q.close();turn.pending=false;turn.working=null;chatChanged();
  }catch(e){
-  if(e.name==='AbortError'||id!==requestId)return;
+  turn.pending=false;turn.working=null;
+  if(e.name==='AbortError'||id!==requestId){if(!turn.text)turn.text='(stopped)';chatChanged();return;}
+  turn.error=e.message;chatChanged();
   q.close();if(!spoken)error(e.message);else out.textContent=spoken+' (Interrupted: '+e.message+')';
  }
 }
@@ -140,17 +147,16 @@ $('rate').addEventListener('change',()=>savePreference('rate',$('rate').value));
 $('hologramView').addEventListener('change',()=>{savePreference('view',$('hologramView').value);applySettings();});
 applySettings();document.addEventListener('cortana:avatar-ready',applySettings);
 mic.addEventListener('click',listen);
-document.querySelector('[aria-label="Type a message"]').addEventListener('click',()=>openDialog('messageDialog'));
-$('messageForm').addEventListener('submit',e=>{e.preventDefault();const text=$('message').value.trim();if(text){$('messageDialog').close();send(text);}});
+document.querySelector('[aria-label="Type a message"]').addEventListener('click',()=>navigate('chat'));
 
 document.querySelector('.menu-btn').addEventListener('click',()=>navigate('settings'));
 const sideButtons=document.querySelectorAll('.side-btn');if(sideButtons[1]){sideButtons[1].setAttribute('aria-label','Stop speech');sideButtons[1].addEventListener('click',stop);}
 function info(title,text){$('infoTitle').textContent=title;$('infoText').textContent=text;openDialog('infoDialog');}
 function navigate(target){
+ if(target==='voice')target='chat';
  if(window.CortanaPages?.open(target))return;
  if(target==='settings'){openDialog('settingsDialog');return;}
  if(['home','cortana'].includes(target)){hideScreen();return;}
- if(['chat','voice'].includes(target)){openDialog('messageDialog');return;}
  const entries={briefing:['Mission briefing','Calendar and agenda services have not been connected yet.'],tasks:['Objectives','Task and reminder services have not been connected yet.'],memory:['Conversation memory',history.length?history.map(m=>(m.role==='user'?'You: ':'Cortana: ')+m.content).join('\n\n'):'No AI conversation in this session yet. Conversations are kept in memory only.']};
  const entry=entries[target]||['Not connected','This section needs its corresponding assistant service.'];info(...entry);
 }
@@ -184,7 +190,7 @@ refreshStatus();setInterval(refreshStatus,4000);
 addEventListener('keydown',e=>{if(e.key==='Escape')stop();});
 addEventListener('pagehide',stop);
 // An existing assistant can provide replies using this API without replacing the UI.
-window.Cortana={speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake};
+window.Cortana={speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md)};
 
 /* ---- Timer and reminder alerts (checked with every status poll) ---- */
 const announced=new Set();

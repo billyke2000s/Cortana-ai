@@ -53,6 +53,8 @@ Same request. Response `{"reply": str, "screen": str, "raw": str}`.
 
 ### `POST /api/transcribe`
 `{"audio": "<base64 WAV, mono, 16-bit, 16 kHz, ≤30 s>"}` → `{"text": str}`.
+With `"wake": true` (wake-word bursts): Whisper gets a hint for the name and the server decides →
+`{"text": str, "wake": bool, "rest": "words after the name"}`; no speech gives `wake: false` instead of an error.
 
 ### `POST /api/speech`
 `{"text": str (1–3000 chars), "rate": -1|0|1}` → `{"audio": "<base64 WAV>", "voice": str, "visemes": [{"time": s, "duration": s, "id": 0-21}]}`.

@@ -2,6 +2,18 @@
 
 All notable changes. Dates are UK time.
 
+## [1.3.0] - 2026-11-01
+
+### Added
+- **Web search without a key**: real web results from Bing's RSS feed (DuckDuckGo results page as fallback), and she reads the
+  top result page for the actual answer. Private/home-network addresses are never fetched.
+- **Chat page**: the Chat tab is now the same holo panel as Tasks/Memory/Systems, with message bubbles, a typing indicator and
+  code/table/weather cards inside the conversation. The reply caption under her matches.
+- **Weather card every time**: built from the forecast data instead of depending on the model.
+- **"Hey Cortana" more reliable**: fuzzy name matching on the PC (Whisper writes it as Katana, Courtana, Cortona…), a name hint
+  for Whisper, thresholds that adapt to the mic and room, and bursts no longer dropped while one is being checked.
+- Manual **Live check** workflow (real searches and wake phrases through real Whisper on Windows). 9 new tests (46 total).
+
 ## [1.2.0] - 2026-11-01
 
 ### Added

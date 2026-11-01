@@ -103,3 +103,33 @@ button,select{touch-action:manipulation}
 .pg-r-slow{background:rgba(255,190,90,.2);color:#ffd08a}.pg-r-big{background:rgba(255,120,120,.18);color:#ffaaaa}.pg-r-rec{background:rgba(255,215,100,.2);color:#ffe08a}
 .pg-bar{display:block;height:6px;margin:6px 0 2px;border-radius:3px;background:rgba(92,200,255,.15);overflow:hidden}
 .pg-bar i{display:block;height:100%;background:linear-gradient(90deg,#3fa9ff,#9fe2ff);box-shadow:0 0 8px #5cc8ff;transition:width .4s}
+
+/* ---- Chat page (same holo panel as Tasks/Memory/Systems) ---- */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.chat-log{display:flex;flex-direction:column;gap:8px;padding-bottom:6px}
+.chat-msg{max-width:88%;padding:7px 11px 8px;border:1px solid rgba(92,200,255,.22);border-radius:10px;background:rgba(8,28,64,.55)}
+.chat-msg small{display:block;font-family:Rajdhani,sans-serif;font-size:10px;letter-spacing:.2em;color:var(--cyan-hi);opacity:.85;margin-bottom:2px}
+.chat-msg p{margin:0!important;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-you{align-self:flex-end;border-color:rgba(140,220,255,.45);background:linear-gradient(180deg,rgba(29,95,168,.55),rgba(18,63,115,.55));border-bottom-right-radius:3px}
+.chat-you small{text-align:right}
+.chat-her{align-self:flex-start;border-bottom-left-radius:3px;box-shadow:inset 3px 0 0 rgba(92,200,255,.55)}
+.chat-err{border-color:rgba(255,140,140,.45)}
+.chat-card{margin-top:8px;padding:8px 10px 2px;border:1px solid rgba(92,200,255,.3);border-radius:8px;background:rgba(4,18,40,.7);font-size:13px}
+.chat-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;font-family:Rajdhani,sans-serif;font-weight:700;letter-spacing:.06em;color:var(--cyan-hi)}
+.chat-card-head .pg-btn{min-height:28px;padding:2px 9px;font-size:12px}
+.chat-card table{font-size:12.5px}
+.chat-typing{color:var(--text-dim)}
+.chat-typing i{display:inline-block;width:5px;height:5px;margin-left:4px;border-radius:50%;background:var(--cyan);animation:chatDot 1.2s infinite ease-in-out}
+.chat-typing i:nth-child(2){animation-delay:.15s}.chat-typing i:nth-child(3){animation-delay:.3s}
+@keyframes chatDot{0%,80%,100%{opacity:.2;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){.chat-typing i{animation:none;opacity:.7}}
+.chat-empty{text-align:center;margin:10px 0!important}
+.chat-compose{position:sticky;bottom:-18px;display:flex;align-items:flex-end;gap:8px;margin:6px -16px -18px;padding:10px 16px 14px;background:linear-gradient(180deg,rgba(6,22,48,.92),rgba(5,18,40,.98));border-top:1px solid rgba(92,200,255,.25)}
+.chat-compose textarea{flex:1;min-height:42px;max-height:110px;resize:none;padding:10px 12px;font:inherit;font-size:16px;line-height:1.35;color:var(--text);background:#0a2345;border:1px solid var(--line);border-radius:8px}
+.chat-compose textarea:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 2px rgba(92,200,255,.25)}
+.chat-compose .pg-primary{min-height:42px}
+/* The reply caption under her: the same holo card look as the panels */
+.transcript:not(:empty){padding:6px 12px;margin:3px 14px 4px;border:1px solid rgba(92,200,255,.22);border-radius:8px;background:linear-gradient(180deg,rgba(10,34,72,.55),rgba(6,22,48,.55));box-shadow:inset 3px 0 0 rgba(92,200,255,.5);color:#d6eaff;text-align:left}
+.chat-her:has(.chat-card){max-width:100%;align-self:stretch}
+.chat-card .holo-table th,.chat-card .holo-table td{padding:6px 7px;white-space:normal}
+.chat-card{padding:8px 8px 2px}

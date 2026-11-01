@@ -60,7 +60,7 @@ are kept, and the token is random per launch (Cloudflare mode).
 The secret iCal URL is read-only and works with any calendar app. **Cost:** the URL is a bearer secret; it is stored only
 locally and never returned by the API.
 
-### D-014: Web search without an API key by default
+### D-014: Web search without an API key by default (superseded by D-020)
 DuckDuckGo instant answers + Wikipedia need no account; an optional Brave Search key adds real web results.
 Scraping search engine HTML was rejected (fragile, against terms).
 
@@ -81,6 +81,22 @@ fan-made Microsoft character, so the repository stays private and the model isn'
 measurements on an 8 GB RTX 3070 (9B ≈ 94% on the GPU → ~21 tok/s, acceptable) with 1.5 GB reserved for Windows and the
 browser. Too-big models are refused server-side, not just hidden. On first run, an already-installed usable model is
 preferred over forcing a large download. **Cost:** estimates, not benchmarks; VRAM used by games at that moment isn't considered.
+
+### D-020: Keyless web search from Bing RSS / DuckDuckGo HTML, plus reading the top page (supersedes D-014)
+**Why:** the owner wants real web answers (news, scores, prices) without an API key; D-014's instant answers + Wikipedia
+couldn't do that. Bing's RSS feed is structured XML (robust to parse); DuckDuckGo's HTML results page is the fallback.
+Snippets often lack the answer, so the first readable result page is fetched and trimmed to the most relevant text.
+Verified from a Windows machine with real requests (GitHub live-check workflow). **Cost:** neither endpoint is an official,
+documented API; they can change, rate-limit or block, which would degrade search to Wikipedia (the live check shows it).
+Page text is untrusted (prompt injection) and marked so; only public addresses are fetched.
+
+### D-021: Weather card built in code, not by the model
+**Why:** whether the model wrote a `[[SCREEN]]` for weather was random, so the forecast sometimes appeared and sometimes didn't.
+`get_weather` now produces the card itself from the data every time; the prompt tells the model to just speak a summary.
+
+### D-022: Chat in the holo panel, wake-word decision on the PC
+Chat moved from a browser `<dialog>` into the shared panel so every page looks the same; displays become cards in the chat.
+The wake-word match moved from a page regex to `runtime.wake_match` so it can be unit-tested and fuzzy (Whisper's spellings vary).
 
 ### D-018: No voice cloning of third parties
 The project supports training a Piper voice only from the owner's (or a consenting person's) recordings.

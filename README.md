@@ -176,7 +176,7 @@ Google Calendar → **Settings** → your calendar → **Integrate calendar** �
 | | |
 |---|---|
 | 🏠 **Local by default** | AI, speech recognition, voice, memory and settings all run and stay on your PC (`%LOCALAPPDATA%\CortanaAI`). |
-| 🌐 **What goes online** | Only the abilities you use: weather (Open-Meteo), search (DuckDuckGo, Wikipedia, optional Brave), your calendar address, first-run downloads, and the phone link. |
+| 🌐 **What goes online** | Only the abilities you use: weather (Open-Meteo), search (Bing / DuckDuckGo results and the top result page, Wikipedia; no key needed, Brave optional), your calendar address, first-run downloads, and the phone link. |
 | 📱 **Phone access** | HTTPS only, paired with a per-launch secret in the QR code (`HttpOnly; Secure; SameSite=Lax` cookie). Unpaired devices see a pairing page. |
 | 🛡️ **Hardening** | Origin check on every POST, a fixed whitelist of served files, all AI output HTML-escaped, PC controls limited to a fixed list, and secrets never returned by the API. |
 

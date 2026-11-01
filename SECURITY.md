@@ -26,6 +26,8 @@ if enabled) rather than in a public issue.
 | Model or tool output injects HTML/JS into the page | All text is escaped before Markdown formatting; `textContent` elsewhere; no raw HTML passthrough. |
 | Malicious downloads | GitHub release SHA-256 digests and Piper voice MD5s are verified when available; archives are checked for path traversal before extraction. |
 | Secrets leak via the API or logs | Settings API returns booleans for secrets; secrets aren't logged. |
+| Search results point at the PC or home network (SSRF) | `tools.fetch` only reads public http(s) addresses; every redirect is re-checked. |
+| A web page tries to instruct the model (prompt injection) | Page text is marked untrusted in the tool result; tools that change things are limited to the allow-lists. |
 | Wake word sends audio elsewhere | Audio goes only to the local `/api/transcribe`; nothing is processed while she speaks. |
 | Large or malformed requests | Size limits (64 KB, 1.5 MB for audio), JSON validation, message count and length limits. |
 

@@ -6,7 +6,7 @@ Covers the sentence streamer, local storage, tools, calendar parsing, the HTTP A
 objectives, memory, settings), and the security rules (phone pairing cookie, origin check, private files).
 """
 import base64, http.client, io, json, os, sys, tempfile, threading, time, types, unittest, urllib.request, wave
-from datetime import date
+from datetime import date, timedelta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'app'))
@@ -319,6 +319,34 @@ class WebSearchTests(unittest.TestCase):
             self.assertFalse(tools._public_url(url), url)
             with self.assertRaises(ValueError):
                 tools.fetch(url)
+
+
+class WeatherDisplayTests(unittest.TestCase):
+    def test_weather_always_shows_the_forecast_card(self):
+        today = date.today()
+        fake = {'place': 'London, England, United Kingdom', 'source': 'Open-Meteo',
+                'now': {'summary': 'overcast', 'temp_c': 12, 'feels_like_c': 10, 'wind_kmh': 18},
+                'days': [{'date': (today + timedelta(days=i)).isoformat(), 'summary': s, 'high_c': 13 - i, 'low_c': 8 - i, 'rain_chance_pct': r}
+                         for i, (s, r) in enumerate([('overcast', 20), ('rain', 85), ('partly cloudy', 10)])]}
+        old = tools.weather
+        tools.weather = lambda place, home: fake
+        try:
+            rt = runtime.Runtime(lambda text: None)
+            rt.tag_exists = {m['tag']: True for m in hardware.CATALOG}
+            rt.ensure_ai()
+            events = list(rt.chat_stream([{'role': 'user', 'content': "What's the weather in London?"}]))
+        finally:
+            tools.weather = old
+        screens = [e['markdown'] for e in events if e['type'] == 'screen']
+        self.assertEqual(len(screens), 1)
+        card = screens[0]
+        self.assertTrue(card.startswith('# Weather · London'))
+        for part in ('12°C', 'overcast', '| Today |', '| Tomorrow |', '13° / 8°', '85%'):
+            self.assertIn(part, card)
+        spoken = ' '.join(e['text'] for e in events if e['type'] == 'sentence')
+        self.assertIn('12 degrees', spoken)
+        self.assertNotIn('|', spoken)
+        self.assertEqual(tools.weather_screen({'error': 'x'}), '')
 
 
 class FirstLaunchTests(unittest.TestCase):

@@ -21,6 +21,7 @@ SYSTEM_PROMPT=("You are Cortana, a warm, capable personal AI companion with dry 
  "then write a new line containing exactly [[SCREEN]] followed by the full on-screen content in Markdown, starting with a '# ' title line. "
  "Use fenced code blocks with the language name for code. Never read code aloud, not even a single function name with brackets. "
  "Example of the format: Here's the simplest way, using the tabulate library. I've put it on screen.\n[[SCREEN]]\n# Python table\n```python\nfrom tabulate import tabulate\nprint(tabulate(rows, headers=['Name', 'Age']))\n```\n"
+ "Weather results are put on screen automatically: answer weather questions in one or two spoken sentences and never write [[SCREEN]] for them. "
  "Only write [[SCREEN]] when there is something to show. "
  "The spoken part must contain no Markdown, code or symbols. Never include role labels, stage directions or hidden reasoning.")
 
@@ -410,7 +411,7 @@ class Runtime:
         clean=self.clean_messages(messages)
         convo=[{'role':'system','content':system_prompt(self.store)}]+clean
         use_tools=self.store.get('tools_enabled',True)
-        stream=SpokenStream();raw='';fell_back=False
+        stream=SpokenStream();raw='';fell_back=False;tool_screen=''
         for round_ in range(4):
             payload={'model':self.model,'messages':convo,'stream':True,'think':False,'keep_alive':'15m',
                      'options':{'num_ctx':CONTEXT,'num_predict':1200,'temperature':.45}}
@@ -440,9 +441,10 @@ class Runtime:
                 yield {'type':'tool','name':name,'label':tools.TOOL_LABELS.get(name,'WORKING')}
                 result,change=tools.run(name,args,self.store)
                 if change:yield {'type':'refresh','what':change}
+                if name=='get_weather' and isinstance(result,dict):tool_screen=tools.weather_screen(result) or tool_screen   # always a forecast card
                 convo.append({'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:3500 if name=='web_search' else 2500],'tool_name':name})
         for sentence in stream.finish():yield {'type':'sentence','text':sentence}
-        screen=(stream.screen or '').strip()
+        screen=tool_screen or (stream.screen or '').strip()   # the tool's card wins, so weather looks the same every time
         if screen:yield {'type':'screen','markdown':screen[:12000]}
         if not stream.spoken:
             if not screen:raise RuntimeError('The model returned no spoken answer. Try again.')

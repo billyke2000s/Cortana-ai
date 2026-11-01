@@ -39,7 +39,7 @@ Escape or the stop button returns to `idle` from any state and cancels requests 
 
 ## 3. Abilities (tools)
 
-Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are truncated to 2,500 characters.
+Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are truncated to 2,500 characters (3,500 for `web_search`, which carries page text).
 
 | Tool | Behaviour |
 |---|---|
@@ -50,8 +50,8 @@ Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are
 | `complete_objective(match)` | Completes up to 3 open items whose text contains all words (>2 letters) of `match`. |
 | `remember(fact)` | Saves a fact (≤300 chars, case-insensitive de-duplication, ≤200 kept). |
 | `forget(match)` | Deletes facts containing all words of `match`. |
-| `get_weather(place?)` | Open-Meteo geocoding + forecast (now + 3 days). Empty place → home town; neither → asks the user. |
-| `web_search(query)` | Brave (if key) + DuckDuckGo instant answer + Wikipedia (top 2) → ≤6 results with URLs. |
+| `get_weather(place?)` | Open-Meteo geocoding + forecast (now + 3 days). Empty place → home town; neither → asks the user. **Always** shows a forecast card (`tools.weather_screen`: now, then Today/Tomorrow/weekday with sky, high/low, rain chance), built from the data, not by the model; it replaces any model-written screen for that reply. |
+| `web_search(query)` | **No key needed.** Brave (if a key is saved), else Bing's RSS results feed, else DuckDuckGo's HTML results page (ads skipped) → ≤5 results (title, snippet, source site). Then the first of the top 3 result pages that yields ≥200 characters of text is read: scripts/nav/header/footer dropped, the blocks most related to the query kept (≤1,400 chars), marked untrusted. Wikipedia fills in if fewer than 2 results. Only public http(s) addresses are fetched (redirects checked too). |
 | `pc_control(action, target?, steps?)` | `play_pause`, `next_track`, `previous_track`, `volume_up/down` (1–25 × 2%), `mute`, `open_app` (allow-list: notepad, calculator, file explorer, settings, browser, spotify, task manager, paint, snipping tool), `open_website` (http/https only). Off when **PC controls** is unticked. Windows only. |
 | `get_calendar(day?)` | `today`, `tomorrow` or `YYYY-MM-DD`. Reads the private iCal URL; expands repeats (RRULE), honours EXDATE, skips cancelled, converts time zones; all-day events first. |
 
@@ -72,9 +72,14 @@ All tools are disabled when **Abilities** is unticked in Systems.
   (language label, keyword/string/comment/number/function colours, **Copy** button), tables, bulleted and numbered lists.
 - All text is HTML-escaped before formatting; raw HTML from the model is shown as text.
 - Close: ✕, Escape, or the Home tab. **◆ SHOW DISPLAY** reopens the last answer's screen until the next question.
-- Pages (Briefing, Objectives, Memory, Systems) use the same panel.
+- Pages (Chat, Briefing, Objectives, Memory, Systems) use the same panel. While Chat is open, displays appear as cards inside the conversation instead of replacing it (**Expand** opens one full-size).
 
 ## 6. Pages
+
+**Chat** (Chat tab, or the keyboard button): the conversation as bubbles (You right, Cortana left) in the same holo panel;
+typing indicator with the current ability (e.g. "SEARCHING…"); code, tables and weather as cards in her bubble with **Expand**;
+errors shown in the bubble. Composer pinned at the bottom: Enter sends, Shift+Enter new line, grows to ~5 lines.
+The conversation is kept for this browser tab (last 60 entries). The caption under her face shows the latest spoken reply in a matching holo card.
 
 **Mission Briefing:** date; **Read my briefing** (spoken summary of weather, today's events and open objectives, composed on
 the page, no AI call); weather card + 3 days (needs home town); today's events (needs calendar); up to 6 open objectives.
@@ -87,7 +92,7 @@ taps within 4 s. Facts are not cleared by clearing history.
 
 **Systems:** AI model picker (detected GPU/RAM/disk; every Qwen 3.5 model with its size, rating badge, ★ Recommended, Download with live progress bar, or Use; too-big models greyed out and refused by the server); Abilities on/off; PC controls on/off; voice engine
 and voice; wake word (per device, stored in the browser); home town; calendar address (write-only, Disconnect button);
-Brave Search key (write-only); phone connection (Cloudflare/Tailscale, next launch); link to hologram view, movement, speech
+optional Brave Search key (write-only; search works without it); phone connection (Cloudflare/Tailscale, next launch); link to hologram view, movement, speech
 pace and the phone QR (original Settings dialog). **Save** applies changes.
 
 ## 7. Alerts
@@ -99,10 +104,14 @@ Alerts need a Cortana page open (PC or phone).
 ## 8. Wake word
 
 Off by default; turned on per device in Systems (needs microphone permission and a tap after page load).
-Energy-based detection: speech starts above RMS 0.02 (with ~0.25 s pre-roll), ends after 0.7 s below 0.014 or 7 s total;
-bursts under 0.45 s are ignored. Each burst is transcribed locally; if it starts with "hey/hi/ok/okay/yo" + "Cortana" (common
-mis-hearings included): 2+ following words → sent as the question; otherwise a chime and normal listening. Audio is ignored
-while she's thinking/speaking/listening or another transcription is in flight.
+Energy-based detection that adapts to the room: a background-noise level is tracked while nobody speaks; speech starts above
+max(0.012, 3 × noise) RMS (with pre-roll), ends after 0.7 s below max(0.009, 2 × noise) or 7 s total; bursts under 0.4 s are
+ignored. Each burst is sent to `/api/transcribe` with `wake: true`: Whisper gets the hint "Cortana is my assistant." (a transcript
+equal to the hint is ignored), and `runtime.wake_match` decides. The name may come after "hey/hi/ok/…" and fillers ("um"), within
+the first 4 words, nothing else before it. Spellings ≥78% similar to "cortana" count (Courtana, Cortona, Gortana, "cor tana");
+weaker sound-alikes (Katana, Quartana, Kortina…) only right after a greeting. 2+ following words → sent as the question;
+otherwise a chime and normal listening. If speech arrives while a burst is being transcribed, the latest burst is kept and checked
+next (not dropped). Audio is ignored while she's thinking/speaking/listening.
 
 ## 9. Phone
 
