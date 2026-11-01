@@ -137,8 +137,8 @@ function frame(now){
  }
  shape('Eyebrows-Up',expression.brow*characterStrength);
  shape('Eyebrows-Worried',concern?.12:state==='thinking'?.035:0);
- shape('Eyebrows-Up-L',curious?phraseGesture*.12*characterStrength:0);
- if(!motion.matches){rotate('bip_forearm_L','y',-extra*phraseGesture*(performanceStyle==='focused'?.055:.11));
+ translate('Eyebrow L 1','y',curious?phraseGesture*.0012*extra:0);
+ if(!motion.matches){rotate('bip_lowerArm_L','y',-extra*phraseGesture*(performanceStyle==='focused'?.055:.11));
  rotate('bip_hand_L','x',extra*phraseGesture*.08);}
  shape('Eyes-Squint',expression.squint*characterStrength);
  // Keep emotional mouth controls small while speaking so visemes stay readable.
@@ -168,7 +168,7 @@ window.CortanaAvatar={ready:false,setState:changeState,setFull(v){full=v;framing
  setPerformance(style){performanceStyle=style;},
  stopSpeech(){speech=null;},
  extendSpeech(duration){if(speech)speech.duration=duration;},   // streamed replies add audio as they go
- inspect(){return {ready:!!model,bones:bones.size,morphMeshes:morphs.length,speaking:!!speech,pose:{...mouth},calls:renderer?.info.render.calls,triangles:renderer?.info.render.triangles};}
+ inspect(){const arm=bones.get('bip_lowerArm_L');return {leftForearmAngle:arm?arm.node.quaternion.angleTo(arm.rotation):0,characterStrength,performanceStyle,ready:!!model,bones:bones.size,morphMeshes:morphs.length,speaking:!!speech,pose:{...mouth},calls:renderer?.info.render.calls,triangles:renderer?.info.render.triangles};}
 };
 try{
  renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'low-power'});
@@ -201,6 +201,14 @@ try{
  }
  const [gltf,rigData]=await Promise.all([loadModel(),fetch('./assets/rig.json').then(r=>{if(!r.ok)throw Error('Rig unavailable');return r.json();})]);
  rig=rigData;model=gltf.scene;
+ model.updateMatrixWorld(true);
+ // New performance bones need the same world-axis-in-local-space basis as the authored rig.
+ const performanceBones=new Set(['bip_lowerArm_L','bip_hand_L','Eyebrow L 1']);
+ model.traverse(o=>{
+  if(!o.isBone||!performanceBones.has(o.name))return;
+  const inverse=o.getWorldQuaternion(new THREE.Quaternion()).invert();
+  rig[o.name]=Object.fromEntries([['x',new THREE.Vector3(1,0,0)],['y',new THREE.Vector3(0,1,0)],['z',new THREE.Vector3(0,0,1)]].map(([axis,v])=>[axis,v.applyQuaternion(inverse).toArray()]));
+ });
  model.traverse(o=>{
   if(o.isBone)bones.set(o.name,{node:o,rotation:o.quaternion.clone(),position:o.position.clone()});
   if(!o.isMesh)return;

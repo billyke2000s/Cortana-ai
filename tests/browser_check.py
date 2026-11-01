@@ -28,6 +28,13 @@ try:
             assert panel['y']+panel['height']<=nav['y']+1,(width,panel,nav)
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'),width
             print('LAYOUT',width,height,'OK',flush=True)
+        page.wait_for_function('window.CortanaAvatar?.ready',timeout=60000)
+        page.evaluate("window.CortanaAvatar.setCharacter(1.8);window.CortanaAvatar.startSpeech([{time:0,duration:1,id:2}],()=>.6,1,'curious')")
+        page.wait_for_function('window.CortanaAvatar.inspect().leftForearmAngle > .01')
+        page.evaluate('window.CortanaAvatar.setCharacter(1.3)')
+        page.wait_for_function('window.CortanaAvatar.inspect().leftForearmAngle < .001')
+        page.evaluate('window.CortanaAvatar.stopSpeech()')
+        print('EXPRESSIVE RIG GESTURE / NORMAL RESET OK',flush=True)
         page.evaluate("window.CortanaPages.open('chat')");page.fill('#chatInput','Remember my dog is called Max')
         page.click('#chatForm [type=submit]')
         page.wait_for_function("window.Cortana.chat.some(m=>m.role==='assistant'&&!m.pending&&m.text)")
