@@ -4,6 +4,8 @@ from runtime import Runtime,DATA,qr_matrix
 from server import AppServer
 def main():
     import argparse
+    if sys.stdout is None:sys.stdout=open(os.devnull,'w')   # the windowed exe has no console; --headless prints status lines
+    if sys.stderr is None:sys.stderr=open(os.devnull,'w')
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=0);parser.add_argument('--headless',action='store_true');parser.add_argument('--no-tunnel',action='store_true');parser.add_argument('--no-open',action='store_true');args=parser.parse_args()
     events=queue.Queue();runtime=Runtime(events.put)
     runtime.ask_model=not args.headless   # first launch: let the user pick the model (headless/tests keep the automatic pick)

@@ -33,6 +33,14 @@ jobs:
       - name: Build Cortana.exe
         run: python build/build_cortana.py
 
+      - name: Smoke test the built exe
+        shell: pwsh
+        run: |
+          $env:CORTANA_DATA_DIR = "$env:RUNNER_TEMP\cortana-smoke"
+          $p = Start-Process dist\Cortana.exe -ArgumentList '--headless','--no-open','--no-tunnel','--port','8777' -PassThru
+          try { python tests/exe_smoke.py http://127.0.0.1:8777; $code = $LASTEXITCODE } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+          exit $code
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
