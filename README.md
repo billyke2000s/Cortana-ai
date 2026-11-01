@@ -80,7 +80,7 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 | 🩺 | **PC health** | *"Why is my PC so slow?"* · *"Something keeps crashing."* | Disk, memory, CPU, biggest programs, recent crashes |
 | ✉️ | **Email drafts** | *"Email my landlord that the boiler is fixed."* | Approval card → draft in your mail app (you press Send) |
 | 🖼️ | **Pictures** | 📎 a screenshot or photo · *"What does this error mean?"* | Read by the local Qwen model, not saved |
-| 🖱️ | **Full access** (opt-in, PC only) | *"Play something chill on Spotify."* · *"Install VLC."* · *"Turn on dark mode."* | She runs approved commands, or uses the mouse and keyboard herself after you approve the task · push the mouse into the top-left corner to stop her |
+| 🖱️ | **Full access** (opt-in, PC only) | *"Play something chill on Spotify."* · *"Install VLC."* · *"Turn on dark mode."* | She runs approved commands, or uses the mouse and keyboard herself after you approve the task · move your mouse to take over |
 | 🧠 | **Deep thinking** | 🧠 in Chat, or *"Think carefully about which laptop to buy."* | Slower, more careful answers |
 
 > Abilities can be switched off in **Systems** (*Screen, clipboard and file access* has its own switch). She never runs programs, scripts or shortcuts, opens only files she just found or made for you, asks before changing anything (files, folders, email drafts), and screenshots and pictures go only to the AI on your PC.

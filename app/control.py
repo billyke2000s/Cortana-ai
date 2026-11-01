@@ -3,7 +3,7 @@
 Off by default (setting `full_access`), PC-only (never from a paired phone), and every action is approved first:
 - run_command: the exact command is shown on the approval card; it runs once, hidden, with a time limit.
 - computer_task: the goal is approved once; then up to MAX_STEPS rounds of screenshot -> the local model picks ONE
-  action -> it is performed. Emergency stop: push the mouse into the top-left corner, or Stop on the card.
+  action -> it is performed. Emergency stop: the user moves the mouse (she notices it isn't where she left it), or Stop on the card.
 Everything run is appended to DATA/full-access.log so the owner can see exactly what happened.
 """
 import base64, ctypes, json, os, re, struct, subprocess, time, zlib
@@ -129,13 +129,29 @@ def _key(vk, up=False, unicode_char=None):
     return i
 
 
-def cursor_in_corner():
-    """The emergency stop: the real mouse pushed into the top-left corner."""
+def cursor_pos():
     if os.name != 'nt':
-        return False
+        return None
     from ctypes import wintypes
     pt = wintypes.POINT();ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
-    return pt.x <= 2 and pt.y <= 2
+    return (pt.x, pt.y)
+
+
+class UserTookOver:
+    """The emergency stop: the user grabbed the mouse. After each of her steps she remembers where the cursor is; if it has
+    moved more than a few pixels by the time she looks again, someone else moved it, so she stops. She can click anywhere,
+    corners included (the old corner stop could be triggered by her own clicks)."""
+    def __init__(self, where=cursor_pos, tolerance=25):
+        self.where, self.tolerance, self.left = where, tolerance, where()
+
+    def remember(self):
+        self.left = self.where()
+
+    def __call__(self):
+        now = self.where()
+        if now is None or self.left is None:
+            return False
+        return abs(now[0] - self.left[0]) > self.tolerance or abs(now[1] - self.left[1]) > self.tolerance
 
 
 def perform(step, size):
@@ -312,7 +328,7 @@ def computer_task(goal, llm, check, max_steps=MAX_STEPS, shoot=None, act=None, s
     """Screenshot -> model picks one action -> do it, until done/fail/stop. Returns a summary dict.
     `check()` raises when the user pressed Stop; `show(True/False)` turns the blue border and cursor on/off;
     shoot/act/stop/show are injectable for tests."""
-    shoot, act, stop = shoot or screen, act or perform, stop or cursor_in_corner
+    shoot, act, stop = shoot or screen, act or perform, stop or UserTookOver()
     if os.name != 'nt' and act is perform:
         raise RuntimeError('Mouse and keyboard control only works on the Windows PC.')
     if show:
@@ -330,8 +346,8 @@ def _task_loop(goal, llm, check, max_steps, shoot, act, stop):
     for steps in range(1, max_steps + 1):
         check()
         if stop():
-            log('stopped', 'mouse in the top-left corner')
-            return {'stopped': 'You moved the mouse to the corner, so I stopped.', 'steps': history}
+            log('stopped', 'the user moved the mouse')
+            return {'stopped': 'You took the mouse, so I stopped. It is all yours.', 'steps': history}
         shot, size = shoot()
         reply = llm(PROMPT.format(goal=goal, w=size[0], h=size[1], history='\n'.join(history[-8:]) or '(none yet)'), images=[shot], max_tokens=220)
         try:
@@ -344,7 +360,7 @@ def _task_loop(goal, llm, check, max_steps, shoot, act, stop):
             return {('done' if step['action'] == 'done' else 'could_not_finish'): note or step['action'], 'steps': history}
         check()
         if stop():
-            return {'stopped': 'You moved the mouse to the corner, so I stopped.', 'steps': history}
+            return {'stopped': 'You took the mouse, so I stopped. It is all yours.', 'steps': history}
         desc = step['action'] + (f" at {step.get('x')},{step.get('y')}" if 'click' in step['action'] or step['action'] == 'move' else '') + \
                (f" '{str(step.get('text'))[:40]}'" if step['action'] == 'type' else '') + (f" {step.get('keys')}" if step['action'] == 'press' else '')
         try:
@@ -353,5 +369,7 @@ def _task_loop(goal, llm, check, max_steps, shoot, act, stop):
         except ValueError as e:
             history.append(f'{steps}. {desc} failed: {e}')
         log('step', history[-1])
+        if hasattr(stop, 'remember'):
+            stop.remember()   # where SHE left the cursor; any other movement before the next look is the user
         time.sleep(.25)   # a moment for the screen to react before the next look
     return {'could_not_finish': f'Stopped after {max_steps} steps.', 'steps': history}

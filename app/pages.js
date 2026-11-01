@@ -111,7 +111,7 @@ function chatMsg(m,i){
  const body=m.text?`<p>${esc(m.text)}</p>`:m.pending?`<p class="chat-typing">${esc(m.working?m.working+'…':'Thinking')}<i></i><i></i><i></i></p>`:'';
  const asks=(m.confirms||[]).map(c=>`<div class="chat-confirm" data-state="${esc(c.state)}"><b>◆ ${esc(c.summary)}</b>${c.detail?`<pre>${esc(c.detail)}</pre>`:''}${
   c.state==='waiting'?`<span><button type="button" class="pg-primary" data-act="confirm-yes" data-id="${esc(c.id)}">Approve</button> <button type="button" class="pg-btn" data-act="confirm-no" data-id="${esc(c.id)}">Cancel</button></span>`:
-  c.state==='working'&&c.name==='computer_task'?`<span><small>Working… (or push the mouse into the top-left corner)</small> <button type="button" class="pg-btn pg-del" data-act="task-stop" data-id="${esc(c.id)}">Stop</button></span>`:
+  c.state==='working'&&c.name==='computer_task'?`<span><small>Working… (move your mouse to take over)</small> <button type="button" class="pg-btn pg-del" data-act="task-stop" data-id="${esc(c.id)}">Stop</button></span>`:
   `<small>${esc({working:'Working…',done:'Done',failed:'Did not work',cancelled:'Cancelled'}[c.state]||'')}</small>`}</div>`).join('');
  return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${asks}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
 }
@@ -220,7 +220,7 @@ async function systems(){
    <p class="pg-muted">Current: ${esc(s.context)} tokens. Bigger remembers more of the conversation and long documents. Deep thinking: 🧠 in Chat, or say “think carefully about…”.</p>
    ${C.state!==undefined&&(await get('/api/status')).canPair?`<h3>Full access</h3>
    <label class="pg-check"><input type="checkbox" id="sFull"${s.full_access?' checked':''}> Let her run commands and use the mouse and keyboard on this PC</label>
-   <p class="pg-muted">Only from this PC, never from your phone. She shows every command, and every mouse/keyboard task, for you to approve first. Stop a task by pushing the mouse into the top-left corner. Everything she runs is logged in full-access.log. Small AI models make mistakes: approve carefully.</p>`:''}
+   <p class="pg-muted">Only from this PC, never from your phone. She shows every command, and every mouse/keyboard task, for you to approve first. Move your mouse during a task and she stops and hands it back. Everything she runs is logged in full-access.log. Small AI models make mistakes: approve carefully.</p>`:''}
    <h3>Character</h3>
    <label>Expression<select id="sExpression">${opt('normal','Normal',s.expression_mode!=='expressive')}${opt('expressive','Expressive',s.expression_mode==='expressive')}</select></label>
    <button type="button" class="pg-btn pg-wide" data-act="expression-preview">Preview expression</button>

@@ -571,7 +571,7 @@ class FullAccessTests(unittest.TestCase):
         r,done=self.run_task(['nonsense']*20);self.assertEqual(done,[]);self.assertIn('Stopped after 15 steps',r['could_not_finish'])
 
     def test_emergency_stops(self):
-        r,done=self.run_task(['{"action":"click","x":1,"y":1}']*5,stop_after=2);self.assertEqual(len(done),2);self.assertIn('corner',r['stopped'])
+        r,done=self.run_task(['{"action":"click","x":1,"y":1}']*5,stop_after=2);self.assertEqual(len(done),2);self.assertIn('took the mouse',r['stopped'])
         with self.assertRaises(companion.Cancelled):self.run_task(['{"action":"click","x":1,"y":1}']*5,cancel_at=1)
 
     def test_actions_are_validated_before_anything_is_sent(self):
@@ -646,3 +646,22 @@ class FullAccessBackstopTests(unittest.TestCase):
         w=base.runtime.wants_action
         self.assertTrue(w('Open Notepad and type hello.',True));self.assertFalse(w('Open Notepad and type hello.',False))
         self.assertFalse(w('How do I install Python?',True));self.assertTrue(w('play something chill on Spotify',True))
+
+class TakeOverTests(unittest.TestCase):
+    """She stops when the user moves the mouse, not when the cursor is in a corner (her own clicks can land anywhere)."""
+    def test_user_movement_stops_her_own_does_not(self):
+        import control
+        pos=[(500,500)];s=control.UserTookOver(where=lambda:pos[0])
+        self.assertFalse(s())
+        pos[0]=(0,0);s.remember();self.assertFalse(s())          # she clicked in the very corner herself: fine
+        pos[0]=(10,12);self.assertFalse(s())                     # a few pixels of jitter: fine
+        pos[0]=(400,300);self.assertTrue(s())                    # someone else moved it: stop
+        self.assertFalse(control.UserTookOver(where=lambda:None)())   # off Windows: never stops by itself
+
+    def test_loop_remembers_after_each_of_her_steps(self):
+        import control
+        pos=[(500,500)];stop=control.UserTookOver(where=lambda:pos[0]);replies=iter(['{"action":"click","x":1,"y":1}','{"action":"click","x":5,"y":5}','{"action":"done","note":"ok"}'])
+        def act(step,size):pos[0]=(int(step['x']),int(step['y']))   # her click moves the real cursor
+        with patch.object(control,'log'):
+            r=control.computer_task('x',lambda *a,**k:next(replies),lambda:None,shoot=lambda:('SHOT',(1280,720)),act=act,stop=stop)
+        self.assertEqual(r['done'],'ok')   # her own moves to the corner never stopped her

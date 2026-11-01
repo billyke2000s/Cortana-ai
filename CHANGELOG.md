@@ -11,7 +11,7 @@ All notable changes. Dates are UK time.
 ## [1.7.0] - 2026-11-01
 
 ### Added
-- **Full access mode** (Systems → Full access, off by default, PC only): she can run PowerShell commands and use the mouse and keyboard to do things in any app ("play something chill on Spotify"). Every command, and every mouse/keyboard task, is shown for approval first; push the mouse into the top-left corner or press Stop to end a task; everything is logged in `full-access.log`.
+- **Full access mode** (Systems → Full access, off by default, PC only): she can run PowerShell commands and use the mouse and keyboard to do things in any app ("play something chill on Spotify"). Every command, and every mouse/keyboard task, is shown for approval first; move the mouse yourself or press Stop to end a task; everything is logged in `full-access.log`.
 - Hologram projection look (Systems dialog → Hologram effect: Full / Subtle / Off): glowing edges with a see-through core, fine scan lines drifting up, an interference band sweeping up, thin light streaks over her surface, a slight flicker and an occasional split-second glitch (a slice jumps sideways with a colour split). Original procedural effect; reduced-motion keeps the look but stops the movement.
 - Crash log: errors in any part of the app and native crashes are written to `crash.log` in the Cortana data folder.
 

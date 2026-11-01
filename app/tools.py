@@ -134,7 +134,7 @@ def preview(name, args, store):
             if not goal:
                 return {'error': 'Say what to do on the computer.'}
             return {'summary': 'Let me use your mouse and keyboard to: ' + goal,
-                    'detail': 'Up to 15 steps. To stop me at any time, push the mouse into the top-left corner of the screen, or press Stop.'}
+                    'detail': 'Up to 15 steps. To take over at any time, just move your mouse, or press Stop.'}
         return {'error': f'{name} does not need approval.'}
     except (ValueError, RuntimeError, OSError) as e:
         return {'error': str(e)[:200]}
