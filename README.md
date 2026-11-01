@@ -258,7 +258,7 @@ Point it at **[AGENTS.md](AGENTS.md)** first. It's a strict rulebook (security i
 - **AI:** [Qwen 3.5](https://qwenlm.github.io/) via [Ollama](https://ollama.com) · **Speech recognition:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) · **Voice:** [Piper](https://github.com/rhasspy/piper) · **3D:** [three.js](https://threejs.org) (MIT) · **Weather:** [Open-Meteo](https://open-meteo.com) · **QR:** python-qrcode · **PDF text:** [pypdf](https://github.com/py-pdf/pypdf) (BSD-3-Clause) · **Phone link:** Cloudflare Quick Tunnels / Tailscale.
 - **CPU speech:** [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) / [ZipVoice](https://github.com/k2-fsa/ZipVoice) (Apache-2.0), [Vocos](https://github.com/gemelo-ai/vocos) (MIT), [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) (MIT). Voice notices are bundled; downloaded distributions retain their notices.
 - **Cortana**, **Halo**, **UNSC** and **Master Chief** are trademarks of Microsoft. This is an unofficial, non-commercial fan project, not affiliated with or endorsed by Microsoft, 343 Industries or Bungie.
-- **Private repository.** It contains the Cortana 3D model and is kept private; don't make it public.
+- **Repository visibility:** GitHub reported this repo public on 1 November 2026. This release does not change visibility. It contains the supplied character model and reference profile; see AGENTS.md for contributor restrictions.
 - **Licence:** none has been chosen yet, so by default all rights are reserved by the author. Add a `LICENSE` file to change that.
 
 <div align="center"><br><sub>Built with an unreasonable amount of blue glow.</sub></div>

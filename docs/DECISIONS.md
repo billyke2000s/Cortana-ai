@@ -134,7 +134,7 @@ The project supports training a Piper voice only from the owner's (or a consenti
 
 ### D-028: Optional reference speech, fast Piper retained
 
-The owner requested the supplied experimental Halo-style reference candidate in this private repo/release. This scopes an exception to D-018 and AGENTS voice/recording rules for the existing `app/voice-profile/reference.wav`; it does not change the trainer consent requirement or authorise unrelated recordings. It does not assert an official licence or endorsement. No trained weights or source recording collection is committed.
+The owner requested the supplied experimental Halo-style reference candidate in this existing repo/release. This scopes an exception to D-018 and AGENTS voice/recording rules for the existing `app/voice-profile/reference.wav`; it does not change the trainer consent requirement or authorise unrelated recordings. It does not assert an official licence or endorsement. No trained weights or source recording collection is committed.
 
 ZipVoice-Distill int8 + Vocos (roughly 185 MB model files) is the closer tested candidate, CPU only, 8 steps. It can skip words, is slower than Piper and is not claimed to be 1:1. Stock Piper remains the fast default; Windows remains a fallback. A Piper training pilot was unfinished and is not shipped as a completed model. Source: https://k2-fsa.github.io/sherpa/onnx/tts/zipvoice.html . ZipVoice and sherpa-onnx are Apache-2.0; Vocos is MIT (notices bundled).
 

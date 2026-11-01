@@ -17,7 +17,7 @@ HASHES={
 def pcm(audio):
     import numpy as np
     with wave.open(io.BytesIO(audio)) as w:
-        if w.getsampwidth()!=2 or w.getnchannels()!=1:raise ValueError('Use mono 16-bit WAV audio.')
+        if w.getsampwidth()!=2 or w.getnchannels()!=1 or not 8000<=w.getframerate()<=48000 or w.getnframes()>w.getframerate()*31:raise ValueError('Use mono 16-bit WAV audio.')
         return np.frombuffer(w.readframes(w.getnframes()),dtype='<i2').astype('float32')/32768,w.getframerate()
 
 class Neural:

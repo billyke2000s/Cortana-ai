@@ -311,6 +311,8 @@ Don't duplicate content between docs; link instead. Keep README claims true (e.g
 
 ## 16. Scoped 1.5 owner request and new modules
 
+GitHub metadata on 1 November 2026 reports the existing repository public, contrary to the earlier private-only statements. Do not change visibility without an explicit owner request. The owner requested the supplied voice on the repo and a release using its existing visibility.
+
 The owner's explicit request to implement the new supplied reference voice, dependencies and verbal interruption governs this release. The single private `app/voice-profile/reference.wav` is the scoped exception to §0.5/§5.2/§13 and D-018. Keep the repository private, the existing trainer consent checkbox, and all other recordings/model weights excluded. This is not blanket permission to add unrelated reference recordings.
 
 `neural.py`: CPU reference TTS/KWS. `lips.py`: Rhubarb audio alignment. `companion.py`: request cancellation, timings, Windows notification process. Additive API contracts are in docs/API.md. All are bundled hidden imports and must never be served. New settings require the same validation/UI/docs/tests checklist. First-setup choices and existing settings must survive upgrades. Native synthesis may finish its current chunk; never play or save a cancelled result. Do not claim exact voice identity or perfect lip sync.

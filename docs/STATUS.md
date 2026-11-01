@@ -4,8 +4,10 @@ _Last updated: 1 November 2026._
 
 ## 1.5 current verification
 
+Repository metadata currently reports **public**. The docs previously described it as private; visibility was not changed by this release.
+
 - Recovered source: 80 offline tests passed on Linux; JavaScript syntax checks passed.
-- Earlier implementation in this session: browser layout passed at 320×568, 360×640, 390×844, 430×932, 844×390, 1280×900; saved chat and memory edit passed. Re-run required after recovery.
+- Recovered implementation re-tested: browser layout passed at 320×568, 360×640, 390×844, 430×932, 844×390, 1280×900; saved chat and memory edit passed, no page errors.
 - Actual CPU reference speech produced 24 kHz audio and 11/30 Rhubarb mouth cues in two test sentences. One sentence skipped the name Cortana. Warm long-sentence render was 7.36 s; cold shorter render including model load was 31.21 s. These are observations, not guarantees.
 - A separately generated Piper “Hey Cortana” sample triggered the small keyword detector; an unrelated reference sentence did not.
 - Windows rebuilt-exe speech/alignment/cancellation, native keyword checks and real 4B/9B context regression are release gates; pending until their Actions run succeeds.

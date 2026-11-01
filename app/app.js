@@ -211,10 +211,15 @@ function chime(){
 async function announceAlerts(alerts){
  const next=alerts.find(a=>!announced.has(a.id+':'+a.due));
  if(!next||state!=='idle')return;
- announced.add(next.id+':'+next.due);
- api('/api/objectives',{action:'ack',id:next.id}).then(()=>document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:'objectives'}}))).catch(()=>{});
- try{await unlockAudio();chime();}catch{}
- const alertRequest=requestId;setTimeout(()=>{if(state!=='idle'||requestId!==alertRequest)return;speak(next.kind==='timer'?`Chief, your ${next.text.replace(/\s*timer$/i,'')} timer is done.`:`Reminder, Chief: ${next.text}.`);},700);
+ const key=next.id+':'+next.due,alertRequest=requestId;announced.add(key);
+ try{await unlockAudio();}catch{announced.delete(key);return;}
+ if(state!=='idle'||requestId!==alertRequest){announced.delete(key);return;}
+ chime();
+ setTimeout(()=>{
+  if(state!=='idle'||requestId!==alertRequest){announced.delete(key);return;}
+  api('/api/objectives',{action:'ack',id:next.id}).then(()=>document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:'objectives'}}))).catch(()=>{});
+  speak(next.kind==='timer'?`Chief, your ${next.text.replace(/\s*timer$/i,'')} timer is done.`:`Reminder, Chief: ${next.text}.`);
+ },700);
 }
 
 /* ---- "Hey Cortana" wake word: listens locally for speech, transcribes short bursts on this PC, reacts to the name ---- */
@@ -236,6 +241,7 @@ async function setWake(on){
     const norm=t=>t.toLowerCase().replace(/[^a-z0-9 ]/g,'').trim();
     if(state==='speaking'&&norm(playingText).includes(norm(r.text)))return;
     stop();
+    if(/^(stop|quiet|cancel|enough|never mind)[.! ]*$/i.test(r.rest.trim()))return;
     wake.pending=null;
     if(r.rest.split(/\s+/).filter(Boolean).length>=2)send(r.rest);else{chime();listen();}
    }).catch(()=>{}).finally(()=>{wake.busy=false;const next=wake.pending;wake.pending=null;if(next&&wake.on&&state!=='listening'&&!recording)check(next);});
