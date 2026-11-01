@@ -4,6 +4,10 @@ _Last updated: 1 November 2026._
 
 ## 1.6.0: verification
 
+**Released:** [v1.6.0](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.6.0), built from `b7213f79d5095ed54a483115681782e72b51e9cd` in Actions run 41337204413 (UI, Windows build + offline suite + native checks + packaged reference-voice smoke, real `qwen3.5:4b` 6/6 and `qwen3.5:9b` 6/6 on CPU runners). `Cortana.exe` SHA-256 `647e7c12de50f26b1309af51fddcd6c10ce70493c34811bb86276e6067939c61`. Later documentation commits do not change the app.
+
+Release checks caught and fixed before publishing: doubled line breaks in CSVs written on Windows; qwen3.5:9b claiming a timer and then a reminder it never set (D-036); the spreadsheet tool being offered for "build a table in Python" (D-034). One 4B run failed only because Ollama's registry returned 503 during the model download. The 9B passing 6/6 once is one sample of a temperature-0.45 model, not a reliability figure.
+
 - Offline suite: 116 tests passed on Linux (Python 3.13). New tests cover the voice unpack/warm-up, reminder backoff, recap offset, context sizing, deep thinking, watchers and briefing, the approval gate end to end (nothing written until approved, one use, expiry, origin/auth), every work tool, picture validation and privacy.
 - Browser check (Playwright/Chromium, fake Ollama): six layouts, approval card via tap and via typed "yes", deep thinking toggle, new Systems sections, no page errors.
 - **[Unverified]** everything that needs the real models or Windows: how well qwen3.5 9B/4B choose the new tools and phrase approval requests, deep-thinking quality and time, the Auto context on a real graphics card, `pc_health`'s PowerShell output, the Word file opening in Word, mailto drafts in the user's mail app, folder tidying on a real Downloads folder, Windows pop-ups for notices. The release workflow's real-model job runs only on a tag.
