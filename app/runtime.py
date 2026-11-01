@@ -135,6 +135,28 @@ def extract(archive,directory):
             if not dest.is_relative_to(directory.resolve()):raise RuntimeError('Invalid archive path.')
         z.extractall(directory)
 
+# ---- "Hey Cortana": Whisper spells the name many ways ("Katana", "Courtana", "Cortona"...), so match it fuzzily.
+WAKE_PROMPT='Cortana is my assistant.'   # biases Whisper towards the name; a transcript equal to it is ignored (hallucination)
+WAKE_GREETINGS={'hey','hi','ok','okay','yo','a','hay','hei','hej','eh'}
+WAKE_WEAK={'katana','quartana','kortina','cortina','catana','gotana','cortna','cotanna'}   # only count after a greeting
+def wake_match(text):
+    """Return the words after the wake name, or None if the name isn't near the start."""
+    from difflib import SequenceMatcher
+    norm=lambda t:re.sub(r'[^a-z ]','',t.lower()).strip()
+    if not text or norm(text)==norm(WAKE_PROMPT):return None
+    words=[(m.group().lower(),m.end()) for m in re.finditer(r"[A-Za-z']+",text)][:6]
+    sim=lambda w:SequenceMatcher(None,w,'cortana').ratio()
+    for i,(w,end) in enumerate(words[:4]):
+        after_greeting=i>0 and words[i-1][0] in WAKE_GREETINGS
+        joined=(w+words[i+1][0],words[i+1][1]) if i+1<len(words) else None
+        hit=None
+        if 5<=len(w)<=9 and (sim(w)>=0.78 or (after_greeting and (w in WAKE_WEAK or sim(w)>=0.75))):hit=end
+        elif joined and 6<=len(joined[0])<=9 and sim(joined[0])>=0.85:hit=joined[1]   # "cor tana", "court ana"
+        if hit is not None:
+            if any(x[0] not in WAKE_GREETINGS|{'um','uh','er','erm','so','oh','well'} for x in words[:i]):return None   # name must open the phrase
+            return text[hit:].lstrip(' ,.!?;:-').strip()
+    return None
+
 class Runtime:
     def __init__(self,report=lambda text:None):
         DATA.mkdir(parents=True,exist_ok=True)
@@ -418,7 +440,7 @@ class Runtime:
                 yield {'type':'tool','name':name,'label':tools.TOOL_LABELS.get(name,'WORKING')}
                 result,change=tools.run(name,args,self.store)
                 if change:yield {'type':'refresh','what':change}
-                convo.append({'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':name})
+                convo.append({'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:3500 if name=='web_search' else 2500],'tool_name':name})
         for sentence in stream.finish():yield {'type':'sentence','text':sentence}
         screen=(stream.screen or '').strip()
         if screen:yield {'type':'screen','markdown':screen[:12000]}
@@ -436,7 +458,7 @@ class Runtime:
             if event['type']=='done':result.update(reply=event['reply'],raw=event['raw'])
         return result
 
-    def transcribe(self,wav):
+    def transcribe(self,wav,prompt=None):
         import tempfile,wave,io
         if not self.stt_ready:raise RuntimeError('Microphone recognition is still starting. You can type while it loads.')
         try:
@@ -445,7 +467,7 @@ class Runtime:
         except wave.Error:raise ValueError('Invalid voice recording.')
         with self.stt_lock,tempfile.TemporaryDirectory(dir=DATA) as tmp:
             path=Path(tmp)/'speech.wav';path.write_bytes(wav);output=Path(tmp)/'words'
-            p=subprocess.run([str(self.whisper),'-m',str(self.whisper_model),'-f',str(path),'-otxt','-of',str(output),'-t','4','-l','en','-nt','-ng'],capture_output=True,timeout=90,creationflags=HIDDEN)
+            p=subprocess.run([str(self.whisper),'-m',str(self.whisper_model),'-f',str(path),'-otxt','-of',str(output),'-t','4','-l','en','-nt','-ng']+(['--prompt',prompt] if prompt else []),capture_output=True,timeout=90,creationflags=HIDDEN)
             textfile=output.with_suffix('.txt')
             if p.returncode or not textfile.exists():raise RuntimeError('Could not transcribe that recording. Please try again.')
             text=textfile.read_text(encoding='utf-8-sig').strip()

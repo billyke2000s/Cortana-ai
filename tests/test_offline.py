@@ -227,6 +227,100 @@ class CalendarTests(unittest.TestCase):
         self.assertNotIn('Weekly with exception', day8)                # EXDATE honoured
 
 
+class WakeWordTests(unittest.TestCase):
+    def test_spellings_whisper_produces(self):
+        for heard, rest in [('Hey Cortana.', ''), ('Hey, Cortana, what time is it?', 'what time is it?'),
+                            ('Hey Katana, set a timer.', 'set a timer.'), ('Courtana what is the weather', 'what is the weather'),
+                            ('Um, hey Cortona.', ''), ('OK Cortina', ''), ('Hey Quartana!', ''), ('Cor tana, hello there', 'hello there'),
+                            ('Cortana', ''), ('Hey Gortana pause the music', 'pause the music'), ('Hey cortanna.', '')]:
+            self.assertEqual(runtime.wake_match(heard), rest, heard)
+
+    def test_ordinary_speech_does_not_trigger(self):
+        for heard in ['I need to contain this.', 'Katana is a sword.', 'Certainly, sir.', 'Hey Montana', 'The curtains are open',
+                      'Call Santana later', 'I asked Cortana yesterday', 'Cortana is my assistant.', '', 'Thank you.',
+                      'Contact me tomorrow', 'Hey Carter']:
+            self.assertIsNone(runtime.wake_match(heard), heard)
+
+
+DDG_PAGE = """<div class="result results_links results_links_deep result--ad"><div class="links_main links_deep result__body">
+<h2 class="result__title"><a rel="nofollow" class="result__a" href="https://duckduckgo.com/y.js?ad_domain=x&amp;u3=1">Buy tickets</a></h2>
+<a class="result__snippet" href="#">An advert</a></div></div>
+<div class="result results_links results_links_deep web-result "><div class="links_main links_deep result__body">
+<h2 class="result__title"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.bbc.co.uk%2Fsport%2Ffootball&amp;rut=abc">Premier League - <b>Scores</b> &amp; Fixtures</a></h2>
+<div class="result__extras"><div class="result__extras__url"><a class="result__url" href="#">www.bbc.co.uk</a></div></div>
+<a class="result__snippet" href="#">Premier League <b>scores</b>, results and fixtures on BBC Sport.</a><div class="clear"></div></div></div>"""
+
+BING_RSS = """<?xml version="1.0" encoding="utf-8" ?><rss version="2.0"><channel><title>Bing: q</title>
+<item><title>Premier League - Scores &amp; Fixtures - BBC Sport</title><link>https://www.bbc.co.uk/sport/football/premier-league/scores-fixtures</link>
+<description>Premier League scores, results and fixtures on BBC Sport, including live football scores.</description></item>
+<item><title>Results | Premier League</title><link>https://www.premierleague.com/results</link><description>Latest results.</description></item>
+<item><title>Bad link</title><link>javascript:alert(1)</link><description>x</description></item></channel></rss>"""
+
+ARTICLE = """<html><head><script>var ignore='me';</script><style>.a{}</style></head><body><nav>Home News Sport Weather Menu links here</nav>
+<p>Cookie banner text that is long enough to count as a block of page text.</p>
+<article><h1>Premier League results</h1><p>Arsenal 2-1 Chelsea: Saka scored the winner in the 89th minute at the Emirates on Saturday.</p>
+<p>Liverpool 3-0 Everton in the Merseyside derby, with two goals from Salah in the Premier League.</p></article>
+<footer>Copyright and footer links that should never be read out as results.</footer></body></html>"""
+
+
+class WebSearchTests(unittest.TestCase):
+    def setUp(self):
+        self._fetch, self._public = tools.fetch, tools._public_url
+        self.calls = []
+
+    def tearDown(self):
+        tools.fetch, tools._public_url = self._fetch, self._public
+
+    def fake(self, pages):
+        def fetch(url, timeout=8, limit=0):
+            self.calls.append(url)
+            for key, (body, ctype) in pages.items():
+                if key in url:
+                    if body is None:
+                        raise OSError('blocked')
+                    return body, ctype
+            raise OSError('not found')
+        tools.fetch = fetch
+
+    def test_ddg_parser_skips_ads_and_decodes_links(self):
+        self.fake({'duckduckgo.com/html': (DDG_PAGE, 'text/html')})
+        res = tools.ddg_results('premier league scores')
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0]['url'], 'https://www.bbc.co.uk/sport/football')
+        self.assertEqual(res[0]['title'], 'Premier League - Scores & Fixtures')
+        self.assertIn('results and fixtures', res[0]['snippet'])
+
+    def test_bing_rss_and_page_reading_without_key(self):
+        self.fake({'bing.com/search': (BING_RSS, 'application/rss+xml'), 'bbc.co.uk': (ARTICLE, 'text/html')})
+        out = tools.web_search('premier league results')
+        self.assertEqual(out['engine'], 'Bing')
+        self.assertEqual([r['source'] for r in out['results']], ['bbc.co.uk', 'premierleague.com'])   # javascript: link dropped
+        self.assertIn('Arsenal 2-1 Chelsea', out['page']['text'])
+        self.assertIn('Liverpool 3-0 Everton', out['page']['text'])
+        for junk in ('ignore', 'Menu links', 'footer links'):
+            self.assertNotIn(junk, out['page']['text'])
+        self.assertEqual(out['page']['source'], 'bbc.co.uk')
+        self.assertFalse(any('api.search.brave.com' in c for c in self.calls))
+        self.assertLessEqual(len(json.dumps(out)), 3500)            # fits the tool-result budget
+
+    def test_falls_back_to_duckduckgo_when_bing_fails(self):
+        self.fake({'bing.com/search': (None, ''), 'duckduckgo.com/html': (DDG_PAGE, 'text/html'), 'bbc.co.uk': (ARTICLE, 'text/html')})
+        out = tools.web_search('premier league results')
+        self.assertEqual(out['engine'], 'DuckDuckGo')
+        self.assertIn('Arsenal 2-1 Chelsea', out['page']['text'])
+
+    def test_unreachable_is_a_clear_error(self):
+        self.fake({})
+        self.assertIn('unreachable', tools.web_search('anything')['error'])
+
+    def test_never_reads_private_addresses(self):
+        tools.fetch = self._fetch
+        for url in ['http://127.0.0.1:8080/', 'http://localhost/', 'http://192.168.1.1/admin', 'file:///C:/Windows/win.ini', 'ftp://x.org/']:
+            self.assertFalse(tools._public_url(url), url)
+            with self.assertRaises(ValueError):
+                tools.fetch(url)
+
+
 class FirstLaunchTests(unittest.TestCase):
     def test_waits_for_model_choice(self):
         """First launch with the window open: nothing loads until the user picks a model on the page."""

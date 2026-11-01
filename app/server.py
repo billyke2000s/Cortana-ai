@@ -89,7 +89,14 @@ class Handler(SimpleHTTPRequestHandler):
             data=json.loads(self.rfile.read(size))
             if not isinstance(data,dict):raise ValueError('Invalid request.')
             runtime=self.server.runtime
-            if self.path=='/api/transcribe':return self.send_json({'text':runtime.transcribe(base64.b64decode(data.get('audio',''),validate=True))})
+            if self.path=='/api/transcribe':
+                audio=base64.b64decode(data.get('audio',''),validate=True)
+                if data.get('wake') is True:   # wake-word burst: hint the name, decide here (testable) instead of in the page
+                    from runtime import wake_match,WAKE_PROMPT
+                    try:text=runtime.transcribe(audio,WAKE_PROMPT)
+                    except RuntimeError:return self.send_json({'text':'','wake':False,'rest':''})
+                    rest=wake_match(text);return self.send_json({'text':text,'wake':rest is not None,'rest':rest or ''})
+                return self.send_json({'text':runtime.transcribe(audio)})
             if self.path=='/api/chat':
                 messages=data.get('messages',[])
                 if not isinstance(messages,list) or len(messages)>20 or not all(isinstance(m,dict) for m in messages):raise ValueError('Invalid conversation.')

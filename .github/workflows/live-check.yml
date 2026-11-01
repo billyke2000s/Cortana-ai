@@ -1,0 +1,24 @@
+name: Live check (search + wake word)
+
+# Manual: real web searches without a key, and "Hey Cortana" through Windows TTS + the real whisper.cpp.
+on:
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Get whisper.cpp (same version as the app)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.2/whisper-bin-x64.zip -OutFile w.zip
+          Expand-Archive w.zip -DestinationPath whisper
+          Invoke-WebRequest https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin -OutFile ggml-base.en.bin
+          $cli = (Get-ChildItem whisper -Recurse -Filter whisper-cli.exe | Select-Object -First 1).FullName
+          "WHISPER=$cli" | Out-File -Append $env:GITHUB_ENV
+      - name: Live check
+        run: python tests/ci_live_check.py "${{ env.WHISPER }}" ggml-base.en.bin

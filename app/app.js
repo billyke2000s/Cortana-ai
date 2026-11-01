@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const app=$('app'),out=$('transcript'),label=$('listenLabel'),mic=$('mic');
-const wake={on:false,stream:null,input:null,node:null,busy:false};
+const wake={on:false,stream:null,input:null,node:null,busy:false,pending:null};
 let queue=null,state='idle',audioContext=null,source=null,requestId=0,controller=null,recording=null,workletReady=false,capabilities={ai:false,timedSpeech:false},history=[];
 const avatar=()=>window.CortanaAvatar;
 function setState(s,text){state=s;app.classList.toggle('idle',s==='idle');app.classList.toggle('speaking',s==='speaking');mic.setAttribute('aria-pressed',String(s==='listening'));mic.setAttribute('aria-label',s==='listening'?'Finish listening':'Start listening');label.textContent=text;avatar()?.setState(s);document.dispatchEvent(new CustomEvent('cortana:state',{detail:{state:s}}));}
@@ -202,31 +202,37 @@ async function announceAlerts(alerts){
 }
 
 /* ---- "Hey Cortana" wake word: listens locally for speech, transcribes short bursts on this PC, reacts to the name ---- */
-const WAKE=/^\W*(?:hey|hi|ok|okay|yo)?\W*(?:cortana|cortina|kortana|cortanna|quartana|cartana)\b[\s,.!?]*(.*)$/i;
 async function setWake(on){
  if(on===wake.on)return true;
- if(!on){wake.on=false;wake.node&&(wake.node.port.onmessage=null);wake.input?.disconnect();wake.node?.disconnect();wake.stream?.getTracks().forEach(t=>t.stop());Object.assign(wake,{stream:null,input:null,node:null});savePreference('wake','0');if(state==='idle')setState('idle',idleLabel());return true;}
+ if(!on){wake.on=false;wake.node&&(wake.node.port.onmessage=null);wake.input?.disconnect();wake.node?.disconnect();wake.stream?.getTracks().forEach(t=>t.stop());Object.assign(wake,{stream:null,input:null,node:null,pending:null});savePreference('wake','0');if(state==='idle')setState('idle',idleLabel());return true;}
  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){error('The wake word needs the secure phone link or this PC.');return false;}
  try{
   await unlockAudio();
   wake.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
   if(!workletReady){await audioContext.audioWorklet.addModule('./mic-worklet.js');workletReady=true;}
   wake.input=audioContext.createMediaStreamSource(wake.stream);wake.node=new AudioWorkletNode(audioContext,'cortana-capture');
-  let chunks=[],pre=[],talking=false,lastVoice=0,startedAt=0;
+  // Speech detection adapts to the room: thresholds follow the background noise level (quiet mics and noisy rooms both work).
+  let chunks=[],pre=[],talking=false,lastVoice=0,startedAt=0,floor=.006;
+  const check=audio=>{   // the PC transcribes the burst (with a hint for the name) and decides if it was "Hey Cortana"
+   wake.busy=true;
+   api('/api/transcribe',{audio:encodeWav(audio,audioContext.sampleRate),wake:true}).then(r=>{
+    if(!r.wake||state!=='idle'||recording)return;
+    wake.pending=null;
+    if(r.rest.split(/\s+/).filter(Boolean).length>=2)send(r.rest);else{chime();listen();}
+   }).catch(()=>{}).finally(()=>{wake.busy=false;const next=wake.pending;wake.pending=null;if(next&&state==='idle'&&!recording)check(next);});
+  };
   wake.node.port.onmessage=e=>{
    const c=e.data,now=performance.now();let rms=0;for(const v of c)rms+=v*v;rms=Math.sqrt(rms/c.length);
-   if(state!=='idle'||recording||wake.busy){chunks=[];talking=false;pre=[];return;}   // never react to her own voice
-   if(!talking){pre.push(c);if(pre.length>6)pre.shift();if(rms>.02){talking=true;startedAt=now;lastVoice=now;chunks=[...pre];}return;}
-   chunks.push(c);if(rms>.014)lastVoice=now;
+   if(state!=='idle'||recording){chunks=[];talking=false;pre=[];wake.pending=null;return;}   // never react to her own voice
+   const start=Math.max(.012,floor*3),keep=Math.max(.009,floor*2);
+   if(!talking){
+    if(rms<start)floor=floor*.97+rms*.03;
+    pre.push(c);if(pre.length>8)pre.shift();if(rms>start){talking=true;startedAt=now;lastVoice=now;chunks=[...pre];}return;}
+   chunks.push(c);if(rms>keep)lastVoice=now;
    if(now-lastVoice>700||now-startedAt>7000){
     const audio=chunks;chunks=[];pre=[];talking=false;
-    if(now-startedAt<450)return;
-    wake.busy=true;
-    api('/api/transcribe',{audio:encodeWav(audio,audioContext.sampleRate)}).then(r=>{
-     const m=WAKE.exec(r.text||'');if(!m)return;
-     const rest=m[1].trim();
-     if(rest.split(/\s+/).length>=2)send(rest);else{chime();listen();}
-    }).catch(()=>{}).finally(()=>{wake.busy=false;});
+    if(now-startedAt<400)return;
+    if(wake.busy)wake.pending=audio;else check(audio);   // keep the latest burst instead of dropping it while busy
    }
   };
   wake.input.connect(wake.node);wake.node.connect(audioContext.destination);
