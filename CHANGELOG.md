@@ -8,6 +8,9 @@ All notable changes. Dates are UK time.
 - Deep thinking: 🧠 toggle in Chat, or ask her to "think carefully" / "take your time". Reasoning is never spoken.
 - Auto memory size: up to 16,384 tokens when the model and its cache fit on the graphics card (Systems → Brain; Standard keeps 6,144).
 
+### Added (step 3: proactive)
+- She tells you when new documents appear in your Documents folders (and reads them in), when a download finishes (opt-in), and reads a daily briefing at a time you choose. Windows pop-ups for each, titled "Cortana".
+
 ### Step 1: speed and fixes
 
 ### Fixed

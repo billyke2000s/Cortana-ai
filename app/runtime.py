@@ -479,7 +479,7 @@ class Runtime:
 
     def _notify_one(self,item,key,entry,now):
         from companion import notify
-        try:shown=notify(item['text'])
+        try:shown=notify(item['text'],'Cortana reminder' if item['kind'] in ('timer','reminder') else 'Cortana')
         except Exception:shown=False
         entry['tries']+=1;entry['busy']=False
         if shown or entry['tries']>=self.NOTIFY_TRIES:
@@ -487,12 +487,15 @@ class Runtime:
         else:entry['next']=now+60*entry['tries']
 
     def background_loop(self):
-        calendar_at=0
+        import proactive
+        calendar_at=0;watch_at=0
         while not self.closing.is_set():
             if time.monotonic()>=calendar_at:
                 try:self.calendar_tick()
                 except Exception:pass
                 calendar_at=time.monotonic()+300
+            if time.monotonic()>=watch_at:   # new documents, finished downloads, daily briefing (D-033)
+                proactive.tick(self.store);watch_at=time.monotonic()+60
             self.notification_tick()
             if self.closing.wait(2):return
 

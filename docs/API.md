@@ -163,3 +163,5 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 
 - `POST /api/chat-stream` accepts optional `think` (boolean, default false). Thinking also turns on when the question asks for it ("think carefully about…", "take your time"). The stream then starts with `{type:"tool",name:"think",label:"THINKING IT THROUGH"}`; the model's reasoning is never streamed or spoken.
 - Settings GET/POST add `context_mode` (`auto` default / `standard`); GET also returns `context`, the token window in use.
+- Settings GET/POST add `briefing_time` (`"HH:MM"` or `""`, default empty), `watch_folders` (boolean, default true) and `watch_downloads` (boolean, default false).
+- `alerts` in `GET /api/status` can now include `kind:"notice"` (spoken as-is: new document, finished download) and `kind:"briefing"` (the page opens Mission Briefing and reads it). Both are acknowledged like other alerts and never appear in `GET /api/objectives`.

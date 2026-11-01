@@ -30,7 +30,7 @@ Browser / phone ──HTTPS tunnel (phone only)──┐
 | HTTP server thread | `launcher.main` | app | `server.serve_forever()`; each request gets its own thread (`ThreadingHTTPServer`, daemon) |
 | Startup thread | `launcher.main` | until ready | `ensure_ai()` → `ensure_stt()` → `start_tunnel()` |
 | Voice prepare thread | startup | short | `voice.prepare()`: download Piper + voice, start Piper |
-| Background thread | `launcher.main` | app | `Runtime.background_loop()`: every 5 min, 10-minute reminders for upcoming Google Calendar events (`calendar_tick`) |
+| Background thread | `launcher.main` | app | `Runtime.background_loop()`: every 5 min, 10-minute reminders for upcoming Google Calendar events (`calendar_tick`); every minute `proactive.tick` (new documents, finished downloads, daily briefing); every 2 s Windows balloons for due alerts, each in its own short thread |
 | `powershell` screenshot / clipboard image | `files.screenshot` / `clipboard_image` | per request (20 s timeout) | fixed scripts; PNG passed to Ollama, then deleted |
 | `ollama serve` | `Runtime.spawn` (only if not already running) | app | LLM server |
 | `piper.exe --json-input` | `Voice._process` | app (restarted on voice/rate change) | sentence synthesis |

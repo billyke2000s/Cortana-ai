@@ -9,7 +9,7 @@ UNPAIRED_PAGE=('<!doctype html><meta name=viewport content="width=device-width,i
  '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#020814;color:#e8f4ff;font:16px system-ui;text-align:center;padding:24px">'
  '<div><h1 style="color:#9fe2ff;letter-spacing:.12em">CORTANA</h1><p>This phone isn\'t paired with this session.</p>'
  '<p style="color:#a9c6e6">Scan the QR code shown in the Cortana window on your PC.<br>Each time Cortana restarts it shows a new QR code, so old links stop working.</p></div>').encode()
-SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode')
+SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode','briefing_time','watch_folders','watch_downloads')
 _weather_cache={'at':0,'key':None,'value':None}
 class AppServer(ThreadingHTTPServer):
     daemon_threads=True
@@ -64,7 +64,7 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/settings':
             store=runtime.store
             return self.send_json({**{k:store.get(k) for k in SETTINGS_PUBLIC},'model':runtime.model,'voice':store.get('voice','en_US-hfc_female-medium'),
-                'expression_mode':store.get('expression_mode','normal'),'context_mode':store.get('context_mode','auto'),'context':runtime.context(),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
+                'expression_mode':store.get('expression_mode','normal'),'context_mode':store.get('context_mode','auto'),'briefing_time':store.get('briefing_time',''),'watch_folders':store.get('watch_folders',True),'watch_downloads':store.get('watch_downloads',False),'context':runtime.context(),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
                 'voice_engine':store.get('voice_engine','piper'),'pc_controls':store.get('pc_controls',True),'tools_enabled':store.get('tools_enabled',True),'pc_access':store.get('pc_access',True),
                 'phone_access':store.get('phone_access','cloudflare'),'calendar_connected':bool(store.get('calendar_url')),'brave_connected':bool(store.get('brave_key')),
                 'voices':runtime.voice.catalog(),'models':runtime.installed_models(),'voice_status':runtime.voice.status})
@@ -190,7 +190,11 @@ def settings_action(runtime,data):
     if 'expression_mode' in data:
         if data['expression_mode'] not in ('normal','expressive'):raise ValueError('Choose Normal or Expressive.')
         store.set('expression_mode',data['expression_mode'])
-    for key in ('setup_complete','native_notifications'):
+    if 'briefing_time' in data:
+        at=data['briefing_time']
+        if not isinstance(at,str) or (at and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',at)):raise ValueError('Use a time like 07:30, or leave it empty.')
+        store.set('briefing_time',at)
+    for key in ('setup_complete','native_notifications','watch_folders','watch_downloads'):
         if key in data:
             if not isinstance(data[key],bool):raise ValueError('Use true or false for '+key+'.')
             store.set(key,data[key])
@@ -222,7 +226,8 @@ def documents_action(store,data,local):
         folder=Path(str(data.get('path','')).strip().strip('"')).expanduser()
         if not str(folder).strip() or not folder.is_dir():raise ValueError('That folder does not exist.')
         added,skipped=[],[]
-        candidates=[p for p in sorted(folder.rglob('*')) if p.is_file() and p.suffix.lower() in files.DOC_TYPES and len(p.relative_to(folder).parts)<=4][:80]
+        import proactive
+        candidates=proactive.folder_candidates(folder)
         for p in candidates:
             try:
                 if p.stat().st_size>files.MAX_FILE_BYTES:raise ValueError('too large')
@@ -232,6 +237,7 @@ def documents_action(store,data,local):
             except Exception:skipped.append(p.name)
         if not candidates:raise ValueError('No PDF, Word, PowerPoint or text files in that folder.')
         store.set('doc_folders',(store.get('doc_folders',[])+[str(folder)])[-20:])
+        if store.get('watch_seen',None) is not None:proactive.mark_seen(store,candidates)   # already read: no "new document" notices
         return {'added_count':len(added),'skipped':skipped[:20],'documents':store.documents()}
     else:raise ValueError('Unknown action.')
     return {'documents':store.documents()}

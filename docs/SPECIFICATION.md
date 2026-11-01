@@ -144,3 +144,11 @@ explains how to add one and everything else works.
 After model choice, first setup asks Normal (the former Expressive, strength 1.3) or Expressive (1.8), plus Piper/reference/Windows voice. Both have previews, persist on the PC, and remain changeable in Systems. Expression previews temporarily override status syncing. Reactions are deterministic from sentence wording (focused/curious/playful/concerned), with eye contact, smirks and brief gestures; no claim of original Halo animation data. Reduced motion suppresses head/hand movement.
 
 Systems displays measured transcription, first-token, speech preparation, whole reply and send-to-playback times. These are last observed timings, not a performance guarantee; they contain no conversation text.
+
+## 12. Proactive (1.6)
+
+Every minute the launcher checks, without the page open:
+- **New documents** in the folders added to Memory → Documents (same depth/type/count limits as adding a folder): each new or changed file is read in, and she says "New document ready: … Ask me to summarise it." Files present before the upgrade, or added together with a folder, are not announced. At most three notices per check; the rest become one "N more" notice. Switch: Systems → Briefing.
+- **Finished downloads** (opt-in): new files at the top level of the user's Downloads folder, ignoring partial downloads (`.crdownload`, `.part`, …) and files changed in the last 15 seconds.
+- **Daily briefing** (opt-in, Systems → Briefing time): once a day at that local time (or within three hours after, if the PC was off), the page opens Mission Briefing and reads it aloud.
+Notices use the alert path: spoken in the open page and shown as a Windows pop-up titled "Cortana".

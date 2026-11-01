@@ -222,7 +222,8 @@ async function announceAlerts(alerts){
  setTimeout(()=>{
   if(state!=='idle'||requestId!==alertRequest){announced.delete(key);return;}
   api('/api/objectives',{action:'ack',id:next.id}).then(()=>document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:'objectives'}}))).catch(()=>{});
-  speak(next.kind==='timer'?`Chief, your ${next.text.replace(/\s*timer$/i,'')} timer is done.`:`Reminder, Chief: ${next.text}.`);
+  if(next.kind==='briefing'&&window.CortanaPages?.readBriefing){window.CortanaPages.readBriefing();return;}   // daily briefing: open it and read it out
+  speak(next.kind==='timer'?`Chief, your ${next.text.replace(/\s*timer$/i,'')} timer is done.`:next.kind==='notice'?next.text:`Reminder, Chief: ${next.text}.`);
  },700);
 }
 

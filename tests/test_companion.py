@@ -124,7 +124,7 @@ class CompanionApiTests(unittest.TestCase):
             self.assertEqual(self.request('POST',path,body,{'Origin':'https://evil.example'})[0],403)
             self.assertEqual(self.request('POST',path,body,host='phone.example')[0],403)
         self.assertEqual(self.request('GET','/api/conversation',host='phone.example')[0],403)
-        for path in ['/neural.py','/lips.py','/companion.py','/voice-profile/reference.wav','/voice-profile/voice_profile.json']:
+        for path in ['/neural.py','/lips.py','/companion.py','/proactive.py','/voice-profile/reference.wav','/voice-profile/voice_profile.json']:
             self.assertEqual(self.request('GET',path)[0],404)
 
     def test_negative_keyword_burst_never_runs_whisper(self):
@@ -174,7 +174,7 @@ class VoiceSpeedAndReminderTests(unittest.TestCase):
 
     def test_failed_balloon_backs_off_then_gives_up(self):
         rt=self.make_runtime();tid=rt.store.add_item('reminder','Call home',time.time()-5);calls=[]
-        with patch.object(companion,'notify',side_effect=lambda text:calls.append(text) or False):
+        with patch.object(companion,'notify',side_effect=lambda text,title='':calls.append(text) or False):
             rt.notification_tick(now=0,wait=True);self.assertEqual(len(calls),1)
             rt.notification_tick(now=30,wait=True);self.assertEqual(len(calls),1)    # not every 2 seconds
             rt.notification_tick(now=61,wait=True);self.assertEqual(len(calls),2)
@@ -185,7 +185,7 @@ class VoiceSpeedAndReminderTests(unittest.TestCase):
 
     def test_balloon_does_not_block_the_loop(self):
         rt=self.make_runtime();rt.store.add_item('timer','Tea',time.time()-5);release=threading.Event()
-        def slow(text):release.wait(5);return True
+        def slow(text,title=''):release.wait(5);return True
         with patch.object(companion,'notify',side_effect=slow):
             started=time.monotonic();rt.notification_tick(now=0);rt.notification_tick(now=1)
             self.assertLess(time.monotonic()-started,1)   # the old loop waited ~9 s per balloon
@@ -246,3 +246,65 @@ class BrainApiTests(unittest.TestCase):
         self.assertEqual(self.request('POST','/api/settings',{'context_mode':'standard'})[0],200)
         s=json.loads(self.request('GET','/api/settings')[2]);self.assertEqual((s['context_mode'],s['context']),('standard',6144))
         self.rt.store.set('context_mode','auto')
+
+class ProactiveTests(unittest.TestCase):
+    """1.6 step 3: she notices new documents, finished downloads and briefing time on her own."""
+    def setUp(self):
+        import proactive;self.p=proactive
+        self.s=base.store.Store(':memory:');self.addCleanup(self.s.close)
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.dir=Path(self.tmp.name)
+
+    def notices(self):return [i['text'] for i in self.s.due_alerts() if i['kind']=='notice']
+
+    def test_new_document_is_read_and_mentioned_once(self):
+        (self.dir/'old.txt').write_text('Old notes about the garden.')
+        self.s.set('doc_folders',[str(self.dir)])
+        self.p.watch_folders_tick(self.s);self.assertEqual(self.notices(),[])   # first run: existing files are known
+        (self.dir/'plan.md').write_text('Project plan: launch in March.')
+        self.p.watch_folders_tick(self.s)
+        self.assertEqual(self.notices(),['New document ready: plan.md. Ask me to summarise it.'])
+        self.assertIn('plan.md',[d['name'] for d in self.s.documents()])
+        self.p.watch_folders_tick(self.s);self.assertEqual(len(self.notices()),1)
+        self.assertEqual(self.s.items(),[])   # notices never clutter Objectives or the briefing list
+
+    def test_many_new_documents_are_grouped_and_switch_off(self):
+        self.s.set('doc_folders',[str(self.dir)]);self.p.watch_folders_tick(self.s)
+        for i in range(6):(self.dir/f'n{i}.txt').write_text(f'Note number {i} with text.')
+        self.s.set('watch_folders',False);self.p.watch_folders_tick(self.s);self.assertEqual(self.notices(),[])
+        self.s.set('watch_folders',True);self.p.watch_folders_tick(self.s)
+        n=self.notices();self.assertEqual(len(n),4);self.assertEqual(n[-1],'3 more new documents are ready in your folders.')
+
+    def test_finished_downloads_only_when_enabled_and_settled(self):
+        (self.dir/'before.zip').write_bytes(b'x')
+        self.p.watch_downloads_tick(self.s,folder=self.dir);self.assertIsNone(self.s.get('downloads_seen',None))   # off by default
+        self.s.set('watch_downloads',True);self.p.watch_downloads_tick(self.s,folder=self.dir)   # remembers what was there
+        (self.dir/'game.exe').write_bytes(b'x');(self.dir/'movie.mkv.crdownload').write_bytes(b'x')
+        now=time.time()
+        self.p.watch_downloads_tick(self.s,now=now,folder=self.dir);self.assertEqual(self.notices(),[])   # still settling
+        self.p.watch_downloads_tick(self.s,now=now+60,folder=self.dir)
+        self.assertEqual(self.notices(),['Download finished: game.exe.'])
+
+    def test_daily_briefing_once_inside_window(self):
+        from datetime import datetime
+        self.s.set('briefing_time','07:30');at=datetime.now().replace(hour=7,minute=30,second=0,microsecond=0).timestamp()
+        self.assertFalse(self.p.briefing_tick(self.s,at-60))
+        self.assertTrue(self.p.briefing_tick(self.s,at+120));self.assertFalse(self.p.briefing_tick(self.s,at+600))
+        self.assertEqual([i['kind'] for i in self.s.due_alerts()],['briefing'])
+        self.s.set('briefing_last','');self.assertFalse(self.p.briefing_tick(self.s,at+4*3600))   # PC was off all morning: skip
+
+    def test_acknowledged_notice_is_done(self):
+        nid=self.s.add_notice('Download finished: a.zip.');self.s.acknowledge(nid)
+        self.assertEqual(self.s.item(nid)['done'],1);self.assertEqual(self.s.due_alerts(),[])
+        with self.assertRaises(ValueError):self.s.add_notice('x','timer')
+
+class ProactiveSettingsTests(unittest.TestCase):
+    request=base.ApiTests.request
+    setUpClass=classmethod(CompanionApiTests.setUpClass.__func__)
+    tearDownClass=classmethod(CompanionApiTests.tearDownClass.__func__)
+    def test_settings_roundtrip_and_validation(self):
+        self.assertEqual(self.request('POST','/api/settings',{'briefing_time':'07:30','watch_downloads':True,'watch_folders':False})[0],200)
+        s=json.loads(self.request('GET','/api/settings')[2])
+        self.assertEqual((s['briefing_time'],s['watch_downloads'],s['watch_folders']),('07:30',True,False))
+        for bad in [{'briefing_time':'7:30'},{'briefing_time':'25:00'},{'briefing_time':730},{'watch_downloads':'yes'}]:
+            self.assertEqual(self.request('POST','/api/settings',bad)[0],400,bad)
+        self.assertEqual(self.request('POST','/api/settings',{'briefing_time':''})[0],200)

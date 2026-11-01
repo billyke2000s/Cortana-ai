@@ -62,7 +62,7 @@ class Jobs:
     def snapshot(self):
         with self.lock:return dict(self.metrics)
 
-def notify(text):
+def notify(text,title='Cortana reminder'):
     if os.name!='nt':return False
     from runtime import HIDDEN
     # Input is data on stdin, never interpolated into PowerShell source.
@@ -72,10 +72,10 @@ Add-Type -AssemblyName System.Drawing
 $n = New-Object System.Windows.Forms.NotifyIcon
 $n.Icon = [System.Drawing.SystemIcons]::Information
 $n.Visible = $true
-$n.BalloonTipTitle = 'Cortana reminder'
+$n.BalloonTipTitle = [Environment]::GetEnvironmentVariable('CORTANA_TITLE')
 $n.BalloonTipText = [Console]::In.ReadToEnd()
 $n.ShowBalloonTip(8000)
 Start-Sleep -Seconds 9
 $n.Dispose()'''
-    p=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],input=str(text)[:200].encode('utf8'),capture_output=True,timeout=15,creationflags=HIDDEN)
+    p=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],input=str(text)[:200].encode('utf8'),capture_output=True,timeout=15,creationflags=HIDDEN,env={**os.environ,'CORTANA_TITLE':str(title)[:60]})
     return p.returncode==0

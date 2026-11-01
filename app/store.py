@@ -157,8 +157,15 @@ class Store:
         return self.insert('INSERT INTO items(kind,text,due,created) VALUES(?,?,?,?)', (kind, text, due, time.time()))
 
     def items(self, include_done=False):
-        sql = 'SELECT * FROM items' + ('' if include_done else ' WHERE done=0') + ' ORDER BY (due IS NULL), due, id'
+        sql = "SELECT * FROM items WHERE kind NOT IN ('notice','briefing')" + ('' if include_done else ' AND done=0') + ' ORDER BY (due IS NULL), due, id'
         return self.q(sql)
+
+    def add_notice(self, text, kind='notice'):
+        """Something she noticed on her own (new document, finished download, daily briefing). Due now; announced once."""
+        if kind not in ('notice', 'briefing'):
+            raise ValueError('Unknown notice type.')
+        text = ' '.join(str(text).split())[:200]
+        return self.insert('INSERT INTO items(kind,text,due,created) VALUES(?,?,?,?)', (kind, text, time.time(), time.time()))
 
     def item(self, item_id):
         rows = self.q('SELECT * FROM items WHERE id=?', (int(item_id),))
@@ -181,7 +188,7 @@ class Store:
 
     def acknowledge(self, item_id):
         item = self.item(item_id)
-        if item and item['kind'] == 'timer':
+        if item and item['kind'] in ('timer', 'notice', 'briefing'):
             self.q('UPDATE items SET announced=1, done=1 WHERE id=?', (item['id'],))
         elif item:
             self.q('UPDATE items SET announced=1 WHERE id=?', (item['id'],))

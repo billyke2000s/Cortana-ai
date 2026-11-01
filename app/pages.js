@@ -214,6 +214,10 @@ async function systems(){
    <p class="pg-muted">${Object.entries((await get('/api/status')).latency||{}).map(([k,v])=>esc(({tts_ms:'Speech preparation',first_token_ms:'First model token',transcription_ms:'Transcription',playback_ms:'Send to playback',reply_ms:'Full reply'})[k]||k)+': '+esc(v)+' ms').join(' · ')||'Timings appear after your first conversation.'}</p>
    <label class="pg-check"><input type="checkbox" id="sWake"${C.wake?' checked':''}> “Hey Cortana” wake word (this device; listens locally)</label>
    <h3>Briefing</h3>
+   <label>Daily spoken briefing at<input id="sBriefAt" type="time" value="${esc(s.briefing_time||'')}"></label>
+   <p class="pg-muted">Leave empty for none. Keep this page open on the PC (or phone) so she can speak it; Windows also shows a pop-up.</p>
+   <label class="pg-check"><input type="checkbox" id="sWatchDocs"${s.watch_folders!==false?' checked':''}> Tell me when new documents appear in my Documents folders</label>
+   <label class="pg-check"><input type="checkbox" id="sWatchDl"${s.watch_downloads?' checked':''}> Tell me when a download finishes</label>
    <label>Home town (for weather)<input id="sHome" value="${esc(s.home_location||'')}" maxlength="80" placeholder="e.g. London"></label>
    <label>Calendar secret iCal address ${s.calendar_connected?'<span class="pg-ok">connected</span>':''}<input id="sCal" type="password" autocomplete="off" placeholder="${s.calendar_connected?'Leave blank to keep':'https://calendar.google.com/calendar/ical/…/basic.ics'}"></label>
    <p class="pg-muted">Google Calendar → Settings → your calendar → “Secret address in iCal format”. Treat it like a password.</p>
@@ -234,7 +238,7 @@ async function saveSystems(){
  data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;data.pc_access=v('sAccess').checked;
  if(v('sEngine').value!==s.voice_engine)data.voice_engine=v('sEngine').value;
  if(v('sVoice').value!==s.voice)data.voice=v('sVoice').value;
- data.expression_mode=v('sExpression').value;data.context_mode=v('sContext').value;data.native_notifications=v('sNotifications').checked;
+ data.expression_mode=v('sExpression').value;data.context_mode=v('sContext').value;data.briefing_time=v('sBriefAt').value;data.watch_folders=v('sWatchDocs').checked;data.watch_downloads=v('sWatchDl').checked;data.native_notifications=v('sNotifications').checked;
  data.home_location=v('sHome').value.trim();
  if(v('sCal').value.trim())data.calendar_url=v('sCal').value.trim();
  if(v('sBrave').value.trim())data.brave_key=v('sBrave').value.trim();
@@ -291,4 +295,5 @@ async function setup(){
  }catch(e){failed('setup','Meet Cortana',e);}
 }
 const PAGES={setup,chat,tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
-window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;}};
+window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;},
+ async readBriefing(){await briefing();if(lastBriefing)C.speak(briefingSpeech(lastBriefing));}};
