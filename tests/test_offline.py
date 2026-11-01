@@ -590,9 +590,11 @@ class WeatherFirstTests(unittest.TestCase):
             tools.weather = old
         self.assertEqual(asked[0], 'Paris')
         self.assertEqual(events[0], {'type': 'tool', 'name': 'get_weather', 'label': 'CHECKING WEATHER'})
-        first = fake_ollama.CHAT_REQUESTS[0]['messages']   # the model's first request already holds the real result
-        self.assertEqual([m['role'] for m in first[-3:]], ['user', 'assistant', 'tool'])
-        self.assertIn('offline', first[-1]['content'])
+        first = fake_ollama.CHAT_REQUESTS[0]['messages']
+        self.assertEqual(first[-1]['role'], 'user')  # No Python intent pre-routing: the model chose the weather tool.
+        second = fake_ollama.CHAT_REQUESTS[1]['messages']
+        self.assertEqual([m['role'] for m in second[-3:]], ['user', 'assistant', 'tool'])
+        self.assertIn('offline', second[-1]['content'])
         rt.close()
 
 
@@ -711,7 +713,7 @@ class ApiTests(unittest.TestCase):
     def test_stream_with_tool_updates_objectives(self):
         events = self.chat('Set a 10 minute timer for the pasta')
         types_ = [e['type'] for e in events]
-        self.assertEqual(types_[:2], ['tool', 'refresh'])
+        self.assertEqual([t for t in types_ if t!='activity'][:2], ['tool', 'refresh'])
         self.assertEqual(types_[-1], 'done')
         items = json.loads(self.request('GET', '/api/objectives')[2])['items']
         self.assertTrue(any(i['text'] == 'pasta' for i in items))
@@ -759,7 +761,7 @@ class ApiTests(unittest.TestCase):
     def test_private_files_are_not_served(self):
         for path in ('/runtime.py', '/server.py', '/store.py', '/tools.py', '/voice.py', '/files.py', '/hardware.py', '/assets/%2e%2e/runtime.py'):
             self.assertEqual(self.request('GET', path)[0], 404, path)
-        for path in ('/', '/app.js', '/pages.js', '/avatar.js', '/responsive.css'):
+        for path in ('/', '/app.js', '/pages.js', '/agent-pages.js', '/avatar.js', '/responsive.css'):
             self.assertEqual(self.request('GET', path)[0], 200, path)
 
     def test_models_api_and_guards(self):

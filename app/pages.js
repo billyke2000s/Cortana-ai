@@ -193,11 +193,11 @@ async function systems(){
   const s=await get('/api/settings');
   const opt=(v,t,sel)=>`<option value="${esc(v)}"${sel?' selected':''}>${esc(t)}</option>`;
   page('settings','Systems',`
-   <h3>Assistant</h3>
+   <h3>Assistant</h3><button type="button" class="pg-btn pg-wide" data-act="agent-abilities">Abilities, connections and Activity…</button>
    <div id="sModels"><p class="pg-muted">Checking your hardware…</p></div>
    <label class="pg-check"><input type="checkbox" id="sTools"${s.tools_enabled?' checked':''}> Abilities (timers, memory, weather, search, calendar)</label>
    <label class="pg-check"><input type="checkbox" id="sPC"${s.pc_controls?' checked':''}> PC controls (media, volume, open allowed apps)</label>
-   <label class="pg-check"><input type="checkbox" id="sAccess"${s.pc_access!==false?' checked':''}> Screen, clipboard and file access (only when you ask; nothing leaves this PC)</label>
+   <label class="pg-check"><input type="checkbox" id="sAccess"${s.pc_access!==false?' checked':''}> Screen, clipboard and file access (includes your scheduled goals; configured tools may share selected data)</label>
    <h3>Character</h3>
    <label>Expression<select id="sExpression">${opt('normal','Normal',s.expression_mode!=='expressive')}${opt('expressive','Expressive',s.expression_mode==='expressive')}</select></label>
    <button type="button" class="pg-btn pg-wide" data-act="expression-preview">Preview expression</button>
@@ -251,6 +251,7 @@ D.body().addEventListener('click',async e=>{
   else if(act==='clear'){if(!confirmClear.armed){confirmClear.armed=true;btn.textContent='Tap again to clear everything';setTimeout(()=>{confirmClear.armed=false;},4000);return;}
    await post('/api/memory',{action:'clear_history'});C.clearConversation();memory();}
   else if(act==='read'&&lastBriefing)C.speak(briefingSpeech(lastBriefing));
+  else if(act==='agent-abilities')window.CortanaPages?.open('abilities');
   else if(act==='save')saveSystems();
   else if(act==='expression-preview'){C.applyMode(document.getElementById('sExpression').value,true);C.speak('Still with me, Chief? Of course you are. What is our next move?');}
   else if(act==='voice-preview'){await post('/api/settings',{voice_engine:document.getElementById('sEngine').value,voice:document.getElementById('sVoice').value});C.speak('Systems online, Chief. I am ready when you are.');}

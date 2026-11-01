@@ -13,7 +13,7 @@ work.mkdir(parents=True, exist_ok=True)
 if os.name != 'nt':
     sys.exit('Build on Windows: Cortana.exe uses Windows speech, keyboard and process APIs.')
 
-needed = {'PyInstaller': 'pyinstaller', 'qrcode': 'qrcode', 'dateutil': 'python-dateutil', 'tzdata': 'tzdata', 'pypdf': 'pypdf', 'sherpa_onnx': 'sherpa-onnx==2.0.1', 'numpy': 'numpy'}
+needed = {'PyInstaller': 'pyinstaller', 'qrcode': 'qrcode', 'dateutil': 'python-dateutil', 'tzdata': 'tzdata', 'pypdf': 'pypdf', 'sherpa_onnx': 'sherpa-onnx==2.0.1', 'numpy': 'numpy', 'playwright':'playwright>=1.51,<2', 'docx':'python-docx>=1.1,<2', 'reportlab':'reportlab>=4,<5', 'openpyxl':'openpyxl>=3.1,<4', 'pypdfium2':'pypdfium2>=4.30,<6', 'PIL':'Pillow>=10,<13'}
 missing = [pkg for mod, pkg in needed.items() if importlib.util.find_spec(mod) is None]
 if missing:
     print('Installing', ', '.join(missing))
@@ -22,13 +22,15 @@ if missing:
 if not (app / 'assets' / 'cortana.glb').exists():
     print('WARNING: app/assets/cortana.glb is missing - the 3D character will not appear in this build.')
 
-WEB_FILES = ['index.html', 'app.js', 'pages.js', 'avatar.js', 'responsive.css', 'mic-worklet.js', 'speech.ps1', 'manifest.webmanifest', 'app-icon.svg']
+WEB_FILES = ['index.html', 'app.js', 'pages.js', 'agent-pages.js', 'avatar.js', 'responsive.css', 'mic-worklet.js', 'speech.ps1', 'manifest.webmanifest', 'app-icon.svg']
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onefile', '--windowed', '--name', 'Cortana',
         '--distpath', str(dist), '--workpath', str(work / 'pyinstaller'), '--specpath', str(work), '--paths', str(app)]
-for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'sherpa_onnx', 'numpy']:
+for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'sherpa_onnx', 'numpy', 'agent', 'workspace', 'browser_agent', 'connections', 'pc_agent', 'playwright.sync_api', 'docx', 'openpyxl', 'reportlab', 'pypdfium2', 'PIL']:
     args += ['--hidden-import', name]
 args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx']
-for name in ['PIL', 'torch', 'cv2', 'matplotlib', 'scipy', 'pandas']:
+for name in ['playwright','docx','reportlab','pypdfium2','pypdfium2_raw']:
+    args += ['--collect-all',name]
+for name in ['torch', 'cv2', 'matplotlib', 'scipy', 'pandas']:
     args += ['--exclude-module', name]
 for name in WEB_FILES:
     args += ['--add-data', str(app / name) + os.pathsep + '.']

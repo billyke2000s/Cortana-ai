@@ -7,3 +7,11 @@ pypdf>=5.0
 # CPU voice and small keyword spotter (no PyTorch).
 sherpa-onnx==2.0.1
 numpy>=1.26,<3
+
+# Optional abilities bundled in the desktop app; browser uses installed Edge on Windows.
+playwright>=1.51,<2
+python-docx>=1.1,<2
+reportlab>=4,<5
+openpyxl>=3.1,<4
+pypdfium2>=4.30,<6
+Pillow>=10,<13

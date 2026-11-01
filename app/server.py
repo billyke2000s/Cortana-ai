@@ -58,6 +58,26 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/status':
             alerts=[{'id':i['id'],'kind':i['kind'],'text':i['text'],'due':i['due']} for i in runtime.store.due_alerts()]
             return self.send_json({'timedSpeech':os.name=='nt','ai':runtime.ai_ready,'transcription':runtime.stt_ready,'model':runtime.model,'status':runtime.status,'canPair':self.local,'phoneReady':bool(runtime.phone_url),'error':runtime.error,'voice':runtime.voice.status,'alerts':alerts,'chooseModel':runtime.awaiting_choice,'choosePersonality':not runtime.store.get('setup_complete',False) and (runtime.model_chosen or not runtime.ask_model),'expressionMode':runtime.store.get('expression_mode','normal'),'latency':runtime.jobs.snapshot(),'wakeDetector':runtime.neural.wake_status,'lipSync':runtime.lips.status})
+        if parsed.path=='/api/agent':
+            from connections import summaries
+            return self.send_json({'settings':runtime.agent.settings(),'roots':list(runtime.agent.workspace.roots()),'canConfigure':self.local,
+                'connections':summaries(runtime.store),'missions':runtime.store.agent_list('mission',20),'activity':runtime.store.agent_list('activity',40),
+                'approvals':[{k:v for k,v in a.items() if k not in ('arguments','category')} for a in runtime.store.agent_list('approval',30) if a['state']=='pending' and a['expires']>time.time()],
+                'jobs':runtime.store.agent_list('automation'),'artifacts':[{k:v for k,v in a.items() if k!='path'} for a in runtime.store.agent_list('artifact',30)]})
+        if parsed.path.startswith('/api/artifacts/'):
+            item=runtime.store.agent_get(parsed.path.rsplit('/',1)[-1],'artifact')
+            if not item:return self.send_error(404)
+            try:
+                path=runtime.agent.workspace.path(item['path'],True)
+                if not path.is_file() or path.stat().st_size>32*1024*1024:return self.send_error(404)
+            except ValueError:return self.send_error(404)
+            name=re.sub(r'[^A-Za-z0-9._ -]','_',item['name'])[:160]
+            self.send_response(200);self.send_header('Content-Type','application/octet-stream');self.send_header('Content-Disposition','attachment; filename="'+name+'"');self.send_header('Content-Security-Policy',"sandbox; default-src 'none'")
+            self.send_header('Content-Length',str(path.stat().st_size));self.end_headers()
+            with path.open('rb') as source:
+                import shutil
+                shutil.copyfileobj(source,self.wfile)
+            return
         if parsed.path=='/api/conversation':return self.send_json({'messages':runtime.store.recent_messages(60),'summary':runtime.store.conversation_summary()})
         if parsed.path=='/api/objectives':return self.send_json({'items':runtime.store.items(),'recent_alerts':runtime.store.recent_alerts()})
         if parsed.path=='/api/memory':return self.send_json({'facts':runtime.store.facts(),'conflicts':runtime.store.fact_conflicts(),'messages':runtime.store.recent_messages(60)})
@@ -80,7 +100,7 @@ class Handler(SimpleHTTPRequestHandler):
             if not self.local:return self.send_json({'error':'Pairing is available on the PC only.'},403)
             return self.send_json({'ready':bool(runtime.phone_url),'url':runtime.phone_url})
         public_path=unquote(parsed.path).replace('\\','/')
-        allowed=public_path in ('/','/index.html','/app.js','/avatar.js','/pages.js','/mic-worklet.js','/responsive.css','/manifest.webmanifest','/app-icon.svg') or public_path.startswith(('/assets/','/vendor/'))
+        allowed=public_path in ('/','/index.html','/app.js','/avatar.js','/pages.js','/agent-pages.js','/mic-worklet.js','/responsive.css','/manifest.webmanifest','/app-icon.svg') or public_path.startswith(('/assets/','/vendor/'))
         if not allowed or '..' in public_path.split('/'):return self.send_error(404)
         super().do_GET()
     def do_POST(self):
@@ -89,11 +109,50 @@ class Handler(SimpleHTTPRequestHandler):
         if origin and origin!=expected:return self.send_json({'error':'Request must come from Cortana.'},403)
         if not self.headers.get('Content-Type','').startswith('application/json'):return self.send_json({'error':'JSON required.'},415)
         try:
-            size=int(self.headers.get('Content-Length','0'));limit={'/api/transcribe':1500000,'/api/documents':16000000}.get(self.path,64000)
+            size=int(self.headers.get('Content-Length','0'));limit={'/api/transcribe':1500000,'/api/documents':16000000,'/api/agent-upload':45000000}.get(self.path,64000)
             if not 0<size<=limit:return self.send_json({'error':'Request is too large or empty.'},400)
             data=json.loads(self.rfile.read(size))
             if not isinstance(data,dict):raise ValueError('Invalid request.')
             runtime=self.server.runtime
+            if self.path=='/api/agent-upload':
+                if not runtime.store.get('pc_access',True):raise ValueError('PC access is switched off.')
+                name=os.path.basename(str(data.get('name','')).replace('\\','/'))
+                if not name or name in ('.','..') or ':' in name:raise ValueError('Choose a valid filename.')
+                raw=base64.b64decode(str(data.get('data','')),validate=True)
+                if not raw or len(raw)>32*1024*1024:raise ValueError('Choose a file under 32 MB.')
+                path=runtime.agent.workspace.path('Uploads/'+secrets.token_hex(6)+'-'+name);path.parent.mkdir(exist_ok=True,parents=True);path.write_bytes(raw)
+                return self.send_json(runtime.agent.workspace.artifact(path))
+            if self.path=='/api/agent':
+                action=data.get('action')
+                if action=='review':
+                    if not isinstance(data.get('allow'),bool):raise ValueError('Choose approve or deny.')
+                    return self.send_json(runtime.agent.review(data.get('id'),data['allow']))
+                if action=='undo':return self.send_json(runtime.agent.workspace.undo(data.get('id')))
+                if action=='target':
+                    item=runtime.store.agent_get(data.get('id'),'artifact')
+                    if not item:raise ValueError('Choose an existing file.')
+                    path=runtime.agent.workspace.path(item['path'],True);runtime.store.set('active_file',str(path));return self.send_json({'ok':True,'name':path.name})
+                if action=='job':return self.send_json(runtime.agent.automation({**data,'action':data.get('job_action')}))
+                if not self.local:return self.send_json({'error':'Configure abilities on the PC itself.'},403)
+                if action=='connection':
+                    from connections import configure
+                    result=configure(runtime.store,data);runtime.agent.connection_clients.clear();return self.send_json({'connections':result})
+                if action=='root':
+                    folder=Path(str(data.get('path','')).strip().strip('"')).expanduser().resolve()
+                    name=str(data.get('name','')).strip()
+                    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,30}',name) or name=='Workspace':raise ValueError('Choose a unique folder label with letters and digits.')
+                    if not folder.is_dir():raise ValueError('Choose an existing folder.')
+                    from runtime import DATA
+                    if folder.is_relative_to(DATA.resolve()) or DATA.resolve().is_relative_to(folder):raise ValueError('Choose a work folder that does not contain Cortana internal data.')
+                    roots=[r for r in runtime.store.get('work_roots',[]) if r['name']!=name]
+                    if not data.get('remove'):roots.append({'name':name,'path':str(folder)})
+                    if len(roots)>20:raise ValueError('Use at most twenty folders.')
+                    runtime.store.set('work_roots',roots);return self.send_json({'ok':True})
+                if action=='preferences':
+                    mode=data.get('reasoning','fast');context=data.get('context_tokens',6144)
+                    if mode not in ('fast','deep') or type(context) is not int or context not in runtime.agent.context_choices():raise ValueError('Choose a supported reasoning mode and a context rated for this PC.')
+                    runtime.store.set('reasoning',mode);runtime.store.set('context_tokens',context);return self.send_json(runtime.agent.settings())
+                raise ValueError('Unknown ability setting.')
             if self.path=='/api/cancel':
                 key=runtime.jobs.key(data.get('request_id'))
                 if not key:raise ValueError('Request ID required.')

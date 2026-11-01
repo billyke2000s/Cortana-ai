@@ -77,7 +77,7 @@ class Handler(BaseHTTPRequestHandler):
                 {'function': {'name': 'add_event', 'arguments': {'title': 'Study time', 'day': 'tomorrow', 'time': '15:00'}}}]}}, {'done': True}])
         if 'weather' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
-                {'function': {'name': 'get_weather', 'arguments': {'place': 'London'}}}]}}, {'done': True}])
+                {'function': {'name': 'get_weather', 'arguments': {'place': 'Paris' if 'paris' in user else 'London'}}}]}}, {'done': True}])
         if 'remember' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'remember', 'arguments': {'fact': "The user's dog is called Max"}}}]}}, {'done': True}])
