@@ -39,9 +39,12 @@ Small models forget it, so fenced code and table rows are diverted anyway. **Cos
 **Why:** Piper reports no mouth shapes; loudness + zero-crossing per 45 ms gives convincing movement with no extra model.
 **Cost:** not phoneme-accurate. The Windows voice keeps its real viseme events.
 
-### D-010: Validate textures after loading the 3D model and retry
-**Why:** a WebP texture occasionally failed to decode on first load, and three.js silently rendered the hair as solid
-geometry. Detecting the missing map and reloading (up to 3 times) fixes it without a refresh.
+### D-010: Hair as depth-writing cut-out, and texture validation with retry
+**Why:** the hair sometimes rendered as a dark helmet with strands across the face until a refresh. The GLB marks the hair
+material as blended, which also disables depth writes; the app renders it as an alpha-tested cut-out but had left
+`depthWrite` off, so the draw order (which depends on GPU shader compile timing) decided which hair card won. Fix:
+`depthWrite = true`, normal blending, `alphaToCoverage` for smooth edges. Separately, a WebP texture can occasionally fail to
+decode and three.js silently renders without it, so textures are validated after load and the model is reloaded (up to 3 times).
 
 ### D-011: SQLite for all local state
 **Why:** standard library, single file, safe with a lock across server threads, survives restarts.

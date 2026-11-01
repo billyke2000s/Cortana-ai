@@ -203,7 +203,10 @@ try{
   for(const mat of (Array.isArray(o.material)?o.material:[o.material])){
    mat.color.multiply(new THREE.Color(.36,.72,1));
    mat.emissive.set(0x167cda);mat.emissiveIntensity=.10;
-   if(/hair/i.test(mat.name)){mat.transparent=false;mat.alphaTest=.45;mat.side=THREE.DoubleSide;mat.color.setRGB(.15,.35,.62);}
+   if(/hair/i.test(mat.name)){mat.transparent=false;mat.alphaTest=.45;mat.side=THREE.DoubleSide;mat.color.setRGB(.15,.35,.62);
+    // The GLB marks the hair as blended, which also turns depthWrite off. Rendered as cut-out without depth, hair cards
+    // overdraw each other and the face in whatever order the GPU compiled them: the intermittent 'helmet' hair (D-010).
+    mat.depthWrite=true;mat.blending=THREE.NormalBlending;mat.alphaToCoverage=true;}
    if(/^Eye/.test(mat.name)){mat.color.setRGB(.35,.8,1);mat.emissive.setRGB(.1,.35,.55);mat.emissiveIntensity=.25;mat.roughness=.3;}
    mat.needsUpdate=true;
   }

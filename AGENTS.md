@@ -276,7 +276,7 @@ Don't duplicate content between docs; link instead. Keep README claims true (e.g
 ## 14. Mistakes already made once (don't repeat them)
 
 1. **QR pairing showed "Open Cortana using the QR code".** The cookie was `SameSite=Strict`; browsers drop Strict cookies on navigations that start in another app or site (QR scanners), so the redirect after pairing arrived without it. Fix: `SameSite=Lax`. Python HTTP clients don't enforce SameSite, so test in a real browser. → D-012
-2. **Hair rendered as a solid block until refresh.** A WebP texture failed to decode on first load; three.js silently renders without it. Fix: validate textures after load and retry. → D-010
+2. **Hair rendered as a dark helmet with strands across the face, varying between loads.** The GLB marks the hair as blended, which sets `depthWrite=false`; the app switched it to cut-out (`alphaTest`) but left depth writes off, so hair cards overdrew each other and the face in GPU compile order. Fix: `depthWrite=true` (+ `alphaToCoverage`). A second, rarer cause (a texture failing to decode) is handled by validating textures after load and retrying. → D-010
 3. **"Add" button did nothing.** A hidden `<input type=number min=0.1 step=0.5 value=5>` was invalid (5 isn't on the step grid), so the browser blocked submit silently. Use `step="any"`.
 4. **`ReferenceError` risk:** `const wake` was declared at the bottom of `app.js` but used by `idleLabel()`, called from `stop()`/`setState()`. Declare shared state at the top.
 5. **Hidden inputs showed anyway:** `display:block` CSS overrode the `hidden` attribute.

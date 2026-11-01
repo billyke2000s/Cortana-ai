@@ -12,6 +12,7 @@ All notable changes. Dates are UK time.
 - `GET/POST /api/models`; `app/hardware.py`; 5 new tests (37 total).
 
 ### Fixed
+- **Hair rendering** (dark helmet, strands across the face, varying per load): hair now writes depth as a cut-out material.
 - Validation messages (e.g. "too big for this PC") now reach the page instead of a generic "Invalid request".
 
 ## [1.0.0] - 2026-11-01
