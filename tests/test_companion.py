@@ -125,7 +125,7 @@ class CompanionApiTests(unittest.TestCase):
             self.assertEqual(self.request('POST',path,body,{'Origin':'https://evil.example'})[0],403)
             self.assertEqual(self.request('POST',path,body,host='phone.example')[0],403)
         self.assertEqual(self.request('GET','/api/conversation',host='phone.example')[0],403)
-        for path in ['/neural.py','/lips.py','/companion.py','/proactive.py','/work.py','/voice-profile/reference.wav','/voice-profile/voice_profile.json']:
+        for path in ['/neural.py','/lips.py','/companion.py','/proactive.py','/work.py','/openjarvis.py','/control.py','/voice-profile/reference.wav','/voice-profile/voice_profile.json']:
             self.assertEqual(self.request('GET',path)[0],404)
 
     def test_whisper_decides_every_wake_burst(self):
@@ -688,3 +688,111 @@ class VisibleControlTests(unittest.TestCase):
         cur=control.cursor_file();self.assertEqual(struct.unpack('<HHH',cur[:6]),(0,2,1))
         size,=struct.unpack('<I',cur[14:18]);offset,=struct.unpack('<I',cur[18:22]);self.assertEqual(offset,22);self.assertEqual(len(cur),22+size)
         hotspot=struct.unpack('<HH',cur[10:14]);self.assertEqual(hotspot,(0,0))   # the click point is the arrow tip
+
+class OpenJarvisTests(unittest.TestCase):
+    """1.8 (D-042): OpenJarvis as the brain, Cortana as the face; local-only, approvals on the PC, safe config edit."""
+    request=base.ApiTests.request
+    @classmethod
+    def setUpClass(cls):
+        import fake_openjarvis as fj;cls.fj=fj;cls.jsrv=fj.start();cls.jurl=f'http://127.0.0.1:{cls.jsrv.server_address[1]}'
+        CompanionApiTests.setUpClass.__func__(cls)
+    @classmethod
+    def tearDownClass(cls):
+        CompanionApiTests.tearDownClass.__func__(cls);cls.jsrv.shutdown();cls.jsrv.server_close()
+    def setUp(self):
+        self.rt.store.set('brain','openjarvis');self.rt.store.set('openjarvis_url',self.jurl);self.rt.store.set('openjarvis_key','')
+        self.rt.jarvis.info=None;self.rt.jarvis.cache['at']=0;self.fj.REQUESTS.clear();self.fj.HEADERS.clear();self.fj.APPROVALS.clear()
+    def tearDown(self):self.rt.store.set('brain','cortana')
+    stream=BrainApiTests.stream
+
+    def test_conversation_goes_to_openjarvis_and_is_spoken(self):
+        status,events=self.stream({'messages':[{'role':'user','content':'Check my email please'}]})
+        self.assertEqual(status,200);req=self.fj.REQUESTS[-1]
+        self.assertEqual((req['model'],req['stream']),('qwen3.5:9b',True))
+        self.assertEqual(req['messages'][0]['role'],'system');self.assertIn('Cortana',req['messages'][0]['content'])
+        self.assertEqual(req['messages'][-1],{'role':'user','content':'Check my email please'})
+        spoken=' '.join(e['text'] for e in events if e['type']=='sentence');self.assertIn('two new emails',spoken)
+        self.assertEqual(events[0]['label'],'OPENJARVIS IS WORKING');self.assertEqual(events[-1]['type'],'done')
+        self.assertIn('two new emails',self.rt.store.recent_messages(1)[0]['content'])
+
+    def test_key_is_sent_but_never_returned(self):
+        self.request('POST','/api/settings',{'openjarvis_key':'sk-local-123'})
+        self.stream({'messages':[{'role':'user','content':'Hello'}]})
+        self.assertEqual(self.fj.HEADERS[-1].get('Authorization'),'Bearer sk-local-123')
+        raw=self.request('GET','/api/settings')[2].decode();self.assertNotIn('sk-local-123',raw);self.assertTrue(json.loads(raw)['openjarvis_key_set'])
+
+    def test_timers_stay_with_cortana(self):
+        self.stream({'messages':[{'role':'user','content':'Set a timer for 5 minutes'}]})
+        self.assertEqual(self.fj.REQUESTS,[]);self.assertTrue(any(i['kind']=='timer' for i in self.rt.store.items()))
+
+    def test_falls_back_to_her_own_brain(self):
+        self.rt.store.set('openjarvis_url','http://127.0.0.1:9')   # nothing listening
+        with patch('openjarvis.find_install',return_value=None):
+            status,events=self.stream({'messages':[{'role':'user','content':'Hello there'}]})
+        spoken=' '.join(e['text'] for e in events if e['type']=='sentence')
+        self.assertIn("OpenJarvis isn't running",spoken);self.assertIn('Good evening, Chief',spoken)   # fake Ollama answered
+
+    def test_approvals_show_on_the_pc_and_are_decided_there(self):
+        self.fj.APPROVALS['a1']={'status':'pending','description':'Send an email to your boss'}
+        st=json.loads(self.request('GET','/api/status')[2]);self.assertEqual(st['jarvisApprovals'][0]['summary'],'Send an email to your boss')
+        self.assertEqual(self.request('POST','/api/jarvis/decide',{'id':'a1','approve':True},host='phone.example')[0],403)
+        self.assertEqual(self.request('POST','/api/jarvis/decide',{'id':'a1','approve':True})[0],200)
+        self.assertEqual(self.fj.APPROVALS['a1']['status'],'approved')
+        self.assertEqual(self.request('POST','/api/jarvis/decide',{'id':'gone','approve':False})[0],400)
+        self.assertEqual(self.request('POST','/api/jarvis/decide',{'id':'../../x','approve':True})[0],400)
+
+    def test_settings_are_local_only_and_loopback_only(self):
+        import openjarvis
+        for bad in ['http://evil.example:8000','https://127.0.0.1:8000','http://192.168.1.5:8000','http://127.0.0.1:8000/../x']:
+            with self.assertRaises(ValueError,msg=bad):openjarvis.check_url(bad)
+        self.assertEqual(self.request('POST','/api/settings',{'openjarvis_url':'http://evil.example:8000'})[0],400)
+        with self.assertRaises(ValueError):base.server.settings_action(self.rt,{'brain':'openjarvis'},local=False)
+        s=json.loads(self.request('GET','/api/settings')[2]);self.assertTrue(s['openjarvis']['running']);self.assertEqual(s['brain'],'openjarvis')
+
+class WindowsControlConfigTests(unittest.TestCase):
+    def setUp(self):
+        import openjarvis;self.oj=openjarvis
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.path=Path(self.tmp.name)/'config.toml'
+    def test_new_and_existing_configs(self):
+        self.oj.add_windows_control(self.path)
+        import tomllib;cfg=tomllib.loads(self.path.read_text())
+        self.assertTrue(cfg['tools']['mcp']['enabled']);self.assertEqual(json.loads(cfg['tools']['mcp']['servers'])[0]['args'],self.oj.WINDOWS_MCP['args'])
+        self.assertIn('already',self.oj.add_windows_control(self.path))   # idempotent
+        self.path.write_text('[agent]\nname = "orchestrator"\n\n[tools.mcp]\nenabled = false\nservers = \'[{"name": "files", "command": "fs-mcp"}]\'\n\n[server]\nport = 8000\n')
+        self.oj.add_windows_control(self.path);cfg=tomllib.loads(self.path.read_text())
+        self.assertEqual([s['name'] for s in json.loads(cfg['tools']['mcp']['servers'])],['files','windows'])
+        self.assertTrue(cfg['tools']['mcp']['enabled']);self.assertEqual((cfg['server']['port'],cfg['agent']['name']),(8000,'orchestrator'))
+        self.assertIn('fs-mcp',(Path(self.tmp.name)/'config.toml.cortana-backup').read_text())
+    def test_unusual_format_is_left_alone(self):
+        self.path.write_text('[tools.mcp]\nenabled = true\nservers = "mcp.json"\n');before=self.path.read_text()
+        with self.assertRaises(ValueError):self.oj.add_windows_control(self.path)
+        self.assertEqual(self.path.read_text(),before)
+
+class OpenJarvisSafetyTests(unittest.TestCase):
+    def test_setup_config_and_limits(self):
+        import openjarvis,tomllib
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'config.toml'
+            openjarvis.setup_config('http://127.0.0.1:51234','qwen3.5:9b',path)
+            cfg=tomllib.loads(path.read_text())
+            self.assertEqual((cfg['agent']['default_agent'],cfg['engine']['ollama']['host'],cfg['intelligence']['default_model'],cfg['server']['host']),
+                             ('orchestrator','http://127.0.0.1:51234','qwen3.5:9b','127.0.0.1'))
+            self.assertNotIn('shell_exec',cfg['tools']['enabled'])
+            path.write_text('[agent]\ndefault_agent = "mine"\n');openjarvis.setup_config('http://127.0.0.1:1','x',path)
+            self.assertIn('mine',path.read_text())   # an existing config is never replaced
+        self.assertIn('PowerShell,Registry,FileSystem,Process',openjarvis.WINDOWS_MCP['args'])
+
+class OpenJarvisPhoneTests(OpenJarvisTests):
+    """From the phone, Cortana answers herself even when OpenJarvis is the brain (its tools act on the PC)."""
+    def test_conversation_goes_to_openjarvis_and_is_spoken(self):pass
+    def test_key_is_sent_but_never_returned(self):pass
+    def test_timers_stay_with_cortana(self):pass
+    def test_falls_back_to_her_own_brain(self):pass
+    def test_approvals_show_on_the_pc_and_are_decided_there(self):pass
+    def test_settings_are_local_only_and_loopback_only(self):pass
+    def test_phone_never_reaches_openjarvis(self):
+        list(self.rt.chat_stream([{'role':'user','content':'Check my email please'}],local=False))
+        self.assertEqual(self.fj.REQUESTS,[])
+    def test_windows_control_needs_full_access(self):
+        self.rt.store.set('full_access',False)
+        self.assertEqual(self.request('POST','/api/jarvis/windows-control',{})[0],400)

@@ -2,6 +2,14 @@
 
 All notable changes. Dates are UK time.
 
+## [1.8.0] - 2026-11-01
+
+### Added
+- **OpenJarvis brain** (Systems → Brain → Who thinks: OpenJarvis). Cortana stays the face, voice and hologram; conversations on the PC go to your local OpenJarvis server, whose agent uses its tools (web, browser, code, files, PDFs, memory, knowledge, weather, calendar) and MCP servers. Cortana starts OpenJarvis from your OpenJarvis folder when it isn't running, and answers herself if it can't start. Timers, reminders and weather stay with Cortana. From the phone she always answers herself.
+- First switch to OpenJarvis writes a Cortana-ready OpenJarvis settings file if there is none: orchestrator agent, Cortana's own Ollama and model (one copy in graphics memory), local-only server. Existing settings are never replaced.
+- **Give OpenJarvis control of Windows**: adds Windows-MCP (clicks and types using Windows' own list of buttons and fields, not pixel guessing) with PowerShell, Registry, FileSystem and Process switched off; commands stay with Cortana's approved run_command. Needs Full access on; the original OpenJarvis settings are kept as `config.toml.cortana-backup`.
+- OpenJarvis's approval requests appear as Cortana approval cards on the PC.
+
 ## [1.7.1] - 2026-11-01
 
 ### Added

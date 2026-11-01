@@ -63,7 +63,7 @@ try:
         page.wait_for_function("document.querySelectorAll('.chat-confirm[data-state=done]').length===2")
         assert sorted(os.listdir(OUT))==['Plan (2).docx','Plan.docx'],os.listdir(OUT)
         page.click('[data-act=deep]');assert page.get_attribute('[data-act=deep]','aria-pressed')=='true'
-        page.evaluate("window.CortanaPages.open('settings')");page.wait_for_selector('#sContext');page.wait_for_selector('#sBriefAt');page.wait_for_selector('#sFull')
+        page.evaluate("window.CortanaPages.open('settings')");page.wait_for_selector('#sContext');page.wait_for_selector('#sBriefAt');page.wait_for_selector('#sFull');page.wait_for_selector('#sBrain')
         print('APPROVAL CARD / VOICE YES / DEEP TOGGLE / SYSTEMS OK',flush=True)
         assert not errors,errors
         print('CONSOLE OK',flush=True)

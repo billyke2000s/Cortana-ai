@@ -2,6 +2,13 @@
 
 _Last updated: 1 November 2026._
 
+## 1.8.0: verification
+
+- Offline suite: 149 tests on Linux, including a fake OpenJarvis server (SSE stream, model from /v1/info, system prompt, API key header, key never returned, timers kept by Cortana, fallback when not running, phone never routed, approvals on the PC only, loopback-only URL, starter config, Windows-MCP config editing with backup, unusual formats left alone, Windows control needing Full access).
+- Browser check passed with the new Brain controls.
+- On the owner's PC (read-only check): `~/OpenJarvis/.venv/Scripts/jarvis.exe` exists; `~/.openjarvis` has no config.toml; version-check reports 0.1.1 with 1.0.2 available.
+- **[Unverified]**: the bridge against OpenJarvis 0.1.1 (its API may lack `/v1/info` or `/v1/approvals`), OpenJarvis tool quality with qwen3.5 9B, Windows-MCP under `uvx` on the owner's PC (needs uv and Python 3.14, which uvx downloads).
+
 ## 1.7.1: verification
 
 **Released:** [v1.7.1](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.7.1), built from `426e978f280aec1aefb10f76e4487efae3a6c314` in Actions run 41345901607 (UI, Windows build + offline suite + packaged voice smoke, real `qwen3.5:4b` 6/6 and `qwen3.5:9b` 6/6 with the full-access prompt line). `Cortana.exe` SHA-256 `220cd2d82d1f48f342a64c505e5ca1025d433cac97bd653a96b9d7b6619c7132`. Offline suite: 132 tests. **[Unverified]** on the owner's PC: the blue frame, capture exclusion, cursor swap/restore, in-process capture, and whether the 9B now calls computer_task/run_command reliably.

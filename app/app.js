@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const app=$('app'),out=$('transcript'),label=$('listenLabel'),mic=$('mic');
 const clientId=crypto.randomUUID?.().replaceAll('-','')||Math.random().toString(36).slice(2);
-let pendingImages=[],pendingConfirm=null,deepThinking=false,activeJob=null,turnStarted=0,playingText='',restorePromise=null,restored=false,modePreviewUntil=0;
+let shownJarvis=new Set(),pendingImages=[],pendingConfirm=null,deepThinking=false,activeJob=null,turnStarted=0,playingText='',restorePromise=null,restored=false,modePreviewUntil=0;
 const wake={on:false,stream:null,input:null,node:null,busy:false,pending:null};
 let queue=null,state='idle',audioContext=null,source=null,requestId=0,controller=null,recording=null,workletReady=false,capabilities={ai:false,timedSpeech:false},history=[];
 const avatar=()=>window.CortanaAvatar;
@@ -77,7 +77,7 @@ async function resolveConfirm(id,approve){
  if(pendingConfirm===id)pendingConfirm=null;
  card.state='working';chatChanged();
  try{
-  const r=await api('/api/confirm',{id,approve});card.state=approve?(r.ok?'done':'failed'):'cancelled';
+  const r=id.startsWith('oj:')?await api('/api/jarvis/decide',{id:id.slice(3),approve}):await api('/api/confirm',{id,approve});card.state=approve?(r.ok?'done':'failed'):'cancelled';
   if(r.refresh)document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:r.refresh}}));
   if(r.result?.identical_copies)note('Identical copies (left in place): '+r.result.identical_copies.map(g=>g.join(' = ')).join('; '));
   chatChanged();speak(r.say);
@@ -208,6 +208,11 @@ async function refreshStatus(){
   $('aiInfo').textContent=capabilities.ai?'Local assistant: '+capabilities.model:capabilities.status;
   $('statusText').textContent=capabilities.ai?'ONLINE':'STARTING';
   announceAlerts(capabilities.alerts||[]);
+  for(const j of capabilities.jarvisApprovals||[]){   // OpenJarvis asks before acting: show it as a Cortana approval card (D-042)
+   if(shownJarvis.has(j.id))continue;shownJarvis.add(j.id);
+   chatLog.push({role:'assistant',text:'OpenJarvis wants to do this:',confirms:[{id:'oj:'+j.id,name:'openjarvis',label:j.kind,summary:j.summary,detail:j.detail,state:'waiting'}]});chatChanged();
+   if(holoPage!=='chat')window.CortanaPages?.open('chat');
+  }
   // First launch: keep the model chooser up (Systems also contains it) until a model is picked.
   if(capabilities.chooseModel&&capabilities.canPair&&window.CortanaDisplay?.page!=='settings')window.CortanaPages?.open('choose-model');
   if(!capabilities.chooseModel&&capabilities.choosePersonality&&capabilities.canPair&&window.CortanaDisplay?.page!=='setup')window.CortanaPages?.open('setup');

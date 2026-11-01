@@ -9,7 +9,7 @@ UNPAIRED_PAGE=('<!doctype html><meta name=viewport content="width=device-width,i
  '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#020814;color:#e8f4ff;font:16px system-ui;text-align:center;padding:24px">'
  '<div><h1 style="color:#9fe2ff;letter-spacing:.12em">CORTANA</h1><p>This phone isn\'t paired with this session.</p>'
  '<p style="color:#a9c6e6">Scan the QR code shown in the Cortana window on your PC.<br>Each time Cortana restarts it shows a new QR code, so old links stop working.</p></div>').encode()
-SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode','briefing_time','watch_folders','watch_downloads','full_access')
+SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode','briefing_time','watch_folders','watch_downloads','full_access','brain','openjarvis_url')
 _weather_cache={'at':0,'key':None,'value':None}
 class AppServer(ThreadingHTTPServer):
     daemon_threads=True
@@ -57,14 +57,15 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.authorised():return self.send_data(UNPAIRED_PAGE,'text/html; charset=utf-8',403)
         if parsed.path=='/api/status':
             alerts=[{'id':i['id'],'kind':i['kind'],'text':i['text'],'due':i['due']} for i in runtime.store.due_alerts()]
-            return self.send_json({'timedSpeech':os.name=='nt','ai':runtime.ai_ready,'transcription':runtime.stt_ready,'model':runtime.model,'status':runtime.status,'canPair':self.local,'phoneReady':bool(runtime.phone_url),'error':runtime.error,'voice':runtime.voice.status,'voiceReady':runtime.voice.ready,'alerts':alerts,'chooseModel':runtime.awaiting_choice,'choosePersonality':not runtime.store.get('setup_complete',False) and (runtime.model_chosen or not runtime.ask_model),'expressionMode':runtime.store.get('expression_mode','normal'),'latency':runtime.jobs.snapshot(),'wakeDetector':runtime.neural.wake_status,'lipSync':runtime.lips.status})
+            return self.send_json({'timedSpeech':os.name=='nt','ai':runtime.ai_ready,'transcription':runtime.stt_ready,'model':runtime.model,'status':runtime.status,'canPair':self.local,'phoneReady':bool(runtime.phone_url),'error':runtime.error,'voice':runtime.voice.status,'voiceReady':runtime.voice.ready,'alerts':alerts,'chooseModel':runtime.awaiting_choice,'choosePersonality':not runtime.store.get('setup_complete',False) and (runtime.model_chosen or not runtime.ask_model),'expressionMode':runtime.store.get('expression_mode','normal'),'latency':runtime.jobs.snapshot(),'jarvisApprovals':runtime.jarvis.approvals() if self.local and runtime.store.get('brain','cortana')=='openjarvis' else [],'wakeDetector':runtime.neural.wake_status,'lipSync':runtime.lips.status})
         if parsed.path=='/api/conversation':return self.send_json({'messages':runtime.store.recent_messages(60),'summary':runtime.store.conversation_summary()})
         if parsed.path=='/api/objectives':return self.send_json({'items':runtime.store.items(),'recent_alerts':runtime.store.recent_alerts()})
         if parsed.path=='/api/memory':return self.send_json({'facts':runtime.store.facts(),'conflicts':runtime.store.fact_conflicts(),'messages':runtime.store.recent_messages(60)})
         if parsed.path=='/api/settings':
             store=runtime.store
             return self.send_json({**{k:store.get(k) for k in SETTINGS_PUBLIC},'model':runtime.model,'voice':store.get('voice','en_US-hfc_female-medium'),
-                'expression_mode':store.get('expression_mode','normal'),'context_mode':store.get('context_mode','auto'),'briefing_time':store.get('briefing_time',''),'watch_folders':store.get('watch_folders',True),'watch_downloads':store.get('watch_downloads',False),'full_access':store.get('full_access',False),'context':runtime.context(),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
+                'expression_mode':store.get('expression_mode','normal'),'context_mode':store.get('context_mode','auto'),'briefing_time':store.get('briefing_time',''),'watch_folders':store.get('watch_folders',True),'watch_downloads':store.get('watch_downloads',False),'full_access':store.get('full_access',False),'brain':store.get('brain','cortana'),'openjarvis_url':store.get('openjarvis_url','http://127.0.0.1:8000'),
+                'openjarvis_key_set':bool(store.get('openjarvis_key')),'openjarvis':runtime.jarvis.status() if self.local else {},'context':runtime.context(),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
                 'voice_engine':store.get('voice_engine','piper'),'pc_controls':store.get('pc_controls',True),'tools_enabled':store.get('tools_enabled',True),'pc_access':store.get('pc_access',True),
                 'phone_access':store.get('phone_access','cloudflare'),'calendar_connected':bool(store.get('calendar_url')),'brave_connected':bool(store.get('brave_key')),
                 'voices':runtime.voice.catalog(),'models':runtime.installed_models(),'voice_status':runtime.voice.status})
@@ -101,6 +102,20 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path=='/api/confirm':
                 if not isinstance(data.get('approve'),bool) or not isinstance(data.get('id'),str):raise ValueError('Send id and approve (true or false).')
                 return self.send_json(runtime.confirm(data['id'],data['approve'],self.local))
+            if self.path=='/api/jarvis/decide':   # OpenJarvis approval queue, decided only on the PC (D-042)
+                if not self.local:raise ValueError('Approve this on the PC itself.')
+                if not isinstance(data.get('approve'),bool):raise ValueError('Send id and approve (true or false).')
+                return self.send_json(runtime.jarvis.decide(data.get('id'),data['approve']))
+            if self.path=='/api/jarvis/windows-control':
+                if not self.local:raise ValueError('Set this up on the PC itself.')
+                if not runtime.store.get('full_access',False):raise ValueError('Switch on Full access first: Windows control lets OpenJarvis click and type for you.')
+                import openjarvis
+                try:message=openjarvis.add_windows_control()
+                except OSError as e:raise ValueError("Couldn't edit OpenJarvis's settings: "+str(e)[:100])
+                p=runtime.jarvis.started
+                if p and p.poll() is None:   # Cortana started it: restart so the new tools load
+                    p.terminate();runtime.jarvis.started=None;threading.Thread(target=runtime.jarvis.ensure_running,daemon=True).start()
+                return self.send_json({'ok':True,'message':message})
             if self.path=='/api/metrics':
                 value=data.get('playback_ms')
                 if not isinstance(value,(int,float)) or not 0<=value<=600000:raise ValueError('Invalid playback timing.')
@@ -213,6 +228,21 @@ def settings_action(runtime,data,local=False):
         at=data['briefing_time']
         if not isinstance(at,str) or (at and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',at)):raise ValueError('Use a time like 07:30, or leave it empty.')
         store.set('briefing_time',at)
+    if 'brain' in data:
+        if data['brain'] not in ('cortana','openjarvis'):raise ValueError('Choose Cortana or OpenJarvis.')
+        if data['brain']=='openjarvis' and not local:raise ValueError('Switch the brain on the PC itself.')
+        store.set('brain',data['brain'])
+        if data['brain']=='openjarvis':   # first use: give an unconfigured OpenJarvis a tool-using agent on Cortana's model
+            import openjarvis
+            try:openjarvis.setup_config(runtime.ollama_url,runtime.model,port=urlsplit(runtime.jarvis.url).port or 8000)
+            except OSError:pass
+    if 'openjarvis_url' in data:
+        import openjarvis
+        if not local:raise ValueError('Change this on the PC itself.')
+        store.set('openjarvis_url',openjarvis.check_url(data['openjarvis_url']));runtime.jarvis.info=None
+    if 'openjarvis_key' in data:   # secret: stored, never returned (AGENTS §4.8)
+        if not local:raise ValueError('Change this on the PC itself.')
+        store.set('openjarvis_key',str(data['openjarvis_key']).strip()[:200])
     if 'full_access' in data:   # full access can only be switched on or off on the PC itself (D-038)
         if not isinstance(data['full_access'],bool):raise ValueError('Use true or false for full_access.')
         if not local:raise ValueError('Full access can only be changed on the PC.')
