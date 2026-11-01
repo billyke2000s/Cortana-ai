@@ -53,8 +53,18 @@ Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are
 | `get_weather(place?)` | Open-Meteo geocoding + forecast (now + 3 days). Empty place → home town; neither → asks the user. **Always** shows a forecast card (`tools.weather_screen`: now, then Today/Tomorrow/weekday with sky, high/low, rain chance), built from the data, not by the model; it replaces any model-written screen for that reply. |
 | `web_search(query)` | **No key needed.** Brave (if a key is saved), else Bing's RSS results feed, else DuckDuckGo's HTML results page (ads skipped) → ≤5 results (title, snippet, source site). Then the first of the top 3 result pages that yields ≥200 characters of text is read: scripts/nav/header/footer dropped, the blocks most related to the query kept (≤1,400 chars), marked untrusted. Wikipedia fills in if fewer than 2 results. Only public http(s) addresses are fetched (redirects checked too). |
 | `pc_control(action, target?, steps?)` | `play_pause`, `next_track`, `previous_track`, `volume_up/down` (1–25 × 2%), `mute`, `open_app` (allow-list: notepad, calculator, file explorer, settings, browser, spotify, task manager, paint, snipping tool), `open_website` (http/https only). Off when **PC controls** is unticked. Windows only. |
-| `get_calendar(day?)` | `today`, `tomorrow` or `YYYY-MM-DD`. Reads the private iCal URL; expands repeats (RRULE), honours EXDATE, skips cancelled, converts time zones; all-day events first. |
+| `get_calendar(day?)` | `today`, `tomorrow` or `YYYY-MM-DD`. Cortana's own events plus the private iCal URL (if connected); expands repeats (RRULE), honours EXDATE, skips cancelled, converts time zones; all-day events first. |
 
+| `add_event(title, day, time, minutes?)` | `day` = today/tomorrow/weekday/`YYYY-MM-DD`, `time` = `HH:MM`, resolved in code (a weekday already past today = next week). Saves a Cortana event (5 min–24 h), a reminder 10 minutes before, and returns a Google Calendar "add event" link. Card: **Event added** with **Add to Google Calendar**. |
+| `search_documents(query, document?)` | BM25 over the added documents' ~900-character pieces (page/slide labelled); up to 4 pieces (≤2,600 chars). `document` narrows by name. |
+| `summarise_document(document?)` | Empty = newest. ≤3,000 chars: the text itself. Longer: the model writes 2-3 sentences for each of up to 8 evenly spaced 3,000-char parts (separate requests), cached per document. |
+| `look_at_screen(question)` | Primary screen captured by a fixed PowerShell script, scaled to ≤1280 px wide, sent with the question to the current model in a separate request; the image is deleted. Windows only. |
+| `clipboard(action, text?)` | `read`: clipboard text (≤3,200 chars, with a note if cut); if it holds an image, the model describes it. `write`: puts text (≤20,000 chars) on the clipboard. |
+| `find_files(query, kind?, days?)` | Searches file names under Desktop, Documents, Downloads, Pictures, Videos, Music and OneDrive (≤7 levels, ≤80,000 entries, ≤5 s; skips AppData, node_modules, .git…). ≥60% of the query words must match; newest first; up to 8. Card: **Files found** with folders. |
+| `open_file(number, read?)` | Only a number from the last `find_files` list. Opens it with its default app, or (`read`) adds it to Documents. Programs, scripts and shortcuts are refused. |
+
+Tool results go back to the model truncated to 2,500 characters (3,500 for `web_search` and `clipboard`, 3,200 for the document tools).
+`look_at_screen`, `clipboard`, `find_files` and `open_file` obey **Screen, clipboard and file access** in Systems.
 All tools are disabled when **Abilities** is unticked in Systems.
 
 ## 4. Voice
@@ -78,19 +88,22 @@ All tools are disabled when **Abilities** is unticked in Systems.
 
 **Chat** (Chat tab, or the keyboard button): the conversation as bubbles (You right, Cortana left) in the same holo panel;
 typing indicator with the current ability (e.g. "SEARCHING…"); code, tables and weather as cards in her bubble with **Expand**;
-errors shown in the bubble. Composer pinned at the bottom: Enter sends, Shift+Enter new line, grows to ~5 lines.
+errors shown in the bubble. Composer pinned at the bottom: 📎 adds files (PDF, Word, PowerPoint, text; ≤12 MB each, also by
+dropping them on the panel; a note bubble confirms "added (N pages)"), Enter sends, Shift+Enter new line, grows to ~5 lines.
+Cards have **Copy** (plain text, links as "text: url") and **Expand**. Links in cards open in a new tab and only https links are made clickable.
 The conversation is kept for this browser tab (last 60 entries). The caption under her face shows the latest spoken reply in a matching holo card.
 
 **Mission Briefing:** date; **Read my briefing** (spoken summary of weather, today's events and open objectives, composed on
-the page, no AI call); weather card + 3 days (needs home town); today's events (needs calendar); up to 6 open objectives.
+the page, no AI call); weather card + 3 days (needs home town); today's events (Cortana's own, with ✕ to remove, and Google's if connected); up to 6 open objectives.
 
 **Objectives:** add To-do / Timer (minutes) / Reminder (date-time); grouped Timers, Reminders, To-do; live countdown for
 running timers; ✓ completes, ✕ deletes; reminders that have fired are highlighted until completed. Re-renders when the AI changes items.
 
-**Memory:** remembered facts (✕ forget, add your own); last 30 conversation lines; **Clear conversation history** needs two
+**Memory:** remembered facts (✕ forget, add your own); **Documents I can read** (name, pages/slides, size, ✕ remove;
+**Add files…**; on the PC only, **Add folder** by path: up to 80 readable files, 4 levels deep); last 30 conversation lines; **Clear conversation history** needs two
 taps within 4 s. Facts are not cleared by clearing history.
 
-**Systems:** AI model picker (detected GPU/RAM/disk; every Qwen 3.5 model with its size, rating badge, ★ Recommended, Download with live progress bar, or Use; too-big models greyed out and refused by the server); Abilities on/off; PC controls on/off; voice engine
+**Systems:** AI model picker (detected GPU/RAM/disk; every Qwen 3.5 model with its size, rating badge, ★ Recommended, Download with live progress bar, or Use; too-big models greyed out and refused by the server); Abilities on/off; PC controls on/off; Screen, clipboard and file access on/off; voice engine
 and voice; wake word (per device, stored in the browser); home town; calendar address (write-only, Disconnect button);
 optional Brave Search key (write-only; search works without it); phone connection (Cloudflare/Tailscale, next launch); link to hologram view, movement, speech
 pace and the phone QR (original Settings dialog). **Save** applies changes.

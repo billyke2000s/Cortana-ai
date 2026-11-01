@@ -17,6 +17,9 @@ python -m unittest discover -s tests -v
 | `ToolTests` | every tool's success and failure paths, `HH:MM` reminders, past times refused, unknown tools never raise, PC control switch |
 | `CalendarTests` | iCal parsing: escaped text, all-day, weekly RRULE, EXDATE, cancelled events, ordering |
 | `HardwareTests` | model recommendation per card size, too-big models unselectable, low RAM blocks spilling, unknown tags hidden |
+| `DocumentTests` | PDF/Word/PowerPoint/text extraction (real generated PDF), search finds the right page, summaries per part + cache, replace/remove, document names in the prompt |
+| `PcAccessTests` | file search (age/kind filters, skipped folders), programs never opened, open only by number, read into documents, screen/clipboard via the model (stubbed capture), the off switch |
+| `EventTests` | weekday/time resolution, event + 10-minute reminder + Google link + card, Google events reminded once |
 | `WakeWordTests` | Whisper's spellings of the name trigger; ordinary speech and look-alikes ("Montana", "contain") don't |
 | `WebSearchTests` | Bing RSS + DuckDuckGo HTML parsing (ads skipped, links decoded), fallback order, page text extraction, size budget, private addresses refused |
 | `WeatherDisplayTests` | every weather answer yields the forecast card; spoken part has no table symbols |
@@ -33,8 +36,11 @@ Needs the phone tunnel to be up (don't use `--no-tunnel`). The transcription rou
 
 ## 2b. Live check on GitHub (Windows, internet, no GPU)
 
-Actions → **Live check (search + wake word)** → Run workflow. Runs `tests/ci_live_check.py`: real keyless searches, and
-"Hey Cortana" phrases spoken by Windows text-to-speech into the real whisper.cpp. Fails if an engine returns nothing or a phrase is misjudged.
+Actions → **Live check (search + wake word)** → Run workflow. Two jobs:
+- **live** (Windows): `tests/ci_live_check.py`, real keyless searches; "Hey Cortana" phrases spoken by Windows text-to-speech into the
+  real whisper.cpp; screenshot capture, clipboard round trip, and file search in the real Documents folder.
+- **model** (Linux, CPU): installs Ollama + `qwen3.5:4b` and runs `tests/ci_model_check.py`: tool choice for 11 asks with the
+  real prompt and schemas, and reading an error from an image. (9B is too slow on a CPU runner; check it on the PC.)
 
 ## 3. Real-model prompt check (whenever the prompt or tool schemas change)
 

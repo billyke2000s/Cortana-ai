@@ -41,28 +41,28 @@ TOOLS = [
         'steps': {'type': 'integer', 'description': 'For volume: how many 2% steps (default 5).'}}, ['action']),
     _fn('get_calendar', "Events from the user's calendar for a day.", {
         'day': {'type': 'string', 'description': "'today', 'tomorrow' or 'YYYY-MM-DD'."}}),
-    _fn('add_event', 'Put an event in the calendar (study time, meetings, appointments). Reminds the user 10 minutes before.', {
+    _fn('add_event', 'Add a calendar event (reminds 10 minutes before).', {
         'title': {'type': 'string'},
         'day': {'type': 'string', 'description': "'today', 'tomorrow', a weekday like 'thursday', or 'YYYY-MM-DD'."},
         'time': {'type': 'string', 'description': "24-hour start time 'HH:MM'."},
         'minutes': {'type': 'number', 'description': 'Length in minutes (default 60).'}}, ['title', 'day', 'time']),
-    _fn('search_documents', 'Look up information inside the documents the user added (notes, briefs, PDFs). Use for questions about their content or to quiz the user.', {
-        'query': {'type': 'string', 'description': 'What to look for, e.g. deadline, chapter 3.'},
-        'document': {'type': 'string', 'description': 'Words from the document name; empty searches all.'}}, ['query']),
-    _fn('summarise_document', 'Summarise a whole document the user added. Empty document = the most recent one.', {
+    _fn('search_documents', "Find information in the user's added documents (also for quizzing them).", {
+        'query': {'type': 'string', 'description': 'e.g. deadline, chapter 3'},
+        'document': {'type': 'string', 'description': 'Words from its name; empty = all.'}}, ['query']),
+    _fn('summarise_document', "Summarise an added document; empty = the newest.", {
         'document': {'type': 'string'}}),
-    _fn('look_at_screen', "Look at the user's PC screen, only when they ask about their screen, an error on it, or what they are looking at.", {
-        'question': {'type': 'string', 'description': 'What to find out from the screen.'}}, ['question']),
-    _fn('clipboard', "Read what the user copied (when they mention something they copied), or write text to the clipboard when asked to copy.", {
+    _fn('look_at_screen', "See the user's screen, only when they ask about it.", {
+        'question': {'type': 'string'}}, ['question']),
+    _fn('clipboard', "Read what the user copied, or write text when asked to copy.", {
         'action': {'type': 'string', 'enum': ['read', 'write']},
-        'text': {'type': 'string', 'description': 'For write: the text to copy.'}}, ['action']),
-    _fn('find_files', "Search the user's PC (Desktop, Documents, Downloads, OneDrive...) for files by name.", {
+        'text': {'type': 'string', 'description': 'For write.'}}, ['action']),
+    _fn('find_files', "Find files on the user's PC by name.", {
         'query': {'type': 'string', 'description': 'Words from the file name.'},
         'kind': {'type': 'string', 'enum': ['', 'document', 'pdf', 'word', 'slides', 'spreadsheet', 'image', 'video', 'audio', 'code']},
-        'days': {'type': 'number', 'description': 'Only files changed in the last N days (e.g. 7 for last week).'}}, ['query']),
-    _fn('open_file', 'Open a file from the last find_files results, or read it so you can answer questions about it.', {
-        'number': {'type': 'integer', 'description': 'Its number in the last results.'},
-        'read': {'type': 'boolean', 'description': 'true = read it into your documents instead of opening it.'}}, ['number']),
+        'days': {'type': 'number', 'description': 'Changed in the last N days (7 = last week).'}}, ['query']),
+    _fn('open_file', 'Open a file from the last find_files list, or read it into documents.', {
+        'number': {'type': 'integer'},
+        'read': {'type': 'boolean', 'description': 'true = read instead of open.'}}, ['number']),
 ]
 TOOL_LABELS = {'set_timer': 'SETTING TIMER', 'set_reminder': 'SETTING REMINDER', 'add_task': 'UPDATING OBJECTIVES',
                'list_objectives': 'CHECKING OBJECTIVES', 'complete_objective': 'UPDATING OBJECTIVES', 'remember': 'SAVING TO MEMORY',
@@ -71,7 +71,7 @@ TOOL_LABELS = {'set_timer': 'SETTING TIMER', 'set_reminder': 'SETTING REMINDER',
                'search_documents': 'READING DOCUMENTS', 'summarise_document': 'READING DOCUMENT', 'look_at_screen': 'LOOKING AT SCREEN',
                'clipboard': 'CHECKING CLIPBOARD', 'find_files': 'SEARCHING FILES', 'open_file': 'OPENING FILE'}
 # Longer results for tools whose text is the answer (the default is 2,500 characters; see DECISIONS D-004/D-023).
-RESULT_LIMIT = {'web_search': 3500, 'clipboard': 4500, 'search_documents': 3200, 'summarise_document': 3200, 'open_file': 3200}
+RESULT_LIMIT = {'web_search': 3500, 'clipboard': 3500, 'search_documents': 3200, 'summarise_document': 3200, 'open_file': 3200}
 CHANGES = {'set_timer': 'objectives', 'set_reminder': 'objectives', 'add_task': 'objectives', 'complete_objective': 'objectives',
            'remember': 'memory', 'forget': 'memory', 'add_event': 'objectives'}
 
@@ -696,7 +696,7 @@ def pc_access_tool(name, args, store, llm):
             return {'done': 'copied to the clipboard'}, None
         text = files.clipboard_text()
         if text and text.strip():
-            return {'clipboard': text[:4000], **({'note': f'Clipboard text was cut to 4,000 of {len(text):,} characters.'} if len(text) > 4000 else {})}, None
+            return {'clipboard': text[:3200], **({'note': f'Clipboard text was cut to 3,200 of {len(text):,} characters.'} if len(text) > 3200 else {})}, None
         image = files.clipboard_image()
         if image and llm:
             return {'clipboard_image': llm("This is an image the user copied. Describe it precisely; quote any text in it exactly.",

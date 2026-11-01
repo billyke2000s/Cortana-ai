@@ -387,8 +387,8 @@ class PcAccessTests(unittest.TestCase):
         self.assertIn("what's this error?", seen['prompt'])
         files.clipboard_text = lambda: 'Dear Sam, ' * 600
         out, _ = tools.run('clipboard', {'action': 'read'}, self.s, llm)
-        self.assertEqual(len(out['clipboard']), 4000)
-        self.assertIn('cut to 4,000', out['note'])
+        self.assertEqual(len(out['clipboard']), 3200)
+        self.assertIn('cut to 3,200', out['note'])
         files.clipboard_text, files.clipboard_image = (lambda: None), (lambda: 'IMG')
         self.assertEqual(tools.run('clipboard', {'action': 'read'}, self.s, llm)[0]['clipboard_image'], 'NameError on line 3')
         files.clipboard_image = lambda: None

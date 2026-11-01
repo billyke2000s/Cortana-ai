@@ -28,6 +28,10 @@ if enabled) rather than in a public issue.
 | Secrets leak via the API or logs | Settings API returns booleans for secrets; secrets aren't logged. |
 | Search results point at the PC or home network (SSRF) | `tools.fetch` only reads public http(s) addresses; every redirect is re-checked. |
 | A web page tries to instruct the model (prompt injection) | Page text is marked untrusted in the tool result; tools that change things are limited to the allow-lists. |
+| Screen/clipboard contents leak | Screenshots and copied images go only to the local Ollama in memory (temp file deleted at once); never stored, logged or sent online. Off switch: *Screen, clipboard and file access*. |
+| The model opens or runs something harmful | `open_file` takes a **number** from the last search results, never a path; programs, scripts and shortcuts are refused (`files.EXECUTABLE`). |
+| A paired phone reads arbitrary PC folders | Adding folders to Documents is allowed only from the PC itself; phones can upload single files they already have. |
+| Malicious document text (prompt injection) | Treated as data; the tools that change things are limited to the fixed allow-lists above. |
 | Wake word sends audio elsewhere | Audio goes only to the local `/api/transcribe`; nothing is processed while she speaks. |
 | Large or malformed requests | Size limits (64 KB, 1.5 MB for audio), JSON validation, message count and length limits. |
 

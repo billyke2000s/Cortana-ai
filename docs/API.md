@@ -6,7 +6,7 @@ Base URL: `http://127.0.0.1:<port>` on the PC, or the paired tunnel URL on a pho
 
 - **Local** (Host `localhost`/`127.0.0.1`, no proxy headers): always allowed.
 - **Remote** (phone): Host must equal the tunnel host **and** the `cortana_session` cookie must match. Otherwise: `403` HTML pairing page (GET) or `403 {"error"}` (POST).
-- **POST**: `Content-Type: application/json` required (`415`); `Origin`, if present, must equal this host (`403`); body size 1–64,000 bytes (1,500,000 for `/api/transcribe`) (`400`).
+- **POST**: `Content-Type: application/json` required (`415`); `Origin`, if present, must equal this host (`403`); body size 1–64,000 bytes (1,500,000 for `/api/transcribe`, 16,000,000 for `/api/documents`) (`400`).
 - Errors: `400` invalid input, `403` not allowed, `404` unknown, `503` service problem. Body `{"error": "plain English message"}`.
 
 ## Pairing
@@ -97,7 +97,7 @@ Secrets (`calendar_url`, `brave_key`, tokens) are **never** returned.
 ### `POST /api/settings`
 Any subset of: `model` (`[\w.:/-]{1,80}`), `voice_engine` (`piper`|`windows`), `voice` (must be in the catalog),
 `home_location` (≤80 chars), `calendar_url` (`https://…` or `""` to disconnect), `brave_key`, `pc_controls` (bool),
-`tools_enabled` (bool), `phone_access` (`cloudflare`|`tailscale`, applies next launch). → `{"ok": true}`.
+`tools_enabled` (bool), `pc_access` (bool: screen, clipboard, file search/open), `phone_access` (`cloudflare`|`tailscale`, applies next launch). → `{"ok": true}`.
 
 ## Models
 
@@ -121,8 +121,26 @@ Poll `GET /api/models` for `pull` progress. `POST /api/settings {"model"}` appli
 ## Briefing
 
 ### `GET /api/briefing`
-`{"items": [...open objectives], "weather": {place, now:{summary,temp_c,feels_like_c,wind_kmh}, days:[{date,summary,high_c,low_c,rain_chance_pct}]} | {"error"} | null, "events": {"day", "events":[{title,time,location}]} | {"error"} | null}`
-Weather is cached for 10 minutes; the calendar for 5.
+`{"items": [...open objectives], "weather": {place, now:{summary,temp_c,feels_like_c,wind_kmh}, days:[{date,summary,high_c,low_c,rain_chance_pct}]} | {"error"} | null, "events": {"day", "events":[{title,time,location,source:"Cortana"|"Google",id?}]} | {"error"} | null}`
+Weather is cached for 10 minutes; the calendar for 5. `events` merges Cortana's own events (with `id`) and the Google iCal calendar.
+
+## Documents
+
+### `GET /api/documents`
+`{"documents": [{id, name, path|null, pages|null, chars, added, summarised}], "folders": [str], "canAddFolder": bool}`; `canAddFolder` is true only on the PC.
+
+### `POST /api/documents`
+- `{"action":"add","name":"brief.pdf","data":"<base64>"}` → `{"added":{id,name,pages,chars},"documents":[...]}`. Folders in `name` are dropped. PDF, .docx, .pptx and text types only; same name replaces the old copy.
+- `{"action":"add_folder","path":"C:\\…"}` (**PC only**, `400` from a phone) → `{"added_count", "skipped":[names], "documents"}`. Up to 80 files, 4 levels deep, ≤40 MB each.
+- `{"action":"remove","id":3}` → `{"documents":[...]}`.
+
+## Events
+
+### `GET /api/events`
+`{"events": [{id, title, start, end, created}]}`: Cortana's upcoming events (UNIX times).
+
+### `POST /api/events`
+`{"action":"remove","id":3}` → `{"events":[...]}`.
 
 ## Static files
 

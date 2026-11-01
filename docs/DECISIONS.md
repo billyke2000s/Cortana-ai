@@ -98,5 +98,27 @@ Page text is untrusted (prompt injection) and marked so; only public addresses a
 Chat moved from a browser `<dialog>` into the shared panel so every page looks the same; displays become cards in the chat.
 The wake-word match moved from a page regex to `runtime.wake_match` so it can be unit-tested and fuzzy (Whisper's spellings vary).
 
+### D-023: Documents searched with BM25 in Python; summaries from sampled parts
+**Why:** a 6,144-token context can't hold a whole document. Keyword ranking (BM25) over ~900-character pieces needs no
+embedding model download and works well for "what does the brief say about X". Summaries ask the local model for 2-3
+sentences from up to 8 evenly spaced parts and cache the result. **Cost:** search is by words, not meaning (synonyms can
+miss); summaries of very long documents are sampled, and the tool says so. pypdf (BSD-3) added with the owner's approval.
+
+### D-024: Screen and clipboard via fixed PowerShell/ctypes, read by Qwen's vision
+**Why:** Qwen 3.5 accepts images at every size (ollama.com/library/qwen3.5), so the model already installed can read a
+screenshot, with no extra download. The screenshot is taken by a fixed script (no model text in the command), scaled to 1280 px wide
+(~1,200 image tokens), and sent in a separate request so it never sits in the chat history. **Cost:** primary screen only.
+
+### D-025: Cortana keeps her own events; one-tap "Add to Google Calendar"
+**Why:** writing to Google needs OAuth and a Google Cloud project (D-013). The owner chose local events with 10-minute
+reminders plus a Google "add event" link per event. Google iCal events also get 10-minute reminders (checked every 5 minutes).
+**Cost:** an event isn't in Google until the user taps the link once.
+
+### D-026: Tool results above 2,500 characters for reading tools
+`RESULT_LIMIT`: web search 3,500, documents 3,200, clipboard 3,500. Estimated worst case at 6,144 with 18 tool schemas
+(characters/4): prompt with 40 facts and the document list ~1,100 + schemas ~1,520 + full history ~1,500 + one 3,500-char
+result ~950 ≈ 5,100, leaving ~1,000 tokens for the reply (typical replies are 50-300). New-tool descriptions were cut short
+to stay inside this. Re-measure before adding tools or raising limits.
+
 ### D-018: No voice cloning of third parties
 The project supports training a Piper voice only from the owner's (or a consenting person's) recordings.

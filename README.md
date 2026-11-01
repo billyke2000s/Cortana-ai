@@ -39,7 +39,8 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 - 🗣️ **Talk naturally.** Tap the mic or just say *"Hey Cortana"*.
 - 🌊 **She answers while she's still thinking.** Replies stream sentence by sentence, so she starts speaking within about a second.
 - 🧠 **Smart and private.** Qwen 3.5 runs on your graphics card through Ollama. She **detects your GPU and recommends the best model it can run**, greys out ones that are too big, and downloads your pick with a progress bar.
-- 🛠️ **She can actually do things:** timers, reminders, a to-do list, long-term memory, weather, web search, your calendar, and media/volume/app control on your PC.
+- 📚 **She works with your PC.** Reads your PDFs, Word docs and slides ("summarise this", "quiz me on chapter 3"), looks at your screen ("what's this error?"), uses your clipboard, finds files, and books calendar events with reminders. All on your PC.
+- 🛠️ **She can actually do things:** timers, reminders, a to-do list, long-term memory, weather, web search (no key needed), your calendar, and media/volume/app control on your PC.
 - 🖥️ **Holographic display panel.** Code, tables and step-by-step answers slide up on screen instead of being read aloud, with syntax colours and a **Copy** button.
 - 📱 **Your phone becomes the screen.** Scan a QR code and the same interface runs on your phone, still powered by your PC.
 - 🌀 **A living hologram.** A fully rigged 3D Cortana blinks, looks around, reacts while listening and thinking, and lip-syncs to her voice.
@@ -61,13 +62,17 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 | 🧠 | **Long-term memory** | *"Remember my dog is called Max."* · *"Forget about the dog."* | Memory page · used in every answer |
 | 🌦️ | **Weather** | *"What's the weather like tomorrow?"* | Mission Briefing |
 | 🔎 | **Web search** | *"When was Halo released?"* | Display panel, with sources |
-| 📅 | **Calendar** | *"What's on today?"* | Mission Briefing (read-only Google/iCal) |
+| 📄 | **Read your files** | Drop a PDF/Word/PowerPoint into Chat (📎) · *"Summarise this."* · *"What does the brief say about deadlines?"* · *"Quiz me on chapter 3."* | Chat · Memory → Documents |
+| 🖥️ | **See your screen** | *"What's this error on my screen?"* · *"Explain what I'm looking at."* | Spoken + Chat (read by the local Qwen model) |
+| 📋 | **Clipboard** | *"Summarise what I just copied."* · *"Fix this code I copied."* · *"Copy that to my clipboard."* | Chat card with **Copy** |
+| 🗂️ | **Find files** | *"Where's my coursework PDF from last week?"* · *"Open number 1."* · *"Read number 2."* | Files card |
+| 📅 | **Calendar** | *"What's on today?"* · *"Book study time Thursday at 3."* | Mission Briefing · event card with **Add to Google Calendar** · reminder 10 min before every event |
 | 🎵 | **PC controls** | *"Pause the music."* · *"Volume up."* · *"Open calculator."* | Acts on your PC (fixed allow-list) |
 | 💻 | **Code & tables** | *"How do I build a table in Python?"* | Display panel with **Copy** |
 | 🎛️ | **Model picker** | **Systems** → pick from models rated *Fast / Good / Slow / Too big* for your GPU | Recommended model ★, one-click download |
 | 📰 | **Daily briefing** | Tap **Mission Briefing → Read my briefing** | Weather, events and objectives, spoken |
 
-> Abilities can be switched off in **Systems**. PC controls only ever do the listed actions: no shell commands, no file access.
+> Abilities can be switched off in **Systems** (*Screen, clipboard and file access* has its own switch). She never runs programs, scripts or shortcuts, opens only files she just found for you, and screenshots go only to the AI on your PC.
 
 ---
 
@@ -178,7 +183,7 @@ Google Calendar → **Settings** → your calendar → **Integrate calendar** �
 | 🏠 **Local by default** | AI, speech recognition, voice, memory and settings all run and stay on your PC (`%LOCALAPPDATA%\CortanaAI`). |
 | 🌐 **What goes online** | Only the abilities you use: weather (Open-Meteo), search (Bing / DuckDuckGo results and the top result page, Wikipedia; no key needed, Brave optional), your calendar address, first-run downloads, and the phone link. |
 | 📱 **Phone access** | HTTPS only, paired with a per-launch secret in the QR code (`HttpOnly; Secure; SameSite=Lax` cookie). Unpaired devices see a pairing page. |
-| 🛡️ **Hardening** | Origin check on every POST, a fixed whitelist of served files, all AI output HTML-escaped, PC controls limited to a fixed list, and secrets never returned by the API. |
+| 🛡️ **Hardening** | Origin check on every POST, a fixed whitelist of served files, all AI output HTML-escaped, PC controls limited to a fixed list, files opened only from her own search results (never programs), whole folders addable only on the PC, and secrets never returned by the API. |
 
 Full threat model and rules: [SECURITY.md](SECURITY.md).
 
@@ -193,7 +198,8 @@ cortana-ai/
 │   ├── server.py           # HTTP gateway: auth, API, streaming
 │   ├── runtime.py          # AI orchestration, streaming, prompt, Ollama/Whisper/tunnel lifecycle
 │   ├── tools.py            # abilities the AI can call
-│   ├── store.py            # SQLite: settings, memory, objectives, conversation log
+│   ├── files.py            # documents, file search, screen and clipboard
+│   ├── store.py            # SQLite: settings, memory, objectives, documents, events, conversation log
 │   ├── voice.py            # Piper + Windows voice
 │   ├── hardware.py         # GPU/RAM detection, model ratings and recommendation
 │   ├── speech.ps1          # Windows voice with mouth timings
@@ -247,7 +253,7 @@ Point it at **[AGENTS.md](AGENTS.md)** first. It's a strict rulebook (security i
 
 ## 🙏 Credits & disclaimer
 
-- **AI:** [Qwen 3.5](https://qwenlm.github.io/) via [Ollama](https://ollama.com) · **Speech recognition:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) · **Voice:** [Piper](https://github.com/rhasspy/piper) · **3D:** [three.js](https://threejs.org) (MIT) · **Weather:** [Open-Meteo](https://open-meteo.com) · **QR:** python-qrcode · **Phone link:** Cloudflare Quick Tunnels / Tailscale.
+- **AI:** [Qwen 3.5](https://qwenlm.github.io/) via [Ollama](https://ollama.com) · **Speech recognition:** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) · **Voice:** [Piper](https://github.com/rhasspy/piper) · **3D:** [three.js](https://threejs.org) (MIT) · **Weather:** [Open-Meteo](https://open-meteo.com) · **QR:** python-qrcode · **PDF text:** [pypdf](https://github.com/py-pdf/pypdf) (BSD-3-Clause) · **Phone link:** Cloudflare Quick Tunnels / Tailscale.
 - **Cortana**, **Halo**, **UNSC** and **Master Chief** are trademarks of Microsoft. This is an unofficial, non-commercial fan project, not affiliated with or endorsed by Microsoft, 343 Industries or Bungie.
 - **Private repository.** It contains the Cortana 3D model and is kept private; don't make it public.
 - **Licence:** none has been chosen yet, so by default all rights are reserved by the author. Add a `LICENSE` file to change that.

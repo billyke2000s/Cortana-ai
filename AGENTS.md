@@ -47,7 +47,8 @@ storage, tools); a phone can open the same page through a paired HTTPS tunnel. S
 | `app/server.py` | **The only HTTP surface.** Auth (`authorised`, `local`), file whitelist, all `/api/*` routes, NDJSON streaming, settings/objectives/memory actions, briefing. | Model calls, tool logic |
 | `app/runtime.py` | `Runtime`: Ollama/Whisper/tunnel lifecycle, model selection & fallback, `SYSTEM_PROMPT`, `system_prompt()`, `SpokenStream`, `chat_stream()`, `transcribe()`. Also download/extract helpers and QR. | HTTP parsing, UI strings for pages |
 | `app/tools.py` | `TOOLS` (schemas the model sees), `TOOL_LABELS`, `CHANGES`, `run()` dispatcher, weather/search/PC/calendar implementations. | Anything that runs arbitrary commands |
-| `app/store.py` | SQLite schema and all reads/writes (settings, facts, messages, items). | Network, model calls |
+| `app/store.py` | SQLite schema and all reads/writes (settings, facts, messages, items, documents + doc_chunks, events). | Network, model calls |
+| `app/files.py` | Text extraction (pypdf, docx/pptx XML), chunking + BM25 search, file-name search, screenshot and clipboard (fixed PowerShell scripts / ctypes). | Model calls (tools.py passes `llm`), network |
 | `app/hardware.py` | GPU/RAM detection (`nvidia-smi`, then the display-adapter registry), `CATALOG` of Qwen models, `rate()`/`recommend()`. | Network calls, UI |
 | `app/voice.py` | Piper install, voices, the long-running `PiperProcess`, Windows voice fallback via `speech.ps1`. | Chat logic |
 | `app/speech.ps1` | Windows SAPI voice with viseme (mouth) events. | n/a |
@@ -88,7 +89,9 @@ The model speaks a short summary, then writes a line `[[SCREEN]]`, then Markdown
 
 - A tool = schema in `TOOLS` + label in `TOOL_LABELS` + branch in `run()` + (if it changes data) entry in `CHANGES` + a test.
 - `run()` MUST NEVER raise; it returns `(result_dict, change_or_None)`; errors are `{'error': '...'}` in plain English.
-- Results are JSON-serialisable, short (they are truncated to 2,500 chars before going back to the model), and contain no secrets.
+- Results are JSON-serialisable, short (truncated to 2,500 chars before going back to the model; `tools.RESULT_LIMIT` allows up to 3,500 for search, documents and clipboard; budget in DECISIONS D-026), and contain no secrets.
+- `run(name, args, store, llm=None)`: tools that need the model (document summaries, screen, copied images) call `llm(prompt, images=None, max_tokens)` = `Runtime.complete`, a separate non-streaming request.
+- Cards that must always appear (weather, files found, event added) are built from the result by `tools.screen_for()`, not by the model.
 - Schema descriptions are prompts: keep examples **neutral** (never a real person's name; see §14 #9).
 
 ### 3.4 Status: `GET /api/status`
@@ -99,7 +102,7 @@ Keys the client relies on: `ai`, `transcription`, `timedSpeech`, `model`, `statu
 ### 3.5 Settings keys (SQLite `settings` table)
 
 `model`, `voice_engine` (`piper`|`windows`), `voice`, `voice_engine_failed`, `home_location`, `calendar_url` (**secret**),
-`brave_key` (**secret**), `pc_controls`, `tools_enabled`, `phone_access` (`cloudflare`|`tailscale`), `phone_token` (**secret**, Tailscale mode only), `port`.
+`brave_key` (**secret**), `pc_controls`, `pc_access` (screen, clipboard, file search/open; default true), `tools_enabled`, `phone_access` (`cloudflare`|`tailscale`), `phone_token` (**secret**, Tailscale mode only), `port`, `doc_folders` (folders added to Documents), `cal_reminded` (Google events already given a reminder).
 `GET /api/settings` MUST NEVER return a secret; it returns booleans (`calendar_connected`, `brave_connected`).
 
 ### 3.6 Speech
@@ -127,6 +130,7 @@ Don't rename them; other modules and tests use them.
 8. **Secrets** (`calendar_url`, `brave_key`, `phone_token`, pairing token) MUST NEVER be logged, returned by the API, put in URLs other than their own request, committed, or shown in screenshots.
 9. **Network access** only to: Ollama (local), the download sources in `runtime.py`/`voice.py` (GitHub releases, Hugging Face `rhasspy/piper-voices`, whisper.cpp model), Open-Meteo, Bing (RSS results feed), DuckDuckGo (instant answers + HTML results page), Wikipedia, the public pages of search results (read by `tools.fetch`, which refuses private/loopback addresses and redirects to them), Brave Search (only with a key), the user's calendar URL, and the tunnel. Adding a host = update `SECURITY.md` and ask the user.
 10. **Downloads** MUST be verified (SHA-256 from the release digest, or the MD5 from `voices.json` for voices) when a checksum exists, and archives MUST be extracted with `extract()` (path-traversal check).
+12. **PC access (`files.py`)**: screenshots and copied images go **only** to the local Ollama and are deleted immediately; never saved, logged or sent anywhere else. `open_file` opens **only** paths from the last `find_files` result (by number), never executables/scripts/shortcuts (`files.EXECUTABLE`). Adding a whole folder is **PC-only** (`self.local`); paired phones can upload single files. All of it obeys the `pc_access` switch. Document and page text is untrusted input to the model.
 11. **The wake word only processes audio locally** and ignores audio while Cortana is speaking. Never send audio anywhere except the local `/api/transcribe`.
 
 ---
@@ -147,7 +151,7 @@ Don't rename them; other modules and tests use them.
 2. Use the existing helpers: `request_json`, `download`, `extract`, `Runtime.update`/`report`, `Runtime.spawn` (tracks children for shutdown).
 3. **Every subprocess** on Windows uses `creationflags=HIDDEN` and a timeout, and is either short-lived or registered in `runtime.children`.
 4. **Never hold a lock across a `yield`.** Streaming generators must not keep `ai_lock` or any lock while yielding (a disconnected client would deadlock the app). `stream_events()` closes the generator in `finally`.
-5. **The context budget is real.** `CONTEXT=6144` tokens must hold: system prompt (+ up to 40 facts) + tool schemas (~850 tokens) + history (`clean_messages(budget=6000)` chars) + tool results (2,500 chars each) + the reply (`num_predict=1200`). If you grow any of these, re-measure (see `docs/DECISIONS.md` D-004). Overflow silently drops the **start** of the prompt (her personality and rules).
+5. **The context budget is real.** `CONTEXT=6144` tokens must hold: system prompt (+ up to 40 facts + document names) + tool schemas (~1,520 tokens, 18 tools) + history (`clean_messages(budget=6000)` chars) + tool results (2,500 chars each) + the reply (`num_predict=1200`). If you grow any of these, re-measure (see `docs/DECISIONS.md` D-004). Overflow silently drops the **start** of the prompt (her personality and rules).
 6. **Prompt changes MUST be tested on the real models** (`qwen3.5:9b` and `qwen3.5:4b`) with at least: a timer, "remember…", "how do I build a table in Python?", a reminder with a clock time, "tell me a joke". Report results. Small models follow **examples** better than rules.
 7. Model fallback: if the preferred model is missing or fails to load or stream, use `FAST_MODEL`. Don't remove this.
 7a. **Models:** never let the user switch to or download a model rated `too_big` (`Runtime.check_model` enforces this server-side; the UI only mirrors it). New models go in `hardware.CATALOG` with their real Ollama download size; keep thresholds in sync with `docs/DECISIONS.md` D-019 and `HardwareTests`. GPU detection must never crash startup (every probe is wrapped and falls back to "no GPU").

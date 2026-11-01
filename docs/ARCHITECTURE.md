@@ -30,6 +30,8 @@ Browser / phone ──HTTPS tunnel (phone only)──┐
 | HTTP server thread | `launcher.main` | app | `server.serve_forever()`; each request gets its own thread (`ThreadingHTTPServer`, daemon) |
 | Startup thread | `launcher.main` | until ready | `ensure_ai()` → `ensure_stt()` → `start_tunnel()` |
 | Voice prepare thread | startup | short | `voice.prepare()`: download Piper + voice, start Piper |
+| Background thread | `launcher.main` | app | `Runtime.background_loop()`: every 5 min, 10-minute reminders for upcoming Google Calendar events (`calendar_tick`) |
+| `powershell` screenshot / clipboard image | `files.screenshot` / `clipboard_image` | per request (20 s timeout) | fixed scripts; PNG passed to Ollama, then deleted |
 | `ollama serve` | `Runtime.spawn` (only if not already running) | app | LLM server |
 | `piper.exe --json-input` | `Voice._process` | app (restarted on voice/rate change) | sentence synthesis |
 | `cloudflared` | `start_tunnel` | app | phone HTTPS link (Cloudflare mode) |
@@ -71,7 +73,7 @@ GPU/RAM detection and model ratings live in `hardware.py` (see D-019); `GET /api
 
 | Path | Contents |
 |---|---|
-| `cortana.db` (+ `-wal`, `-shm`) | SQLite: `settings`, `facts` (≤200), `messages` (≤2000), `items` (timers/reminders/tasks) |
+| `cortana.db` (+ `-wal`, `-shm`) | SQLite: `settings`, `facts` (≤200), `messages` (≤2000), `items` (timers/reminders/tasks), `documents` (≤200) + `doc_chunks` (~900-char pieces with page labels), `events` (Cortana's calendar) |
 | `ollama/`, `ollama.log` | Ollama runtime if the app had to download it |
 | `whisper/`, `ggml-base.en.bin` | Speech recognition |
 | `piper/`, `voices/`, `piper.log`, `speech-tmp/` | Voice engine, voice models, temporary WAVs |
@@ -79,7 +81,8 @@ GPU/RAM detection and model ratings live in `hardware.py` (see D-019); `GET /api
 | `launch-state.json`, `startup-error.log` | Diagnostics |
 
 Schema (see `app/store.py`): `items(kind ∈ {timer, reminder, task}, text, due REAL|NULL, done, announced, created)`.
-Alerts = `done=0 AND announced=0 AND due<=now`. Timers are completed when announced; reminders stay open until completed.
+Documents keep only extracted text (never the original file). Events: `events(title, start, end)`; each also creates a
+reminder item 10 minutes before. Alerts = `done=0 AND announced=0 AND due<=now`. Timers are completed when announced; reminders stay open until completed.
 
 ## Frontend structure
 
