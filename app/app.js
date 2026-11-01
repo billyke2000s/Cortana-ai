@@ -10,7 +10,7 @@ function idleLabel(){return wake.on?'SAY “HEY CORTANA”':'TAP THE MIC TO SPEA
 function error(message){out.textContent=message;out.classList.add('err');setState('idle','READY WHEN YOU ARE');}
 function stop(){if(activeJob)api('/api/cancel',{request_id:activeJob}).catch(()=>{});activeJob=null;playingText='';requestId++;controller?.abort();controller=null;queue?.stop();queue=null;if(source){source.onended=null;try{source.stop();}catch{}source=null;}recording?.cancel();recording=null;avatar()?.stopSpeech();setState('idle',idleLabel());}
 async function unlockAudio(){audioContext??=new AudioContext();await audioContext.resume();}
-async function api(path,data,signal){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal});const value=await r.json();if(!r.ok)throw Error(value.error||'Service unavailable.');return value;}
+async function api(path,data,signal){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal,keepalive:path==='/api/cancel'});const value=await r.json();if(!r.ok)throw Error(value.error||'Service unavailable.');return value;}
 /* ---- Speech: each sentence is voiced as soon as it arrives and played back-to-back ---- */
 // Mouth shapes from loudness for voices that don't report them (Piper). Ids follow the viseme set in avatar.js.
 function envelopeCues(buffer){

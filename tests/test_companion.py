@@ -136,6 +136,8 @@ class CompanionApiTests(unittest.TestCase):
         def chunks(payload):
             self.rt.jobs.cancel('stopped_tool')
             yield {'message':{'tool_calls':[{'function':{'name':'add_task','arguments':{'text':'Should not exist'}}}]}}
+        original_model=self.rt.model
         with patch.object(self.rt,'ollama_stream',chunks):
             events=self.request('POST','/api/chat-stream',{'messages':[{'role':'user','content':'Add a task'}],'request_id':'stopped_tool'})[2].decode()
+        self.assertEqual(self.rt.model,original_model)
         self.assertIn('error',events);self.assertFalse(any(i['text']=='Should not exist' for i in self.rt.store.items()))

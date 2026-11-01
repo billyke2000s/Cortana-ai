@@ -466,8 +466,8 @@ class Runtime:
         try:response=urllib.request.urlopen(req,timeout=180)
         except urllib.error.HTTPError as e:
             raise RuntimeError(json.loads(e.read() or b'{}').get('error') or f'Ollama error {e.code}')
-        self.jobs.watch(response)
         with response:
+            self.jobs.watch(response)
             for line in response:
                 self.jobs.check()
                 if line.strip():
@@ -512,6 +512,7 @@ class Runtime:
                         content+=piece
                         for sentence in stream.feed(piece):yield {'type':'sentence','text':sentence}
             except RuntimeError as e:
+                self.jobs.check()  # cancellation must never switch the active model
                 # The bigger model may not fit next to other GPU work: retry once with the fast model.
                 if fell_back or content or raw or self.model==FAST_MODEL:raise
                 self.report(f'{self.model} failed ({str(e)[:80]}); using {FAST_MODEL}.')
