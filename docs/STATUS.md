@@ -33,7 +33,7 @@ _Last updated: 1 November 2026._
 - Wake word with a real microphone and your voice, in a real room (only synthetic speech tested); phone microphone over the tunnel.
 - Whether the real Qwen models follow the new "don't write a screen for weather" line (the card shows regardless).
 - New abilities on **`qwen3.5:9b`** (only 4B was run, on a CPU) and on your real GPU; screen reading of a real screen through the full app.
-- Tool choice varies between runs: with trimmed tool descriptions 4B skipped tools in 2 of 11 asks (invented weather and a summary), so the tested descriptions were restored plus a "never make up tool results" rule; see the repeated check below.
+- Tool choice varies between runs. Repeated check on 4B (each ask twice): the 6 new abilities 12/12; a code question once missed the `[[SCREEN]]` marker (the app's code fallback still moves fenced code to the display); weather was invented in 1 of 2 runs, so weather is now fetched before the model answers (D-027), after which 4/4 answers used the real data. The model can still embellish slightly ("tomorrow looks the same").
 - Adding a whole folder on a real PC with many large PDFs (time taken); scanned PDFs have no text to read.
 - Opening a found file with its default app (`os.startfile`) through the full app.
 - Google Calendar with a real secret address.

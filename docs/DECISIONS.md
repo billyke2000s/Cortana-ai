@@ -121,5 +121,13 @@ result ~950 ≈ 5,260, leaving ~880 tokens for the reply in that worst case (typ
 descriptions were tried to save ~140 tokens, but the real 4B model then skipped tools twice in 11 asks (it invented a weather
 report and a document summary), so the tested descriptions were kept. Re-measure before adding tools or raising limits.
 
+### D-027: Weather questions are answered from data fetched before the model runs
+**Why:** measured on `qwen3.5:4b` with the real prompt: it skipped `get_weather` and invented a London forecast in 1 of 2
+runs, and still in 2 of 4 runs with an extra "call get_weather" hint. A made-up forecast looks real, so this can't be left to the model.
+`runtime.weather_question()` spots weather questions and the place ("in/for/at <place>", else the home town); the app calls
+`get_weather` first and gives the model the real result as if it had called the tool. Measured after: 4 of 4 answers used the
+given data (7°C, sleet). **Cost:** a regex decides what is a weather question (e.g. "rainbow" is excluded); an unusual
+phrasing falls back to the model's own tool choice.
+
 ### D-018: No voice cloning of third parties
 The project supports training a Piper voice only from the owner's (or a consenting person's) recordings.

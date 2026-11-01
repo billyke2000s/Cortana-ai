@@ -17,7 +17,13 @@ All notable changes. Dates are UK time.
 - **Calendar events**: "book study time Thursday at 3" saves the event, reminds you 10 minutes before, and shows an
   **Add to Google Calendar** button. Google Calendar events also get a reminder 10 minutes before.
 - **Screen, clipboard and file access** switch in Systems. Cards for found files and new events, built from the data.
-- `/api/documents`, `/api/events`; real-model and Windows checks in the Live check workflow. 16 new tests (62 total).
+- `/api/documents`, `/api/events`; real-model and Windows checks in the Live check workflow; the release build now launches
+  the real `Cortana.exe` and checks it before publishing. 18 new tests (64 total).
+
+### Fixed
+- **Invented weather**: the 4B model sometimes answered weather questions without checking. The app now fetches the forecast
+  first and the model answers from it (4/4 faithful in the real-model check).
+- The windowed exe would crash in `--headless` mode on its first status line (no console).
 
 ## [1.3.0] - 2026-11-01
 
