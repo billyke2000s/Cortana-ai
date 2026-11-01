@@ -94,7 +94,7 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 2. **`server.py`** is the only door in. It serves the page, checks every request (local PC, or a phone paired via QR cookie), and blocks cross-site requests and private files.
 3. **`runtime.py`** sends your conversation to **Ollama** with a list of **tools**. As the model streams, a sentence splitter turns text into spoken sentences, and anything meant for the eyes (after a `[[SCREEN]]` marker, or any code or table) goes to the display panel instead.
 4. **`tools.py`** runs the abilities; **`store.py`** keeps memory, objectives and settings in a local SQLite file.
-5. **`voice.py`** keeps **Piper** running, so each sentence takes a fraction of a second, and falls back to the Windows voice if needed.
+5. **`voice.py`** keeps **Piper** running for fast speech, or uses the selected CPU reference voice via `neural.py`; Windows remains a fallback. Rhubarb aligns mouth poses from neural audio.
 6. **`app.js`** plays sentences back to back while the next ones are generated; **`avatar.js`** moves the 3D character's jaw, lips, eyes and head from the audio.
 
 Full details: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [API.md](docs/API.md) · [SPECIFICATION.md](docs/SPECIFICATION.md)
@@ -116,7 +116,8 @@ Full details: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · [API.md](docs/API.md) �
 <td align="center"><img src="docs/assets/screens/systems.png" width="220" alt="Systems settings"><br><b>Systems</b></td>
 </tr>
 </table>
-<sub>Screenshots use demo data.</sub>
+<table><tr><td align="center"><img src="docs/assets/screens/setup.png" width="220" alt="First setup with expression and PC voice choices"><br><b>First setup</b></td><td align="center"><img src="docs/assets/screens/voices.png" width="220" alt="Normal or Expressive and PC voice settings"><br><b>Voice and expression</b></td></tr></table>
+<sub>Screenshots refreshed for 1.5 using demo data and silent test speech. They show the interface, not a voice-quality test.</sub>
 
 ---
 

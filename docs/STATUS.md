@@ -4,13 +4,20 @@ _Last updated: 1 November 2026._
 
 ## 1.5 current verification
 
+**Released:** [v1.5.0](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.5.0). All release jobs passed in [Actions run 41308294155](https://github.com/billyke2000s/Cortana-ai/actions/runs/41308294155). The published executable is built from `b85d9b48231b0f1cb321a06cc6f60f073bc2ee8e`; later documentation/screenshot updates do not change the app. Download SHA-256: `0735727b2f96e55f7ee1ddec0afecef9ef572378906b3bda7a83f75fb02eb841`.
+
+Screenshots were refreshed from the actual interface using demo data and silent test speech. They are not evidence of subjective voice quality.
+
 Repository metadata currently reports **public**. The docs previously described it as private; visibility was not changed by this release.
 
 - Recovered source: 80 offline tests passed on Linux; JavaScript syntax checks passed.
 - Recovered implementation re-tested: browser layout passed at 320×568, 360×640, 390×844, 430×932, 844×390, 1280×900; saved chat and memory edit passed, no page errors.
 - Actual CPU reference speech produced 24 kHz audio and 11/30 Rhubarb mouth cues in two test sentences. One sentence skipped the name Cortana. Warm long-sentence render was 7.36 s; cold shorter render including model load was 31.21 s. These are observations, not guarantees.
 - A separately generated Piper “Hey Cortana” sample triggered the small keyword detector; an unrelated reference sentence did not.
-- Windows rebuilt-exe speech/alignment/cancellation, native keyword checks and real 4B/9B context regression are release gates; pending until their Actions run succeeds.
+- Windows build and packaged smoke passed: real reference speech (24 kHz, 22 mouth cues), Windows fallback, cancelled speech rejection, page/scripts/GLB/model catalogue/PDF parsing. Native keyword tests: “Hey Cortana…” detected; “curtains…” and “Hey Montana…” rejected. Notification subprocess returned success; visible delivery still needs a desktop.
+- Windows offline suite: 80 run, 79 passed and one expected Windows skip (the non-Windows PC-access error test). Linux: all 80 passed.
+- Final browser checks passed on GitHub, including the actual expressive forearm movement and Normal reset, saved chat restoration, memory editing and no JavaScript page errors.
+- Real `qwen3.5:4b`: 6/6 context regressions passed (timer, remember, code display, clock reminder, joke, old-fact recall). The cold `9b` CPU check exceeded the original 180-second transport timeout; the test harness now allows 900 seconds and refuses fallback. Final `qwen3.5:9b` result: **6/6 passed** with no fallback (same six cases as 4B). Cold first spoken response took about 242 seconds on the CPU runner; this is not a GPU performance measurement.
 - **[Unverified]** real microphone/speaker echo rejection, subjective voice/animation quality, visible Windows balloon delivery and phone microphone. Native synthesis may finish its current chunk after Stop.
 
 ## Previously verified (through 1.4)
@@ -37,7 +44,6 @@ Repository metadata currently reports **public**. The docs previously described 
 
 ## Not yet verified [Unverified]
 
-- The rebuilt `Cortana.exe` (build with the new modules, tzdata/dateutil bundling).
 - Piper on Windows: download, `--json-input` process, real speech quality and latency.
 - PC controls (Windows key events, `os.startfile`).
 - Tailscale mode (`tailscale serve --bg PORT`, Host header behaviour).
@@ -63,8 +69,8 @@ Repository metadata currently reports **public**. The docs previously described 
 
 1. Verify all [Unverified] items on Windows; fix what breaks.
 2. Train and install the owner's own Piper voice (voice trainer).
-3. Windows toast notifications for alerts when no page is open.
-4. Phoneme-accurate lip sync for Piper (alignment output).
+3. Check native reminder visibility with different Windows notification settings.
+4. Refine the estimated mouth poses and assess them against real speech.
 5. Streaming the Windows-voice fallback per sentence with lower latency.
-6. Custom "Hey Cortana" model (openWakeWord) to replace transcribe-every-burst.
+6. Validate the small keyword detector and playback echo rejection with real microphones.
 7. Optional: more abilities (music service, smart-home) behind the same allow-list rules.
