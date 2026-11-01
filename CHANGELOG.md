@@ -12,6 +12,7 @@ All notable changes. Dates are UK time.
 - **Weather card every time**: built from the forecast data instead of depending on the model.
 - **"Hey Cortana" more reliable**: fuzzy name matching on the PC (Whisper writes it as Katana, Courtana, Cortona…), a name hint
   for Whisper, thresholds that adapt to the mic and room, and bursts no longer dropped while one is being checked.
+- **Fixed:** the 35B model's tag is `qwen3.5:35b` (was `qwen3.5:35b-a3b`, which doesn't exist, so the model picker hid it).
 - Manual **Live check** workflow (real searches and wake phrases through real Whisper on Windows). 9 new tests (46 total).
 
 ## [1.2.0] - 2026-11-01

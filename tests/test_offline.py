@@ -171,7 +171,7 @@ class HardwareTests(unittest.TestCase):
     def test_too_big_models_are_not_selectable(self):
         rows = {r['tag']: r for r in hardware.recommend({'vram_gb': 8, 'ram_gb': 32})}
         self.assertFalse(rows['qwen3.5:27b']['selectable'])
-        self.assertFalse(rows['qwen3.5:35b-a3b']['selectable'])
+        self.assertFalse(rows['qwen3.5:35b']['selectable'])
         self.assertTrue(rows['qwen3.5:9b']['selectable'])
         self.assertEqual(sum(r['recommended'] for r in rows.values()), 1)
 

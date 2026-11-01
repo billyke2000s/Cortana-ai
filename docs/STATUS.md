@@ -13,6 +13,7 @@ _Last updated: 1 November 2026._
 | UI pages, panel placement, alerts, wake-word pipeline (stand-in recogniser), lip sync from audio | Playwright/Chromium at phone sizes against the real server + fake Ollama |
 | Hair/texture recovery | Deliberately corrupted texture on first load → detected, reloaded, rendered correctly |
 | Weather and search endpoints | Called from the PC's browser; response shapes match the code |
+| Model tags and image input | ollama.com/library/qwen3.5 (1 Nov 2026): tags 0.8b, 2b, 4b, 9b, 27b, 35b, 122b; **every size takes text and image input** |
 | Keyless web search | GitHub Windows runner, real requests: Bing and DuckDuckGo both returned results; top page read for 3 of 4 queries (BBC Sport scores page gave no readable text) |
 | Wake word with real Whisper | Windows text-to-speech → whisper.cpp v1.8.2 base.en with the hint → `wake_match`: 4/4 wake phrases detected, 3/3 look-alikes ignored (synthetic voice, not a real mic) |
 | Chat page, weather card every time | Playwright/Chromium (phone + desktop) with fake Ollama: weather asked 4 times → card every time, in Chat and outside it |
@@ -27,7 +28,7 @@ _Last updated: 1 November 2026._
 - Wake word with a real microphone and your voice, in a real room (only synthetic speech tested); phone microphone over the tunnel.
 - Whether the real Qwen models follow the new "don't write a screen for weather" line (the card shows regardless).
 - Google Calendar with a real secret address.
-- GPU detection on real hardware (`nvidia-smi` / registry), the `qwen3.5:35b-a3b` tag name, real model downloads from the picker.
+- GPU detection on real hardware (`nvidia-smi` / registry), real model downloads from the picker.
 
 ## Known issues / limitations
 

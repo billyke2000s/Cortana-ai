@@ -23,7 +23,7 @@ CATALOG = [
     {'tag': 'qwen3.5:2b', 'label': 'Qwen 3.5 2B', 'size_gb': 2.7, 'quality': 2, 'moe': False, 'blurb': 'Light. Fine for simple chat and timers.'},
     {'tag': 'qwen3.5:4b', 'label': 'Qwen 3.5 4B', 'size_gb': 3.4, 'quality': 3, 'moe': False, 'blurb': 'Fast and capable. Good tool use.'},
     {'tag': 'qwen3.5:9b', 'label': 'Qwen 3.5 9B', 'size_gb': 6.6, 'quality': 4, 'moe': False, 'blurb': 'Smart all-rounder. Best for 8-12 GB cards.'},
-    {'tag': 'qwen3.5:35b-a3b', 'label': 'Qwen 3.5 35B-A3B (MoE)', 'size_gb': 22.0, 'quality': 5, 'moe': True, 'blurb': 'Large mixture-of-experts. Fast for its size; needs lots of memory.'},
+    {'tag': 'qwen3.5:35b', 'label': 'Qwen 3.5 35B-A3B (MoE)', 'size_gb': 22.0, 'quality': 5, 'moe': True, 'blurb': 'Large mixture-of-experts. Fast for its size; needs lots of memory.'},
     {'tag': 'qwen3.5:27b', 'label': 'Qwen 3.5 27B', 'size_gb': 17.4, 'quality': 6, 'moe': False, 'blurb': 'Smartest dense model. Needs a 20 GB+ card.'},
 ]
 
