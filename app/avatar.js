@@ -142,6 +142,7 @@ function frame(now){
  const p=targetPose();
  for(const k in mouth)mouth[k]=THREE.MathUtils.damp(mouth[k],p[k],k==='close'?35:24,dt);
  rotate('Jaw','x',mouth.jaw*.20);
+ if(model.userData.originalMouth){model.userData.originalMouth.scale.y=1+mouth.jaw*5;model.userData.originalMouth.scale.x=1+mouth.wide*.4-mouth.round*.35;}
  shape('Mouth-EE',mouth.wide*.8);shape('Mouth-OO',mouth.round*.75);
  translate('Lips Lower','z',mouth.close*.0025+mouth.fv*.0016);
  translate('Lips Upper','z',-mouth.close*.001);
@@ -184,6 +185,42 @@ try{
  // untextured (flat face, solid blocky hair). Check every textured material and reload once if any are missing.
  const missingTextures=g=>{const want=new Set();for(const m of g.parser.json.materials||[])if(m.pbrMetallicRoughness?.baseColorTexture)want.add(m.name);
   const bad=new Set(want);g.scene.traverse(o=>{if(o.isMesh)for(const mat of [].concat(o.material))if(mat.map?.image?.width)bad.delete(mat.name);});return [...bad];};
+
+ // Original procedural hologram: redistributable fallback when a third-party GLB is absent.
+ function originalAvatar(){
+  const root=new THREE.Group(), cyan=new THREE.MeshStandardMaterial({color:0x44bfff,transparent:true,opacity:.82,metalness:.35,roughness:.28,emissive:0x1269b6,emissiveIntensity:.38,side:THREE.DoubleSide});
+  const dark=new THREE.MeshStandardMaterial({color:0x0a345b,metalness:.55,roughness:.32,emissive:0x0b4477,emissiveIntensity:.25});
+  const glow=new THREE.MeshStandardMaterial({color:0xa4edff,emissive:0x4abaff,emissiveIntensity:.9});
+  function part(geo,mat,x,y,z,sx=1,sy=1,sz=1,parent=root){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.scale.set(sx,sy,sz);parent.add(m);return m;}
+  const torso=part(new THREE.CylinderGeometry(.19,.25,.49,24),cyan,0,.87,0,1,1,.72);
+  part(new THREE.SphereGeometry(.18,24,16),cyan,0,1.17,0,1,.45,.75);
+  part(new THREE.CylinderGeometry(.065,.075,.13,16),dark,0,1.25,0);
+  const head=new THREE.Group();head.position.set(0,1.39,0);root.add(head);
+  const skull=part(new THREE.SphereGeometry(.145,32,24),cyan,0,.035,0,1,1.22,.86,head);
+  part(new THREE.SphereGeometry(.145,24,16),dark,0,.102,-.018,1.09,.65,.91,head);
+  for(const x of [-.056,.056]){
+   part(new THREE.SphereGeometry(.023,12,10),glow,x,.055,.119,1,.48,.4,head);
+   part(new THREE.SphereGeometry(.037,12,10),dark,x,.076,.123,1.2,.18,.35,head);
+  }
+  const jaw=part(new THREE.SphereGeometry(.083,20,12),cyan,0,-.087,.067,1,.4,.9,head);
+  const mouth=part(new THREE.BoxGeometry(.067,.008,.008),dark,0,-.074,.137,1,1,1,head);
+  const hair=part(new THREE.SphereGeometry(.154,24,16),dark,0,.135,-.012,1.1,.58,1,head);
+  for(const x of [-1,1]){
+   const arm=part(new THREE.CylinderGeometry(.062,.044,.36,14),cyan,x*.245,.88,0,1,1,.9);arm.rotation.z=x*.3;
+   part(new THREE.SphereGeometry(.055,16,12),cyan,x*.27,.67,.005);
+  }
+  for(let i=0;i<5;i++){
+   const ring=part(new THREE.TorusGeometry(.22+i*.008,.002,4,64),glow,0,.68+i*.13,0);
+   ring.rotation.x=Math.PI/2;ring.material=glow.clone();ring.material.opacity=.28;ring.material.transparent=true;
+  }
+  // The existing animation loop can drive these original facial parts.
+  const bone=(name,node)=>bones.set(name,{node,rotation:node.quaternion.clone(),position:node.position.clone()});
+  bone('bip_head',head);bone('Jaw',jaw);
+  rig={...rig,bip_head:{x:[1,0,0],y:[0,1,0],z:[0,0,1]},Jaw:{x:[1,0,0],y:[0,1,0],z:[0,0,1]}};
+  root.userData.originalMouth=mouth;
+  return root;
+ }
+
  async function loadModel(){
   for(let attempt=1;;attempt++){
    const g=await new GLTFLoader().loadAsync('./assets/cortana.glb'+(attempt>1?'?retry='+attempt:''));
@@ -193,8 +230,8 @@ try{
    if(attempt>=3){console.error('[Cortana avatar] showing model with missing textures after 3 attempts');return g;}
   }
  }
- const [gltf,rigData]=await Promise.all([loadModel(),fetch('./assets/rig.json').then(r=>{if(!r.ok)throw Error('Rig unavailable');return r.json();})]);
- rig=rigData;model=gltf.scene;
+ let gltf=null;try{gltf=await loadModel();}catch(error){console.info('[Cortana avatar] Using original procedural 3D hologram:',error.message);}
+ if(gltf){rig=await fetch('./assets/rig.json').then(r=>r.json());model=gltf.scene;}else{model=originalAvatar();}
  model.traverse(o=>{
   if(o.isBone)bones.set(o.name,{node:o,rotation:o.quaternion.clone(),position:o.position.clone()});
   if(!o.isMesh)return;
