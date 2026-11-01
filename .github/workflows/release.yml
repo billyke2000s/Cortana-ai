@@ -2,35 +2,18 @@ name: Build Windows release
 on:
   push:
     tags: ['v*']
-    branches: ['release/companion-voice']
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag
+        description: 'Release tag (e.g. v1.6.0)'
         required: true
-        default: v1.5.0
 concurrency:
   group: cortana-release-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: write
-  actions: write
 jobs:
-  superseded:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            if (context.eventName !== 'push' || context.ref !== 'refs/heads/release/companion-voice') return;
-            const runs = await github.rest.actions.listWorkflowRuns({owner: context.repo.owner, repo: context.repo.repo, workflow_id: 'release.yml', branch: 'release/companion-voice', per_page: 20});
-            for (const run of runs.data.workflow_runs) {
-              if (run.id !== context.runId && run.run_number < Number(process.env.GITHUB_RUN_NUMBER) && run.head_sha !== context.sha && ['queued','in_progress'].includes(run.status)) {
-                await github.rest.actions.cancelWorkflowRun({owner: context.repo.owner, repo: context.repo.repo, run_id: run.id});
-              }
-            }
   ui:
-    needs: superseded
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +24,6 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python tests/browser_check.py
   models:
-    needs: superseded
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -64,7 +46,6 @@ jobs:
           ollama pull '${{ matrix.model }}'
           python tests/ci_context_check.py '${{ matrix.model }}'
   build:
-    needs: superseded
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +79,7 @@ jobs:
           retention-days: 7
   publish:
     needs: [ui, models, build]
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'Release Cortana 1.5.0')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -107,13 +88,13 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'v1.5.0' }}
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          name: Cortana 1.5.0
+          name: Cortana ${{ github.event.inputs.tag || github.ref_name }}
           files: dist/Cortana.exe
           body: |
             Download Cortana.exe and run it on Windows 10/11. Keep the launcher open.
 
-            New: Normal/Expressive setup and previews; experimental reference voice on PC alongside fast Piper; audio-aligned mouth cues; request cancellation; restored conversation and older-turn recap; relevant editable memories; Windows reminders and snooze; small local keyword detector; latency measurements.
+            What changed: see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/CHANGELOG.md).
 
-            The reference voice is experimental, slower than Piper, and can skip or mispronounce words. It is not a 1:1 recreation. Native speech can finish its current synthesis chunk after Stop; cancelled audio is discarded. Real microphone echo rejection, animation quality and visible notification delivery need checking on your own Windows desktop.
+            Windows SmartScreen may warn because the app isn't code-signed: click **More info → Run anyway**.

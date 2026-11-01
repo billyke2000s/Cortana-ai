@@ -2,6 +2,18 @@
 
 All notable changes. Dates are UK time.
 
+## [Unreleased] - 1.6 step 1: speed and fixes
+
+### Fixed
+- Cortana's voice no longer re-hashes and re-unpacks its 109 MB model archive (and the 87 MB lip-sync zip) on every launch; it unpacks once (`.unpacked` marker).
+- The voice warms up at startup, so the first reply no longer pays the slow first-generation cost. Measured on a 2-core cloud CPU: second launch load + warm-up 9.8 s (was 18.5–30 s before the first sentence).
+- The voice uses half the logical cores (2–8 threads) instead of a fixed 4.
+- While the voice is still loading the label says "Loading Cortana's voice…" instead of staying silent; `GET /api/status` adds `voiceReady`.
+- The next sentence is synthesised while the current one plays again (1.5 waited for each sentence), still cancellable.
+- Reminder balloons run in their own thread (the loop no longer blocks ~9 s per balloon) and a failed balloon is retried after 1 then 2 minutes and given up after 3 tries, instead of every 2 seconds.
+- Older-turn recap now starts exactly where the sent history ends (it skipped one message).
+- The release workflow works for any `v*` tag again (1.5 hard-coded the name, body and tag `v1.5.0`).
+
 ## [1.5.0] - 2026-11-01
 
 ### Added

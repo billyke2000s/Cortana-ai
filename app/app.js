@@ -33,10 +33,13 @@ class SpeechQueue{
  constructor(id){this.id=id;this.job=activeJob??=clientId+'_'+id;this.abort=new AbortController();this.chain=Promise.resolve();this.sources=[];this.cues=[];this.t0=null;this.end=0;this.count=0;this.finished=0;this.closed=false;this.failure=null;}
  add(text){
   const id=this.id;
+  // Synthesis starts now so the next sentence is prepared while this one plays; Stop aborts the request and cancels it on the PC.
+  const audio=api('/api/speech',{text,rate:Number($('rate').value),request_id:this.job},this.abort.signal).catch(e=>({error:e.message}));
+  if(capabilities.voiceReady===false&&state==='thinking')label.textContent='LOADING CORTANA\u2019S VOICE…';
   this.count++;
   this.chain=this.chain.then(async()=>{
    if(id!==requestId)return;
-   const result=await api('/api/speech',{text,rate:Number($('rate').value),request_id:this.job},this.abort.signal);if(id!==requestId)return;
+   const result=await audio;if(id!==requestId)return;
    if(result.error){this.failure=result.error;this.finished++;return this.check();}
    const buffer=await audioContext.decodeAudioData(Uint8Array.from(atob(result.audio),c=>c.charCodeAt(0)).buffer);if(id!==requestId)return;
    const node=audioContext.createBufferSource();node.buffer=buffer;node.connect(audioContext.destination);

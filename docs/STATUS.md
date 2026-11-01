@@ -2,6 +2,12 @@
 
 _Last updated: 1 November 2026._
 
+## 1.6 step 1 (speed and fixes): verification
+
+- Offline suite: 86 tests passed on Linux (Python 3.13); the 6 new regression tests fail on the 1.5.0 code.
+- Real ZipVoice on a 2-core cloud CPU: first launch load + one-time unpack + warm-up 64.9 s; second launch 9.8 s; first reply sentence 7.6–7.9 s after warm-up.
+- **[Unverified]** timings on the owner's Ryzen 9 3900X, the release workflow on a real tag, and the Windows balloon thread on a desktop.
+
 ## 1.5 current verification
 
 **Released:** [v1.5.0](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.5.0). All release jobs passed in [Actions run 41308294155](https://github.com/billyke2000s/Cortana-ai/actions/runs/41308294155). The published executable is built from `b85d9b48231b0f1cb321a06cc6f60f073bc2ee8e`; later documentation/screenshot updates do not change the app. Download SHA-256: `0735727b2f96e55f7ee1ddec0afecef9ef572378906b3bda7a83f75fb02eb841`.

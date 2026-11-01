@@ -152,7 +152,7 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 - `GET /api/conversation` → `{messages:[{id,role,content,created}],summary:str}`; last 60 messages and an extractive older-turn recap (≤800 characters).
 - `POST /api/chat-stream` and `/api/speech` accept optional `request_id` (1–100 ASCII letters/digits/underscore/hyphen). Existing payloads remain supported.
 - `POST /api/cancel {request_id}` → `{ok:true}`. A cancelled ID stays cancelled for one hour, including queued speech. Streaming ends with an error; cancelled speech returns 503. Completed tools are not rolled back.
-- `POST /api/metrics {playback_ms:number}` (0–600000) → `{ok:true}`. Status adds `latency` (milliseconds), `wakeDetector`, `lipSync`, `expressionMode`, `choosePersonality`; alerts add `due`.
+- `POST /api/metrics {playback_ms:number}` (0–600000) → `{ok:true}`. Status adds `latency` (milliseconds), `wakeDetector`, `lipSync`, `voiceReady` (false while the chosen voice loads), `expressionMode`, `choosePersonality`; alerts add `due`.
 - `POST /api/transcribe` with `wake:true` runs the small keyword detector first. A negative burst avoids Whisper. `interrupt:true` additionally requires the detector (no Whisper-only interruption fallback).
 - Settings GET/POST add `expression_mode` (`normal` default / `expressive`), `setup_complete` (boolean, false default), `native_notifications` (boolean, true default); `voice_engine` adds `zipvoice`. Unknown values are rejected.
 - `GET /api/memory` adds `conflicts`, an array of potentially conflicting fact-ID groups. `POST /api/memory {action:"edit",id,text}` replaces one existing fact (1–300 chars).

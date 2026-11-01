@@ -22,9 +22,13 @@ class Lips:
     def prepare(self,report):
         platform='Windows' if os.name=='nt' else 'Linux';root=DATA/'rhubarb'
         try:
+            name='rhubarb.exe' if os.name=='nt' else 'rhubarb'
+            self.exe=next(root.rglob(name),None) if root.exists() else None   # already installed: skip re-hashing and re-unpacking the 87 MB zip
+            if self.exe:
+                self.status='Local audio alignment ready.';return
             target=DATA/'rhubarb.zip'
             download(RELEASE+f'Rhubarb-Lip-Sync-1.14.0-{platform}.zip',target,report,CHECKSUM[platform])
-            extract(target,root);self.exe=next(root.rglob('rhubarb.exe' if os.name=='nt' else 'rhubarb'))
+            extract(target,root);self.exe=next(root.rglob(name))
             if os.name!='nt':self.exe.chmod(0o755)
             self.status='Local audio alignment ready.'
         except Exception:self.exe=None;self.status='Audio alignment unavailable; using audio envelope.'

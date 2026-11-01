@@ -143,7 +143,8 @@ class Voice:
         store.set('voice_engine_failed', False)   # try Piper again on every launch
         if store.get('voice_engine','piper')=='zipvoice':
             try:
-                with self.runtime.neural.tts_lock:self.runtime.neural.prepare_voice()
+                self.ready,self.status=False,"Loading Cortana's voice..."
+                self.runtime.neural.warm_up()
                 self.ready,self.status=True,'Reference voice ready (experimental, CPU).'
                 return
             except Exception:

@@ -442,14 +442,32 @@ class Runtime:
         self.store.set('cal_reminded',done[-300:])
         return added
 
-    def notification_tick(self):
-        from companion import notify
+    NOTIFY_TRIES=3   # after this many failed Windows balloons, stop trying (the in-app alert still fires)
+
+    def notification_tick(self,now=None,wait=False):
+        """Show due reminders as Windows balloons. Each balloon runs in its own thread (it stays up ~9 s), so the loop
+        never blocks; a failed balloon is retried after 1, then 2 minutes, then given up instead of every 2 seconds."""
         if not self.store.get('native_notifications',True):return
+        now=time.monotonic() if now is None else now
+        if not hasattr(self,'notify_state'):self.notify_state={}   # (id, due) -> {'busy','tries','next'}
+        threads=[]
         for item in self.store.pending_notifications():
-            if self.closing.is_set():return
-            try:
-                if notify(item['text']):self.store.mark_notified(item['id'],item['due'])
-            except Exception:pass
+            if self.closing.is_set():break
+            key=(item['id'],item['due']);entry=self.notify_state.setdefault(key,{'busy':False,'tries':0,'next':0})
+            if entry['busy'] or now<entry['next']:continue
+            entry['busy']=True
+            t=threading.Thread(target=self._notify_one,args=(item,key,entry,now),daemon=True);t.start();threads.append(t)
+        if wait:
+            for t in threads:t.join()
+
+    def _notify_one(self,item,key,entry,now):
+        from companion import notify
+        try:shown=notify(item['text'])
+        except Exception:shown=False
+        entry['tries']+=1;entry['busy']=False
+        if shown or entry['tries']>=self.NOTIFY_TRIES:
+            self.store.mark_notified(item['id'],item['due']);self.notify_state.pop(key,None)
+        else:entry['next']=now+60*entry['tries']
 
     def background_loop(self):
         calendar_at=0

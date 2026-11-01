@@ -140,7 +140,7 @@ class Store:
             self.db.commit()
 
     def conversation_summary(self,budget=800):
-        rows=self.q('SELECT role,content FROM messages ORDER BY id DESC LIMIT 30 OFFSET 16')
+        rows=self.q('SELECT role,content FROM messages ORDER BY id DESC LIMIT 30 OFFSET 15')   # the model already sees the 15 newest earlier messages (clean_messages keeps 16 incl. the new question)
         lines=[];size=0
         for m in rows:
             text=' '.join(m['content'].split('[[SCREEN]]')[0].split())[:130]

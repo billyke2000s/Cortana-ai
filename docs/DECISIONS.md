@@ -145,3 +145,7 @@ Rhubarb 1.14 phonetic recognition supplies nine audio-aligned mouth poses; it is
 ### D-030: Bounded memory, cancellable turns, background reminders
 
 Rank up to 12 facts/1,800 chars by query terms and recency. Keep fact conflicts visible for explicit editing instead of deleting facts heuristically. Recap is extractive (≤800 chars) and reduces the existing history allowance, so context does not grow. IDs group chat/speech cancellation; active native chunks may finish but output is discarded. Reminders have a native-delivery flag separate from browser acknowledgement. Clear History increments a version checked atomically when saving an exchange.
+
+### D-031: Unpack once, warm up, never block on reminders
+
+Voice and keyword archives are unpacked once; a `.unpacked` marker written after a successful unpack proves it finished, so an interrupted unpack is redone. Installed Rhubarb is reused without re-hashing its zip. The reference voice generates one short phrase at startup because the first generation after loading is several times slower. Threads = half the logical cores, 2–8. The client again requests each sentence's audio as soon as it arrives (the server lock still serialises synthesis; lip alignment and decoding overlap). Windows balloons run in a thread with 1- and 2-minute retries and stop after three failures; the in-app alert is independent. The recap offset is 15 because the model already sees the 15 newest earlier messages.

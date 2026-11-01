@@ -1,6 +1,7 @@
 """CPU ZipVoice reference speech and a small local keyword spotter."""
 import io
 import json
+import os
 import threading
 import wave
 from runtime import DATA,RESOURCES,download,extract
@@ -13,6 +14,9 @@ HASHES={
  'vocos_24khz.onnx':'bcb3b970e384161c4d634f0bb9e999ff1c471b34c9bc0b1049a5014065ed3cc0',
  'lexicon-en-us.txt':'8b67ae549a465eee78f92ecb74644ad90c3c58ce65f19c68baf85878a10ef73a',
  KWS_NAME+'.tar.bz2':'f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a'}
+# Half the logical cores (a 12-core/24-thread CPU gets 8), never fewer than 2 or more than 8.
+THREADS=max(2,min(8,(os.cpu_count() or 4)//2))
+WARM_UP='Systems online.'
 
 def pcm(audio):
     import numpy as np
@@ -30,19 +34,34 @@ class Neural:
         target=DATA/'neural'/name
         download(BASE+group+'/'+name,target,self.report,HASHES[name]);return target
 
+    def unpacked(self,name,group):
+        """Download and unpack an archive once; later launches reuse the folder (a marker proves the unpack finished)."""
+        folder=DATA/'neural'/name;marker=folder/'.unpacked'
+        if not marker.exists():
+            extract(self.asset(name+'.tar.bz2',group),DATA/'neural');marker.write_text(HASHES[name+'.tar.bz2'])
+        return folder
+
     def prepare_voice(self):
         import sherpa_onnx as s
         if self.tts:return
-        archive=self.asset(ZIP_NAME+'.tar.bz2','tts-models');root=DATA/'neural'
-        extract(archive,root);m=root/ZIP_NAME
+        m=self.unpacked(ZIP_NAME,'tts-models')
         vocoder=self.asset('vocos_24khz.onnx','vocoder-models');english=self.asset('lexicon-en-us.txt','tts-models')
         config=s.OfflineTtsConfig(model=s.OfflineTtsModelConfig(zipvoice=s.OfflineTtsZipvoiceModelConfig(
             tokens=str(m/'tokens.txt'),encoder=str(m/'encoder.int8.onnx'),decoder=str(m/'decoder.int8.onnx'),
-            vocoder=str(vocoder),lexicon=str(m/'lexicon.txt')+','+str(english)),num_threads=4,provider='cpu'))
+            vocoder=str(vocoder),lexicon=str(m/'lexicon.txt')+','+str(english)),num_threads=THREADS,provider='cpu'))
         if not config.validate():raise RuntimeError('Reference voice files are incomplete.')
         self.tts=s.OfflineTts(config);profile=RESOURCES/'voice-profile'
         self.profile=json.loads((profile/'voice_profile.json').read_text())
         self.reference,self.reference_rate=pcm((profile/'reference.wav').read_bytes())
+
+    def warm_up(self):
+        """The first generation after loading is several times slower; pay that cost at startup, not on the first reply."""
+        import sherpa_onnx as s
+        with self.tts_lock:
+            self.prepare_voice()
+            config=s.GenerationConfig();config.reference_audio=self.reference
+            config.reference_sample_rate=self.reference_rate;config.reference_text=self.profile['reference_text'];config.num_steps=8
+            self.tts.generate(WARM_UP,config)
 
     def speak(self,text,rate,jobs):
         import numpy as np
@@ -66,7 +85,7 @@ class Neural:
         import sherpa_onnx as s
         with self.kws_lock:
             if self.kws:return
-            extract(self.asset(KWS_NAME+'.tar.bz2','kws-models'),DATA/'neural');m=DATA/'neural'/KWS_NAME
+            m=self.unpacked(KWS_NAME,'kws-models')
             keywords=DATA/'neural'/'cortana-keywords.txt'
             keywords.write_text('▁HE Y ▁C OR T AN A :2.0 #0.35 @HEY_CORTANA\n▁C OR T AN A :1.5 #0.45 @CORTANA\n',encoding='utf8')
             self.kws=s.KeywordSpotter(tokens=str(m/'tokens.txt'),encoder=str(next(m.glob('encoder*.int8.onnx'))),

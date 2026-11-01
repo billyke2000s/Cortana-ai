@@ -141,3 +141,63 @@ class CompanionApiTests(unittest.TestCase):
             events=self.request('POST','/api/chat-stream',{'messages':[{'role':'user','content':'Add a task'}],'request_id':'stopped_tool'})[2].decode()
         self.assertEqual(self.rt.model,original_model)
         self.assertIn('error',events);self.assertFalse(any(i['text']=='Should not exist' for i in self.rt.store.items()))
+
+class VoiceSpeedAndReminderTests(unittest.TestCase):
+    """1.6 step 1: unpack voice files once, never-blocking reminder balloons with backoff, no recap gap."""
+    def test_voice_archive_unpacks_once(self):
+        import neural
+        with tempfile.TemporaryDirectory() as tmp,patch.object(neural,'DATA',Path(tmp)),\
+             patch.object(neural,'download') as download,patch.object(neural,'extract') as extract:
+            n=neural.Neural(lambda m:None)
+            def fake_extract(archive,directory):(Path(directory)/neural.ZIP_NAME).mkdir(parents=True,exist_ok=True)
+            extract.side_effect=fake_extract
+            folder=n.unpacked(neural.ZIP_NAME,'tts-models')
+            self.assertEqual(extract.call_count,1);self.assertTrue((folder/'.unpacked').exists())
+            n.unpacked(neural.ZIP_NAME,'tts-models')   # next launch: no re-hash of the 109 MB archive, no re-unpack
+            self.assertEqual(extract.call_count,1);self.assertEqual(download.call_count,1)
+
+    def test_voice_threads_are_bounded(self):
+        import neural
+        self.assertTrue(2<=neural.THREADS<=8)
+
+    def test_installed_lip_sync_skips_download(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.object(lips,'DATA',Path(tmp)),patch.object(lips,'download') as download:
+            exe=Path(tmp)/'rhubarb'/'Rhubarb-Lip-Sync-1.14.0'/('rhubarb.exe' if lips.os.name=='nt' else 'rhubarb')
+            exe.parent.mkdir(parents=True);exe.write_bytes(b'')
+            l=lips.Lips();l.prepare(lambda m:None)
+            download.assert_not_called();self.assertEqual(l.exe,exe);self.assertEqual(l.status,'Local audio alignment ready.')
+
+    def make_runtime(self):
+        rt=object.__new__(base.runtime.Runtime)
+        rt.store=base.store.Store(':memory:');rt.closing=threading.Event();self.addCleanup(rt.store.close)
+        return rt
+
+    def test_failed_balloon_backs_off_then_gives_up(self):
+        rt=self.make_runtime();tid=rt.store.add_item('reminder','Call home',time.time()-5);calls=[]
+        with patch.object(companion,'notify',side_effect=lambda text:calls.append(text) or False):
+            rt.notification_tick(now=0,wait=True);self.assertEqual(len(calls),1)
+            rt.notification_tick(now=30,wait=True);self.assertEqual(len(calls),1)    # not every 2 seconds
+            rt.notification_tick(now=61,wait=True);self.assertEqual(len(calls),2)
+            rt.notification_tick(now=150,wait=True);self.assertEqual(len(calls),2)   # second wait is 2 minutes
+            rt.notification_tick(now=200,wait=True);self.assertEqual(len(calls),3)
+            rt.notification_tick(now=10**6,wait=True);self.assertEqual(len(calls),3)  # given up after 3 tries
+        self.assertEqual(rt.store.pending_notifications(),[]);self.assertEqual(rt.store.due_alerts()[0]['id'],tid)   # in-app alert still fires
+
+    def test_balloon_does_not_block_the_loop(self):
+        rt=self.make_runtime();rt.store.add_item('timer','Tea',time.time()-5);release=threading.Event()
+        def slow(text):release.wait(5);return True
+        with patch.object(companion,'notify',side_effect=slow):
+            started=time.monotonic();rt.notification_tick(now=0);rt.notification_tick(now=1)
+            self.assertLess(time.monotonic()-started,1)   # the old loop waited ~9 s per balloon
+            release.set()
+            for _ in range(50):
+                if not rt.store.pending_notifications():break
+                time.sleep(.05)
+        self.assertEqual(rt.store.pending_notifications(),[])
+
+    def test_recap_starts_where_sent_history_ends(self):
+        s=base.store.Store(':memory:');self.addCleanup(s.close)
+        for i in range(20):s.log_message('user' if i%2==0 else 'assistant',f'msg{i}')
+        # The model sees the 15 newest earlier messages (msg5..msg19); the recap must cover msg4 and older, with no gap or overlap.
+        recap=s.conversation_summary().split('\n')
+        self.assertEqual(recap[-1],'user: msg4');self.assertNotIn('msg5',s.conversation_summary())

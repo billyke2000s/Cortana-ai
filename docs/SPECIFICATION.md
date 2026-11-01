@@ -73,7 +73,7 @@ All tools are disabled when **Abilities** is unticked in Systems.
   (Relaxed 1.15, Normal 1.0, Brisk 0.88). Default voice `en_US-hfc_female-medium`; 8 stock voices offered; any
   `*.onnx` + `*.onnx.json` in the voices folder appears as a selectable voice.
 - If Piper isn't ready or fails, that sentence uses the Windows voice (first installed female voice) and the status explains why.
-- Reference voice (`zipvoice`): CPU-only ZipVoice-Distill int8 + Vocos, 8 steps, using the private supplied reference profile; downloads roughly 185 MB of model files. No pitch shifting. Experimental: can skip words and is slower than Piper.
+- Reference voice (`zipvoice`): CPU-only ZipVoice-Distill int8 + Vocos, 8 steps, using the private supplied reference profile; downloads roughly 185 MB of model files. No pitch shifting. Experimental: can skip words and is slower than Piper. Unpacked once and warmed up at startup; while loading, the label shows "Loading Cortana's voice…".
 - Lip sync: Windows voice → native visemes; Piper/reference → local Rhubarb phonetic audio alignment. It estimates nine mouth poses, not an exact phoneme transcript. Alignment unavailable/timeout → envelope fallback.
 - Stop cancels the request ID on the server, stops playback and aborts queued speech HTTP calls. Native synthesis may finish its current chunk, but its output is discarded; completed tool effects are not undone.
 
@@ -114,7 +114,7 @@ pace and the phone QR (original Settings dialog). **Save** applies changes.
 
 Checked on every status poll (4 s). The first due, unannounced item is acknowledged, a three-note chime plays, and after
 0.7 s she says "Chief, your <label> timer is done." or "Reminder, Chief: <text>." Only while she's idle; one at a time.
-The launcher also checks every two seconds and attempts native Windows reminder balloons while the browser is closed. Notification delivery has its own `notified` flag and does not consume a browser alert. Overdue alerts survive restarts. Systems can disable native reminders. Keep the launcher running; Windows notification settings control visibility. Objectives offers +10m snooze; recent acknowledged timers remain snoozable for 24 hours.
+The launcher also checks every two seconds and attempts native Windows reminder balloons while the browser is closed (each in its own thread; a failed balloon is retried after 1 then 2 minutes and given up after 3 tries). Notification delivery has its own `notified` flag and does not consume a browser alert. Overdue alerts survive restarts. Systems can disable native reminders. Keep the launcher running; Windows notification settings control visibility. Objectives offers +10m snooze; recent acknowledged timers remain snoozable for 24 hours.
 
 ## 8. Wake word
 
