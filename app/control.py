@@ -6,7 +6,7 @@ Off by default (setting `full_access`), PC-only (never from a paired phone), and
   action -> it is performed. Emergency stop: push the mouse into the top-left corner, or Stop on the card.
 Everything run is appended to DATA/full-access.log so the owner can see exactly what happened.
 """
-import base64, ctypes, json, os, re, struct, subprocess, time
+import base64, ctypes, json, os, re, struct, subprocess, time, zlib
 from datetime import datetime
 
 HIDDEN = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -191,15 +191,101 @@ $out.Save($env:CORTANA_IMAGE_OUT, [System.Drawing.Imaging.ImageFormat]::Png)
 '''
 
 
+# ---- fast in-process screenshot (GDI), ~10x quicker than starting PowerShell for every step
+def png_bytes(rgb, w, h):
+    """Minimal PNG (8-bit RGB, no filtering, fast zlib) from packed RGB rows."""
+    stride = w * 3
+    raw = b''.join(b'\x00' + bytes(rgb[y * stride:(y + 1) * stride]) for y in range(h))
+    chunk = lambda kind, data: struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xFFFFFFFF)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw, 1)) + chunk(b'IEND', b'')
+
+
+def bgra_to_rgb(bgra, w, h):
+    rgb = bytearray(w * h * 3)
+    rgb[0::3], rgb[1::3], rgb[2::3] = bgra[2::4], bgra[1::4], bgra[0::4]
+    return rgb
+
+
+def grab_screen(max_width=1280):
+    """Whole primary screen at physical resolution (DPI-aware for this thread only), scaled to max_width, as base64 PNG."""
+    from ctypes import wintypes
+    u, g = ctypes.windll.user32, ctypes.windll.gdi32
+    old = None
+    try:
+        old = u.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))   # per-monitor v2: real pixels, Windows 10 1607+
+    except AttributeError:
+        pass
+    try:
+        sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+        scale = min(1.0, max_width / sw);w, h = max(1, int(sw * scale)), max(1, int(sh * scale))
+        screen_dc = u.GetDC(0);mem = g.CreateCompatibleDC(screen_dc);bmp = g.CreateCompatibleBitmap(screen_dc, w, h)
+        g.SelectObject(mem, bmp);g.SetStretchBltMode(mem, 4)   # HALFTONE: smooth downscale
+        g.StretchBlt(mem, 0, 0, w, h, screen_dc, 0, 0, sw, sh, 0x00CC0020 | 0x40000000)   # SRCCOPY | CAPTUREBLT (layered windows)
+
+        class BITMAPINFOHEADER(ctypes.Structure):
+            _fields_ = [('biSize', wintypes.DWORD), ('biWidth', wintypes.LONG), ('biHeight', wintypes.LONG), ('biPlanes', wintypes.WORD),
+                        ('biBitCount', wintypes.WORD), ('biCompression', wintypes.DWORD), ('biSizeImage', wintypes.DWORD),
+                        ('biXPelsPerMeter', wintypes.LONG), ('biYPelsPerMeter', wintypes.LONG), ('biClrUsed', wintypes.DWORD), ('biClrImportant', wintypes.DWORD)]
+        info = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), w, -h, 1, 32, 0, 0, 0, 0, 0, 0)   # top-down rows
+        buf = ctypes.create_string_buffer(w * h * 4)
+        g.GetDIBits(mem, bmp, 0, h, buf, ctypes.byref(info), 0)
+        g.DeleteObject(bmp);g.DeleteDC(mem);u.ReleaseDC(0, screen_dc)
+        return base64.b64encode(png_bytes(bgra_to_rgb(buf.raw, w, h), w, h)).decode(), (w, h)
+    finally:
+        if old:
+            u.SetThreadDpiAwarenessContext(ctypes.c_void_p(old))
+
+
+# ---- Cortana-blue cursor while she has control
+def cursor_file(size=32):
+    """A Cortana-blue arrow as .cur bytes (32-bit BGRA with alpha, hotspot at the tip)."""
+    def inside(x, y):   # classic arrow: a triangle with a short tail
+        return (x <= y * 0.62 and y <= 22 and x >= 0) or (9 <= y <= 30 and 0.42 * (y - 9) + 6 <= x <= 0.42 * (y - 9) + 10 and x <= 15)
+    rows = []
+    for y in range(size - 1, -1, -1):   # bitmap rows are stored bottom-up
+        row = bytearray()
+        for x in range(size):
+            if inside(x, y):
+                edge = not (inside(x - 1, y) and inside(x + 1, y) and inside(x, y - 1) and inside(x, y + 1))
+                row += bytes((255, 255, 230, 255) if edge else (255, 170, 30, 255))   # BGRA: white-cyan edge, blue fill
+            else:
+                row += bytes((0, 0, 0, 0))
+        rows.append(bytes(row))
+    pixels = b''.join(rows);mask = b'\x00' * (size * size // 8)
+    header = struct.pack('<IiiHHIIiiII', 40, size, size * 2, 1, 32, 0, len(pixels) + len(mask), 0, 0, 0, 0)
+    image = header + pixels + mask
+    return struct.pack('<HHH', 0, 2, 1) + struct.pack('<BBBBHHII', size, size, 0, 0, 0, 0, len(image), 22) + image
+
+
+def set_blue_cursor():
+    from runtime import DATA
+    path = DATA / 'cortana-cursor.cur'
+    path.write_bytes(cursor_file())
+    u = ctypes.windll.user32
+    u.LoadCursorFromFileW.restype = ctypes.c_void_p
+    for shape in (32512, 32649, 32513):   # arrow, hand, text beam: the shapes the cursor usually takes while she clicks
+        h = u.LoadCursorFromFileW(str(path))
+        if h:
+            u.SetSystemCursor(ctypes.c_void_p(h), shape)
+
+
+def restore_cursor():
+    if os.name == 'nt':
+        ctypes.windll.user32.SystemParametersInfoW(0x0057, 0, None, 0)   # SPI_SETCURSORS: reload the user's own cursors
+
+
 def png_size(b64):
     raw = base64.b64decode(b64[:64] + '=' * (-len(b64[:64]) % 4))
     return struct.unpack('>II', raw[16:24])
 
 
 def screen():
-    import files
-    shot = files._powershell_image(SCREEN_PS)
-    return shot, png_size(shot)
+    try:
+        return grab_screen()
+    except Exception:   # fall back to the slower PowerShell capture
+        import files
+        shot = files._powershell_image(SCREEN_PS)
+        return shot, png_size(shot)
 
 
 PROMPT = ('You are operating this Windows PC with the mouse and keyboard to do this for the user: {goal}\n'
@@ -222,12 +308,23 @@ def parse_step(text):
     return step
 
 
-def computer_task(goal, llm, check, max_steps=MAX_STEPS, shoot=None, act=None, stop=None):
+def computer_task(goal, llm, check, max_steps=MAX_STEPS, shoot=None, act=None, stop=None, show=None):
     """Screenshot -> model picks one action -> do it, until done/fail/stop. Returns a summary dict.
-    `check()` raises when the user pressed Stop; shoot/act/stop are injectable for tests."""
+    `check()` raises when the user pressed Stop; `show(True/False)` turns the blue border and cursor on/off;
+    shoot/act/stop/show are injectable for tests."""
     shoot, act, stop = shoot or screen, act or perform, stop or cursor_in_corner
     if os.name != 'nt' and act is perform:
         raise RuntimeError('Mouse and keyboard control only works on the Windows PC.')
+    if show:
+        show(True)
+    try:
+        return _task_loop(goal, llm, check, max_steps, shoot, act, stop)
+    finally:
+        if show:
+            show(False)
+
+
+def _task_loop(goal, llm, check, max_steps, shoot, act, stop):
     log('task', goal)
     history, steps = [], 0
     for steps in range(1, max_steps + 1):
@@ -256,5 +353,5 @@ def computer_task(goal, llm, check, max_steps=MAX_STEPS, shoot=None, act=None, s
         except ValueError as e:
             history.append(f'{steps}. {desc} failed: {e}')
         log('step', history[-1])
-        time.sleep(.6)   # let the screen update before the next look
+        time.sleep(.25)   # a moment for the screen to react before the next look
     return {'could_not_finish': f'Stopped after {max_steps} steps.', 'steps': history}
