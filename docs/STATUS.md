@@ -2,6 +2,10 @@
 
 _Last updated: 1 November 2026._
 
+## 1.7.1: verification
+
+**Released:** [v1.7.1](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.7.1), built from `426e978f280aec1aefb10f76e4487efae3a6c314` in Actions run 41345901607 (UI, Windows build + offline suite + packaged voice smoke, real `qwen3.5:4b` 6/6 and `qwen3.5:9b` 6/6 with the full-access prompt line). `Cortana.exe` SHA-256 `220cd2d82d1f48f342a64c505e5ca1025d433cac97bd653a96b9d7b6619c7132`. Offline suite: 132 tests. **[Unverified]** on the owner's PC: the blue frame, capture exclusion, cursor swap/restore, in-process capture, and whether the 9B now calls computer_task/run_command reliably.
+
 ## 1.7.0: verification
 
 **Released:** [v1.7.0](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.7.0), built from `dd5a0abca25f288f77038549958d8a48c5ec9e78` in Actions run 41343125633 (UI, Windows build + offline suite + packaged voice smoke, real `qwen3.5:4b` 6/6 and `qwen3.5:9b` 6/6). `Cortana.exe` SHA-256 `d2f82259daaba59ae043d998e4ead50013c06b1321f43b4c4f5344cb9ed8340b`.
