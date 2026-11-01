@@ -157,3 +157,11 @@ Thinking stays off by default because it delays the first spoken word. It turns 
 ### D-033: Proactive notices reuse the alert path
 
 New documents, finished downloads and the daily briefing are stored as items of kind `notice`/`briefing` (due now) so the existing status-poll announcement, Windows balloon, retry/backoff and acknowledgement all apply unchanged; `items()` hides them from Objectives. Watchers only look at folders the user already shared with Cortana (Documents folders) plus, opt-in, the top level of Downloads (file names only, never contents). The first run after an upgrade records what already exists, so nobody gets a flood of notices. Downloads must be unchanged for 15 s and not use a partial-download extension. A briefing missed by more than three hours is skipped rather than read at night.
+
+### D-034: Work tools only when asked about (context budget)
+
+Six work tools add ~640 tokens of schema. Offering them on every turn would push a full 6,144-token prompt over budget and silently cut the system prompt (D-004), so `tools_for()` adds each one only when its trigger words appear in the question; with an Auto context of 12,288+ they are always offered. The cost is that an oddly worded request may not get the tool; the trigger lists are deliberately broad.
+
+### D-035: Ask before doing
+
+Small local models misread requests, and documents/web pages can carry instructions (prompt injection). Any action that changes something outside Cortana's own database waits for approval: the model's call becomes a `confirm` stream event and a held, one-use, 10-minute action; the model is told it has not happened. Approval is a tap or a short "yes"; anything else in between clears the voice shortcut (the card's buttons still work). `run()` refuses these tools without `approved=True` as a second line of defence. No "always allow": each action is approved on its own. Not built in 1.6, deliberately: website automation, desktop app control by clicking/typing and running model-written code — each needs a real sandbox or browser engine and stronger guarantees than a local 9B model gives (see STATUS roadmap).

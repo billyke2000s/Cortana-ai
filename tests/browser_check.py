@@ -4,6 +4,7 @@ import sys
 import tempfile
 import threading
 sys.path[:0]=['tests','app']
+OUT=tempfile.mkdtemp(prefix='cortana-out-');os.environ['CORTANA_OUTPUT_DIR']=OUT
 import test_offline as b
 from playwright.sync_api import sync_playwright
 r=b.runtime.Runtime();r.store.close();r.store=b.store.Store(':memory:');r.ai_ready=True;r.stt_ready=True
@@ -22,8 +23,13 @@ try:
                 page.evaluate("window.CortanaPages.open('setup')");page.wait_for_selector('#setupExpression')
                 page.select_option('#setupExpression','expressive');page.click('[data-act=setup-save]');page.wait_for_selector('#chatInput')
             page.evaluate("window.CortanaPages.open('settings')");page.wait_for_selector('#sExpression')
-            page.select_option('#sExpression','expressive');page.click('[data-act=save]')
-            page.wait_for_function("document.getElementById('sMsg')?.textContent==='Saved.'")
+            page.select_option('#sExpression','expressive')
+            # 'Saved.' only shows for ~0.7 s before the page re-renders; with the 3D avatar drawing in software, frame-based
+            # polling can miss it, so check the save request itself and then wait for the re-render to finish.
+            with page.expect_response(lambda resp:resp.url.endswith('/api/settings') and resp.request.method=='POST') as saved:
+                page.click('[data-act=save]')
+            assert saved.value.ok,saved.value.status
+            with page.expect_response(lambda resp:resp.url.endswith('/api/settings') and resp.request.method=='GET'):pass
             panel=page.locator('#holoPanel').bounding_box();nav=page.locator('.nav-wrap').bounding_box()
             assert panel['y']+panel['height']<=nav['y']+1,(width,panel,nav)
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'),width
@@ -40,9 +46,26 @@ try:
         page.wait_for_function("window.Cortana.chat.some(m=>m.role==='assistant'&&!m.pending&&m.text)")
         page.reload();page.wait_for_function("window.Cortana?.chat.some(m=>m.text.includes('Max'))")
         page.evaluate("window.CortanaPages.open('memory')");page.wait_for_selector('[data-fact]')
-        page.locator('[data-fact]').first.fill('My dog is called Rex');page.locator('[data-act=edit-fact]').first.click()
+        page.locator('[data-fact]').first.fill('My dog is called Rex')
+        with page.expect_response(lambda resp:'/api/documents' in resp.url):   # the Memory page re-renders after saving; let it finish
+            page.locator('[data-act=edit-fact]').first.click()
         page.wait_for_function("document.querySelector('[data-fact]')?.value==='My dog is called Rex'")
+        print('HISTORY RESTORE / MEMORY EDIT OK',flush=True)
+        # 1.6: ask-before-doing card (tap Approve, then a spoken/typed "yes"), deep thinking toggle, new Systems sections
+        page.evaluate("window.CortanaPages.open('chat')");page.fill('#chatInput','Please save a document of my plan');page.click('#chatForm [type=submit]')
+        page.wait_for_selector('.chat-confirm[data-state=waiting] [data-act=confirm-yes]')
+        assert not os.listdir(OUT),os.listdir(OUT)
+        page.click('.chat-confirm [data-act=confirm-yes]');page.wait_for_selector('.chat-confirm[data-state=done]')
+        assert os.listdir(OUT)==['Plan.docx'],os.listdir(OUT)
+        page.fill('#chatInput','Please save a document of my plan');page.click('#chatForm [type=submit]')
+        page.wait_for_selector('.chat-confirm[data-state=waiting]');page.wait_for_function("!window.Cortana.chat.some(m=>m.pending)")
+        page.fill('#chatInput','yes please');page.click('#chatForm [type=submit]')
+        page.wait_for_function("document.querySelectorAll('.chat-confirm[data-state=done]').length===2")
+        assert sorted(os.listdir(OUT))==['Plan (2).docx','Plan.docx'],os.listdir(OUT)
+        page.click('[data-act=deep]');assert page.get_attribute('[data-act=deep]','aria-pressed')=='true'
+        page.evaluate("window.CortanaPages.open('settings')");page.wait_for_selector('#sContext');page.wait_for_selector('#sBriefAt')
+        print('APPROVAL CARD / VOICE YES / DEEP TOGGLE / SYSTEMS OK',flush=True)
         assert not errors,errors
-        print('HISTORY RESTORE / MEMORY EDIT / CONSOLE OK',flush=True)
+        print('CONSOLE OK',flush=True)
         browser.close()
 finally:srv.shutdown();srv.server_close();r.store.close()

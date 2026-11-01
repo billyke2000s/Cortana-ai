@@ -67,8 +67,17 @@ class Handler(BaseHTTPRequestHandler):
                      'remember': "Got it. I'll remember that.",
                      'get_weather': "It's 12 degrees and cloudy in London, with rain likely tomorrow.",
                      'find_files': 'I found these files. I have put them on screen.',
-                     'add_event': 'Done. Study time is in your calendar for tomorrow at three.'}.get(last.get('tool_name'), 'Done.')
+                     'add_event': 'Done. Study time is in your calendar for tomorrow at three.',
+                     'create_file': "I've prepared Plan. Say yes or tap Approve to save it.",
+                     'organise_files': "I've planned the tidy-up. Say yes or tap Approve."}.get(last.get('tool_name'), 'Done.')
             return self._stream(words(reply))
+        offered = {t['function']['name'] for t in body.get('tools') or []}   # like a real model, only call tools it was given
+        if 'save a document' in user and 'create_file' in offered:
+            return self._stream([{'message': {'content': '', 'tool_calls': [
+                {'function': {'name': 'create_file', 'arguments': {'name': 'Plan', 'kind': 'document', 'content': '# Plan\n- Launch in March'}}}]}}, {'done': True}])
+        if 'tidy my downloads' in user and 'organise_files' in offered:
+            return self._stream([{'message': {'content': '', 'tool_calls': [
+                {'function': {'name': 'organise_files', 'arguments': {'folder': 'downloads'}}}]}}, {'done': True}])
         if 'timer' in user and body.get('tools'):
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'set_timer', 'arguments': {'minutes': 10, 'label': 'pasta'}}}]}}, {'done': True}])

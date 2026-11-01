@@ -109,7 +109,10 @@ function chatMsg(m,i){
  if(m.role==='user')return `<div class="chat-msg chat-you"><small>YOU</small><p>${esc(m.text)}</p></div>`;
  const card=m.screen?(()=>{const r=D.render(m.screen);return `<div class="chat-card"><div class="chat-card-head">◆ ${esc(r.title)}<span><button type="button" class="pg-btn" data-act="card-copy" data-i="${i}">Copy</button> <button type="button" class="pg-btn" data-act="chat-display" data-i="${i}">Expand</button></span></div>${r.html}</div>`;})():'';
  const body=m.text?`<p>${esc(m.text)}</p>`:m.pending?`<p class="chat-typing">${esc(m.working?m.working+'…':'Thinking')}<i></i><i></i><i></i></p>`:'';
- return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
+ const asks=(m.confirms||[]).map(c=>`<div class="chat-confirm" data-state="${esc(c.state)}"><b>◆ ${esc(c.summary)}</b>${c.detail?`<pre>${esc(c.detail)}</pre>`:''}${
+  c.state==='waiting'?`<span><button type="button" class="pg-primary" data-act="confirm-yes" data-id="${esc(c.id)}">Approve</button> <button type="button" class="pg-btn" data-act="confirm-no" data-id="${esc(c.id)}">Cancel</button></span>`:
+  `<small>${esc({working:'Working…',done:'Done',failed:'Did not work',cancelled:'Cancelled'}[c.state]||'')}</small>`}</div>`).join('');
+ return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${asks}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
 }
 function renderChatLog(){
  const log=document.getElementById('chatLog');if(!log)return;
@@ -136,14 +139,26 @@ function chat(){
 document.addEventListener('cortana:chat',()=>{if(D.page==='chat')renderChatLog();});
 
 /* Files for Cortana to read: the paperclip in Chat, dropping files on the panel, or Memory → Documents. */
-const DOC_ACCEPT='.pdf,.docx,.pptx,.txt,.md,.csv,.json,.py,.js,.html,.htm,.xml,.log,.rtf';
+const DOC_ACCEPT='.pdf,.docx,.pptx,.txt,.md,.csv,.json,.py,.js,.html,.htm,.xml,.log,.rtf,.png,.jpg,.jpeg,.webp';
 const MAX_UPLOAD=12*1024*1024;
 function pickFiles(){
  const input=document.createElement('input');input.type='file';input.multiple=true;input.accept=DOC_ACCEPT;
  input.onchange=()=>uploadFiles([...input.files]);input.click();
 }
+/* Pictures are not stored: they are shrunk here (max 1280 px JPEG) and sent with the next question only. */
+async function shrinkImage(f){
+ const img=await createImageBitmap(f),scale=Math.min(1,1280/Math.max(img.width,img.height));
+ const c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);
+ c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.close?.();
+ return c.toDataURL('image/jpeg',.85).split(',')[1];
+}
 async function uploadFiles(list){
  for(const f of list){
+  if(/^image\/(png|jpeg|webp)$/.test(f.type)){
+   try{const n=C.attachImage(await shrinkImage(f));C.note(`🖼 ${f.name} attached (${n}/2). Ask your question about it.`);}
+   catch(e){C.note(`${f.name}: ${e.message||'Could not read that picture.'}`,true);}
+   continue;
+  }
   if(f.size>MAX_UPLOAD){C.note(`${f.name} is over 12 MB. Add its folder from Memory on the PC instead.`,true);continue;}
   C.note(`Reading ${f.name}…`);
   try{
@@ -254,6 +269,7 @@ D.body().addEventListener('click',async e=>{
  const act=btn.dataset.act,id=btn.dataset.id;
  try{
   if(act==='complete'||act==='delete'||act==='snooze'){await post('/api/objectives',{action:act,id:Number(id)});objectives();}
+  else if(act==='confirm-yes'||act==='confirm-no')C.confirm(id,act==='confirm-yes');
   else if(act==='deep'){C.deep=!C.deep;btn.setAttribute('aria-pressed',String(C.deep));C.note(C.deep?'Deep thinking on: slower, more careful answers.':'Deep thinking off.');}
   else if(act==='edit-fact'){await post('/api/memory',{action:'edit',id:Number(id),text:document.querySelector('[data-fact="'+Number(id)+'"]').value});memory();}
   else if(act==='forget'){await post('/api/memory',{action:'forget',id:Number(id)});memory();}

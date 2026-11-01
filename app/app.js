@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const app=$('app'),out=$('transcript'),label=$('listenLabel'),mic=$('mic');
 const clientId=crypto.randomUUID?.().replaceAll('-','')||Math.random().toString(36).slice(2);
-let deepThinking=false,activeJob=null,turnStarted=0,playingText='',restorePromise=null,restored=false,modePreviewUntil=0;
+let pendingImages=[],pendingConfirm=null,deepThinking=false,activeJob=null,turnStarted=0,playingText='',restorePromise=null,restored=false,modePreviewUntil=0;
 const wake={on:false,stream:null,input:null,node:null,busy:false,pending:null};
 let queue=null,state='idle',audioContext=null,source=null,requestId=0,controller=null,recording=null,workletReady=false,capabilities={ai:false,timedSpeech:false},history=[];
 const avatar=()=>window.CortanaAvatar;
@@ -71,8 +71,24 @@ async function speak(text){
 /* Conversation shown on the Chat page: [{role:'user'|'assistant', text, screen?, error?}] (this tab only, newest last). */
 const chatLog=[];
 function chatChanged(){document.dispatchEvent(new CustomEvent('cortana:chat'));}
+const YES=/^(yes|yeah|yep|yup|sure|ok(ay)?|do it|go ahead|go for it|approve(d)?|confirm(ed)?|please do)\b[\s\S]{0,30}$/i,NO=/^(no|nope|cancel|don'?t|stop|never ?mind|leave it)\b[\s\S]{0,30}$/i;
+async function resolveConfirm(id,approve){
+ const card=chatLog.flatMap(m=>m.confirms||[]).find(c=>c.id===id);if(!card||card.state!=='waiting')return;
+ if(pendingConfirm===id)pendingConfirm=null;
+ card.state='working';chatChanged();
+ try{
+  const r=await api('/api/confirm',{id,approve});card.state=approve?(r.ok?'done':'failed'):'cancelled';
+  if(r.refresh)document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:r.refresh}}));
+  if(r.result?.identical_copies)note('Identical copies (left in place): '+r.result.identical_copies.map(g=>g.join(' = ')).join('; '));
+  chatChanged();speak(r.say);
+ }catch(e){card.state='failed';chatChanged();error(e.message);}
+}
 async function send(text){
  await restoreConversation();
+ if(pendingConfirm&&(YES.test(text.trim())||NO.test(text.trim()))){   // "yes" / "cancel" answers the waiting approval card
+  chatLog.push({role:'user',text});chatChanged();return resolveConfirm(pendingConfirm,YES.test(text.trim()));
+ }
+ pendingConfirm=null;
  const inChat=holoPage==='chat';
  stop();turnStarted=performance.now();activeJob=clientId+'_'+requestId;if(!inChat)hideScreen();holoLast='';holoReopen.hidden=true;
  chatLog.push({role:'user',text});const turn={role:'assistant',text:'',pending:true};chatLog.push(turn);if(chatLog.length>60)chatLog.splice(0,chatLog.length-60);chatChanged();out.classList.remove('err');out.textContent='You: '+text;
@@ -86,12 +102,13 @@ async function send(text){
   if(ev.type==='sentence'){spoken+=(spoken?' ':'')+ev.text;out.textContent=spoken;out.scrollTop=out.scrollHeight;q.add(ev.text);turn.text=spoken;chatChanged();}
   else if(ev.type==='tool'){if(state==='thinking')label.textContent=ev.label+'…';turn.working=ev.label;chatChanged();}
   else if(ev.type==='screen'){turn.screen=ev.markdown;holoLast=ev.markdown;if(holoPage==='chat')chatChanged();else showScreen(ev.markdown);}   // in Chat, the card goes inline
+  else if(ev.type==='confirm'){(turn.confirms??=[]).push({id:ev.id,label:ev.label,summary:ev.summary,detail:ev.detail,state:'waiting'});pendingConfirm=ev.id;chatChanged();if(holoPage!=='chat')window.CortanaPages?.open('chat');}
   else if(ev.type==='refresh')document.dispatchEvent(new CustomEvent('cortana:refresh',{detail:{what:ev.what}}));
   else if(ev.type==='done')history=[...messages,{role:'assistant',content:ev.raw||ev.reply}].slice(-18);
   else if(ev.type==='error')throw Error(ev.error);
  };
  try{
-  const r=await fetch('/api/chat-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,request_id:activeJob,think:deepThinking}),signal:controller.signal});
+  const r=await fetch('/api/chat-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,request_id:activeJob,think:deepThinking,images:pendingImages.splice(0)}),signal:controller.signal});
   if(!r.ok){const v=await r.json().catch(()=>({}));throw Error(v.error||'Service unavailable.');}
   const reader=r.body.getReader(),decoder=new TextDecoder();let buf='';
   for(;;){
@@ -203,8 +220,9 @@ refreshStatus();setInterval(refreshStatus,4000);
 addEventListener('keydown',e=>{if(e.key==='Escape')stop();});
 addEventListener('pagehide',stop);
 // An existing assistant can provide replies using this API without replacing the UI.
-window.Cortana={get deep(){return deepThinking;},set deep(v){deepThinking=!!v;savePreference('deep',deepThinking?'1':'0');},applyMode,restoreConversation,clearConversation(){stop();history=[];chatLog.length=0;chatChanged();},speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
- note(text,error=false){chatLog.push({role:'system',text,error});chatChanged();}};
+function note(text,error=false){chatLog.push({role:'system',text,error});chatChanged();}
+window.Cortana={attachImage(b64){if(pendingImages.length>=2)throw Error('Two pictures at most per question.');pendingImages.push(b64);return pendingImages.length;},confirm:resolveConfirm,get deep(){return deepThinking;},set deep(v){deepThinking=!!v;savePreference('deep',deepThinking?'1':'0');},applyMode,restoreConversation,clearConversation(){stop();history=[];chatLog.length=0;chatChanged();},speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
+ note};
 
 /* ---- Timer and reminder alerts (checked with every status poll) ---- */
 const announced=new Set();

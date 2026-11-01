@@ -88,8 +88,10 @@ def chunks(text):
             page = f'{m.group(1)} {m.group(2)}'
         if not cur:
             cur_page = page
-        while len(para) > CHUNK * 1.5:   # very long paragraphs: hard split at a sentence or space
-            cut = max(para.rfind('. ', 0, CHUNK), para.rfind(' ', 0, CHUNK))
+        while len(para) > CHUNK * 1.5:   # very long paragraphs: split at a line (keeps table rows whole), else a sentence or space
+            cut = para.rfind('\n', 0, CHUNK)
+            if cut <= CHUNK // 2:
+                cut = max(para.rfind('. ', 0, CHUNK), para.rfind(' ', 0, CHUNK))
             cut = cut if cut > CHUNK // 2 else CHUNK
             out.append((cur_page, (cur + ' ' + para[:cut + 1]).strip())); cur = ''; cur_page = page
             para = para[cut + 1:].strip()

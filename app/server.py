@@ -89,7 +89,7 @@ class Handler(SimpleHTTPRequestHandler):
         if origin and origin!=expected:return self.send_json({'error':'Request must come from Cortana.'},403)
         if not self.headers.get('Content-Type','').startswith('application/json'):return self.send_json({'error':'JSON required.'},415)
         try:
-            size=int(self.headers.get('Content-Length','0'));limit={'/api/transcribe':1500000,'/api/documents':16000000}.get(self.path,64000)
+            size=int(self.headers.get('Content-Length','0'));limit={'/api/transcribe':1500000,'/api/documents':16000000,'/api/chat-stream':4000000}.get(self.path,64000)
             if not 0<size<=limit:return self.send_json({'error':'Request is too large or empty.'},400)
             data=json.loads(self.rfile.read(size))
             if not isinstance(data,dict):raise ValueError('Invalid request.')
@@ -98,6 +98,9 @@ class Handler(SimpleHTTPRequestHandler):
                 key=runtime.jobs.key(data.get('request_id'))
                 if not key:raise ValueError('Request ID required.')
                 runtime.jobs.cancel(key);return self.send_json({'ok':True})
+            if self.path=='/api/confirm':
+                if not isinstance(data.get('approve'),bool) or not isinstance(data.get('id'),str):raise ValueError('Send id and approve (true or false).')
+                return self.send_json(runtime.confirm(data['id'],data['approve']))
             if self.path=='/api/metrics':
                 value=data.get('playback_ms')
                 if not isinstance(value,(int,float)) or not 0<=value<=600000:raise ValueError('Invalid playback timing.')
@@ -127,8 +130,10 @@ class Handler(SimpleHTTPRequestHandler):
                 if not isinstance(messages,list) or len(messages)>20 or not all(isinstance(m,dict) for m in messages):raise ValueError('Invalid conversation.')
                 think=data.get('think',False)
                 if not isinstance(think,bool):raise ValueError('Use true or false for think.')
+                images=check_images(data.get('images',[]))
+                if size>64000 and not images:raise ValueError('Request too large.')   # only pictures may use the bigger limit
                 def events():
-                    with runtime.jobs.scope(data.get('request_id')):yield from runtime.chat_stream(messages,think)
+                    with runtime.jobs.scope(data.get('request_id')):yield from runtime.chat_stream(messages,think,images)
                 return self.stream_events(events())
             if self.path=='/api/objectives':return self.send_json(objectives_action(runtime.store,data))
             if self.path=='/api/memory':return self.send_json(memory_action(runtime.store,data))
@@ -148,6 +153,21 @@ class Handler(SimpleHTTPRequestHandler):
         except (TypeError,KeyError):self.send_json({'error':'Invalid request or audio format.'},400)
         except (BrokenPipeError,ConnectionResetError):pass
         except Exception as e:self.send_json({'error':str(e) if isinstance(e,RuntimeError) else 'The local service could not finish. Check the Cortana launcher.'},503)
+def check_images(images):
+    """Up to 2 pictures for the current question, base64 PNG/JPEG/WebP of at most 1.8 MB each. They go only to the local
+    model for this one turn and are never stored (AGENTS §4.12)."""
+    if not isinstance(images,list) or len(images)>2:raise ValueError('Attach at most two pictures.')
+    out=[]
+    for item in images:
+        if not isinstance(item,str):raise ValueError('Invalid picture.')
+        try:raw=base64.b64decode(item,validate=True)
+        except ValueError:raise ValueError('Invalid picture.')
+        if len(raw)>1800000:raise ValueError('That picture is too large.')
+        if not (raw.startswith(b'\x89PNG\r\n\x1a\n') or raw.startswith(b'\xff\xd8\xff') or (raw[:4]==b'RIFF' and raw[8:12]==b'WEBP')):
+            raise ValueError('Pictures must be PNG, JPEG or WebP.')
+        out.append(item)
+    return out
+
 def objectives_action(store,data):
     import tools
     action=data.get('action')

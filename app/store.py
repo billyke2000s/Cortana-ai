@@ -245,8 +245,8 @@ class Store:
         scored = sorted(((sum(w in d['name'].lower() for w in words), -i, d) for i, d in enumerate(docs)), key=lambda x: (-x[0], -x[1]))
         return scored[0][2] if scored[0][0] else None
 
-    def document_text(self, doc_id):
-        return '\n\n'.join(r['text'] for r in self.q('SELECT text FROM doc_chunks WHERE doc_id=? ORDER BY idx', (int(doc_id),)))
+    def document_text(self, doc_id, sep='\n\n'):
+        return sep.join(r['text'] for r in self.q('SELECT text FROM doc_chunks WHERE doc_id=? ORDER BY idx', (int(doc_id),)))
 
     def document_chunks(self, doc_id=None):
         sql = 'SELECT c.doc_id, d.name AS doc, c.page, c.text FROM doc_chunks c JOIN documents d ON d.id=c.doc_id'

@@ -11,6 +11,16 @@ All notable changes. Dates are UK time.
 ### Added (step 3: proactive)
 - She tells you when new documents appear in your Documents folders (and reads them in), when a download finishes (opt-in), and reads a daily briefing at a time you choose. Windows pop-ups for each, titled "Cortana".
 
+### Added (steps 4-6: ask before doing, work abilities)
+- Ask before doing: anything that changes your PC shows an approval card in Chat (Approve/Cancel, or say "yes"/"cancel").
+- Make files (Word, CSV, text, Markdown, web page) in Documents\\Cortana; exact table totals and arithmetic; tidy Downloads/Desktop/Documents by type (moves only, duplicates listed); PC health check; email drafts in your mail app.
+- Pictures in Chat (📎, up to 2 per question, not saved). Deep thinking allows up to 6 steps.
+- Work tools are only offered when the question is about them, so ordinary answers keep the same context budget.
+
+### Fixed
+- Long documents are split at line ends where possible, so table rows stay whole.
+- Browser check waits on requests instead of a 0.7-second "Saved." message (it was flaky).
+
 ### Step 1: speed and fixes
 
 ### Fixed

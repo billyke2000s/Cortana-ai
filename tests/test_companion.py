@@ -4,6 +4,7 @@ import sqlite3
 import tarfile
 import tempfile
 import threading
+import zipfile
 import time
 import unittest
 from pathlib import Path
@@ -124,7 +125,7 @@ class CompanionApiTests(unittest.TestCase):
             self.assertEqual(self.request('POST',path,body,{'Origin':'https://evil.example'})[0],403)
             self.assertEqual(self.request('POST',path,body,host='phone.example')[0],403)
         self.assertEqual(self.request('GET','/api/conversation',host='phone.example')[0],403)
-        for path in ['/neural.py','/lips.py','/companion.py','/proactive.py','/voice-profile/reference.wav','/voice-profile/voice_profile.json']:
+        for path in ['/neural.py','/lips.py','/companion.py','/proactive.py','/work.py','/voice-profile/reference.wav','/voice-profile/voice_profile.json']:
             self.assertEqual(self.request('GET',path)[0],404)
 
     def test_negative_keyword_burst_never_runs_whisper(self):
@@ -308,3 +309,130 @@ class ProactiveSettingsTests(unittest.TestCase):
         for bad in [{'briefing_time':'7:30'},{'briefing_time':'25:00'},{'briefing_time':730},{'watch_downloads':'yes'}]:
             self.assertEqual(self.request('POST','/api/settings',bad)[0],400,bad)
         self.assertEqual(self.request('POST','/api/settings',{'briefing_time':''})[0],200)
+
+class WorkAbilityTests(unittest.TestCase):
+    """1.6 steps 4-5: ask-before-doing gate and work abilities (no network, no real user folders)."""
+    def setUp(self):
+        import work;self.w=work
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.dir=Path(self.tmp.name)
+        patcher=patch.dict(base.os.environ,{'CORTANA_OUTPUT_DIR':str(self.dir/'out')});patcher.start();self.addCleanup(patcher.stop)
+        self.s=base.store.Store(':memory:');self.addCleanup(self.s.close)
+
+    def test_document_is_a_valid_docx_and_never_overwrites(self):
+        r1=self.w.create_file({'name':'Plan: Q3/Q4','kind':'document','content':'# Plan\n## Goals\n- **Ship** it\nA <b>paragraph</b> & more.'})
+        r2=self.w.create_file({'name':'Plan: Q3/Q4','kind':'document','content':'Second'})
+        self.assertEqual((r1['file'],r2['file']),('Plan Q3 Q4.docx','Plan Q3 Q4 (2).docx'))
+        with zipfile.ZipFile(r1['path']) as z:self.assertIn('word/document.xml',z.namelist())
+        text,_=base.files.extract_text('a.docx',Path(r1['path']).read_bytes())
+        for part in ['Plan','Goals','Ship it','A <b>paragraph</b> & more.']:self.assertIn(part,text)
+
+    def test_spreadsheet_webpage_and_bad_input(self):
+        r=self.w.create_file({'name':'Costs','kind':'spreadsheet','content':'Item,Cost\nTea,2.50\nCake,3'})
+        self.assertEqual(Path(r['path']).read_bytes(),'\ufeffItem,Cost\r\nTea,2.50\r\nCake,3\r\n'.encode())
+        page=Path(self.w.create_file({'name':'x','kind':'webpage','content':'# Hi\n<script>alert(1)</script>'})['path']).read_text()
+        self.assertNotIn('<script>alert',page);self.assertIn('&lt;script&gt;',page)
+        for bad in [{'kind':'exe','content':'x'},{'kind':'text','content':' '},{'kind':'spreadsheet','content':'just words'},{'kind':'text','content':'x'*20001}]:
+            with self.assertRaises(ValueError):self.w.create_file(bad)
+        self.assertEqual(self.w.clean_name('..\\..\\Windows\\evil.bat','text'),'Windows evil.txt');self.assertEqual(self.w.clean_name('CON','text'),'_CON.txt')
+
+    def test_calculate_is_exact_and_safe(self):
+        c=lambda e:self.w.calculate(e)['result']
+        self.assertEqual(c('15% of 80'),12);self.assertEqual(c('(1200*0.2)+45'),285);self.assertEqual(c('1,250 × 3'),3750);self.assertEqual(c('0.1+0.2'),0.3)
+        for bad in ["__import__('os').system('calc')",'open("x")','2**10000','1/0','a+1','(lambda:1)()']:
+            with self.assertRaises((ValueError,SyntaxError),msg=bad):self.w.calculate(bad)
+
+    def test_analyse_table_totals(self):
+        text='Month,Sales,Note\nJan,"£1,200",ok\nFeb,800,(late)\nMar,(100),x\n'+'\n'.join(f'Day {i},1,filler text here' for i in range(200))
+        self.s.add_document('sales.csv',text,base.files.chunks(text))   # long enough to be stored in several pieces
+        r=self.w.analyse_table(self.s,{'document':'sales'})
+        self.assertGreater(len(base.files.chunks(text)),1)
+        self.assertEqual(r['rows'],203);col=r['numeric_columns'][0]
+        self.assertEqual((col['column'],col['total'],col['min'],col['max']),('Sales',2100,-100,1200))
+
+    def test_organise_moves_only_and_reports_duplicates(self):
+        dl=self.dir/'Downloads';dl.mkdir();(dl/'Images').mkdir();(dl/'Images'/'a.png').write_bytes(b'old')
+        for name,data in [('a.png',b'img'),('b.png',b'img'),('setup.exe',b'exe'),('notes.pdf',b'pdf'),('x.crdownload',b'..'),('link.lnk',b'l')]:(dl/name).write_bytes(data)
+        with patch.object(self.w,'known_folder',lambda name:dl):
+            plan=self.w.preview_organise({'folder':'downloads'})
+            self.assertIn('Move 4 loose files',plan['summary']);self.assertIn('a.png = b.png',plan['detail'])
+            self.assertTrue((dl/'a.png').exists())   # a preview never changes anything
+            r=self.w.organise({'folder':'downloads'})
+        self.assertEqual((dl/'Images'/'a.png').read_bytes(),b'old')   # never overwritten
+        self.assertTrue((dl/'Images'/'a (2).png').exists() and (dl/'Installers'/'setup.exe').exists() and (dl/'Documents'/'notes.pdf').exists())
+        self.assertTrue((dl/'x.crdownload').exists() and (dl/'link.lnk').exists());self.assertTrue(r['identical_copies'])
+        with self.assertRaises(ValueError):self.w.preview_organise({'folder':'C:\\Windows'})
+
+    def test_email_draft_needs_content_and_valid_address(self):
+        with self.assertRaises(ValueError):self.w.preview_email({'to':'not an address','subject':'Hi','body':'x'})
+        with self.assertRaises(ValueError):self.w.preview_email({'subject':'','body':''})
+        with patch.object(self.w.webbrowser,'open',return_value=True) as opened:
+            self.w.draft_email({'to':'a@b.co','subject':'Hi & bye','body':'Line 1\nLine 2'})
+        url=opened.call_args[0][0];self.assertTrue(url.startswith('mailto:a@b.co?subject=Hi%20%26%20bye&body=Line%201%0D%0ALine%202'))
+
+    def test_pc_health_reports_drives(self):
+        r=self.w.pc_health();self.assertTrue(r['drives']);self.assertIn('free_gb',r['drives'][0])
+
+    def test_gating_and_approval_rule(self):
+        t=base.tools;core=len(t.TOOLS);names=lambda q,c=6144:{x['function']['name'] for x in t.tools_for(q,c)}
+        self.assertEqual(len(t.tools_for('Set a timer for pasta')),core)    # ordinary turns: budget unchanged
+        self.assertIn('organise_files',names('can you tidy my downloads'));self.assertIn('pc_health',names('why is my pc so slow'))
+        self.assertIn('calculate',names('what is 17% of 230'));self.assertIn('create_file',names('turn this into a word document'))
+        self.assertEqual(len(t.tools_for('hello',16384)),core+len(t.WORK_TOOLS))
+        for name in t.CONFIRM:
+            self.assertEqual(t.run(name,{'name':'x','kind':'text','content':'x','folder':'downloads','subject':'s','body':'b'},self.s)[0]['error'],'This needs the user to approve it first.')
+        self.assertFalse((self.dir/'out').exists())
+
+class ConfirmApiTests(unittest.TestCase):
+    request=base.ApiTests.request
+    setUpClass=classmethod(CompanionApiTests.setUpClass.__func__)
+    tearDownClass=classmethod(CompanionApiTests.tearDownClass.__func__)
+    stream=BrainApiTests.stream
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.out=Path(self.tmp.name)/'out'
+        patcher=patch.dict(base.os.environ,{'CORTANA_OUTPUT_DIR':str(self.out)});patcher.start();self.addCleanup(patcher.stop)
+
+    def test_file_is_created_only_after_approval_and_only_once(self):
+        status,events=self.stream({'messages':[{'role':'user','content':'Please save a document of my plan'}]})
+        self.assertEqual(status,200);ask=[e for e in events if e['type']=='confirm']
+        self.assertEqual(len(ask),1);self.assertEqual(ask[0]['summary'],'Create Plan.docx in Documents\\Cortana')
+        self.assertFalse(self.out.exists())   # nothing written while waiting
+        self.assertIn('Approve',' '.join(e['text'] for e in events if e['type']=='sentence'))
+        status,_,raw=self.request('POST','/api/confirm',{'id':ask[0]['id'],'approve':True});r=json.loads(raw)
+        self.assertEqual(status,200);self.assertTrue(r['ok']);self.assertTrue((self.out/'Plan.docx').exists())
+        self.assertIn('Plan.docx',r['say'])
+        self.assertEqual(self.request('POST','/api/confirm',{'id':ask[0]['id'],'approve':True})[0],400)   # one use only
+
+    def test_cancel_changes_nothing_and_guards(self):
+        _,events=self.stream({'messages':[{'role':'user','content':'Please save a document of my plan'}]})
+        pid=[e for e in events if e['type']=='confirm'][0]['id']
+        r=json.loads(self.request('POST','/api/confirm',{'id':pid,'approve':False})[2]);self.assertIn('Cancelled',r['say'])
+        self.assertFalse(self.out.exists())
+        self.assertEqual(self.request('POST','/api/confirm',{'id':'made-up','approve':True})[0],400)
+        self.assertEqual(self.request('POST','/api/confirm',{'id':pid,'approve':'yes'})[0],400)
+        self.assertEqual(self.request('POST','/api/confirm',{'id':pid,'approve':True},{'Origin':'https://evil.example'})[0],403)
+        self.assertEqual(self.request('POST','/api/confirm',{'id':pid,'approve':True},host='phone.example')[0],403)
+
+    def test_held_action_expires(self):
+        pid=self.rt.hold('create_file',{'name':'Old','kind':'text','content':'x'})
+        self.rt.pending[pid]['at']-=self.rt.PENDING_SECONDS+1
+        self.assertEqual(self.request('POST','/api/confirm',{'id':pid,'approve':True})[0],400);self.assertFalse(self.out.exists())
+
+class PictureTests(unittest.TestCase):
+    request=base.ApiTests.request
+    setUpClass=classmethod(CompanionApiTests.setUpClass.__func__)
+    tearDownClass=classmethod(CompanionApiTests.tearDownClass.__func__)
+    stream=BrainApiTests.stream
+    PNG=base.base64.b64encode(b'\x89PNG\r\n\x1a\n'+b'\0'*64).decode()
+
+    def test_picture_goes_to_the_model_for_this_question_only(self):
+        base.fake_ollama.CHAT_REQUESTS.clear()
+        status,events=self.stream({'messages':[{'role':'user','content':'What is in this picture?'}],'images':[self.PNG]})
+        self.assertEqual(status,200);msgs=base.fake_ollama.CHAT_REQUESTS[-1]['messages']
+        self.assertEqual(msgs[-1]['images'],[self.PNG]);self.assertNotIn('images',msgs[0])
+        saved=self.rt.store.recent_messages(2);self.assertNotIn(self.PNG,json.dumps(saved))   # never stored
+
+    def test_pictures_are_checked(self):
+        msg=[{'role':'user','content':'Look'}]
+        for bad in [[self.PNG]*3,['not base64!'],[base.base64.b64encode(b'MZ executable').decode()],'x']:
+            self.assertEqual(self.request('POST','/api/chat-stream',{'messages':msg,'images':bad})[0],400)
+        self.assertEqual(self.request('POST','/api/chat-stream',{'messages':msg,'pad':'x'*70000})[0],400)   # only pictures may be big

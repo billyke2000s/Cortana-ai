@@ -63,7 +63,22 @@ Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are
 | `find_files(query, kind?, days?)` | Searches file names under Desktop, Documents, Downloads, Pictures, Videos, Music and OneDrive (≤7 levels, ≤80,000 entries, ≤5 s; skips AppData, node_modules, .git…). ≥60% of the query words must match; newest first; up to 8. Card: **Files found** with folders. |
 | `open_file(number, read?)` | Only a number from the last `find_files` list. Opens it with its default app, or (`read`) adds it to Documents. Programs, scripts and shortcuts are refused. |
 
-Tool results go back to the model truncated to 2,500 characters (3,500 for `web_search` and `clipboard`, 3,200 for the document tools).
+**Work abilities (1.6)**, offered when the question is about them (or always with a large context):
+
+| Tool | Behaviour |
+|---|---|
+| `create_file(name, kind, content)` | **Asks first.** Word document (.docx from Markdown: headings, bullets, bold), CSV spreadsheet (UTF-8 with BOM for Excel), text, Markdown or web page (everything escaped). Saved in Documents\\Cortana; never overwrites ("Plan (2).docx"); ≤20,000 characters. "Open it" then opens it. |
+| `analyse_table(document, column?)` | Exact row count and per-column total/average/min/max for a CSV in Documents (£/$/€, thousands separators and (negatives) understood). |
+| `calculate(expression)` | Exact arithmetic (+ − × ÷ ^ %, "15% of 80", round/sqrt/min/max…); never runs code. |
+| `organise_files(folder)` | **Asks first.** Downloads, Desktop or Documents only: moves loose top-level files into Images/Documents/Archives/Installers/Video/Audio/Code/Other; skips shortcuts and partial downloads; never overwrites or deletes; lists identical copies. Obeys *Screen, clipboard and file access*. |
+| `pc_health()` | Read-only: free space per drive, RAM, processor load, the six biggest programs, app crashes in the last 2 days, uptime; flags drives ≥90% full and >7 days without restart. |
+| `draft_email(to?, subject, body)` | **Asks first.** Opens a draft in the default mail app (mailto); she never sends it. |
+
+**Ask before doing:** the card in Chat shows exactly what will happen (file name and content, the move plan, the draft). **Approve** / **Cancel**, or say "yes" / "cancel". Requests expire after 10 minutes and run once.
+**Pictures:** 📎 in Chat also takes PNG/JPEG/WebP (up to 2 per question, shrunk to 1280 px); they go only to the local model with that question and are not saved.
+**Deep thinking** allows up to 6 model rounds, so she can chain steps (search, then write a file).
+
+Tool results go back to the model truncated to 2,500 characters (3,500 for `web_search` and `clipboard`, 3,200 for the document tools, 3,000 for `pc_health`).
 `look_at_screen`, `clipboard`, `find_files` and `open_file` obey **Screen, clipboard and file access** in Systems.
 All tools are disabled when **Abilities** is unticked in Systems.
 

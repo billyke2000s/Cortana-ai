@@ -12,7 +12,7 @@
 <img src="https://img.shields.io/badge/voice-Piper-7fd4ff?style=flat-square" alt="Piper">
 <img src="https://img.shields.io/badge/ears-Whisper.cpp-7fd4ff?style=flat-square" alt="Whisper.cpp">
 <img src="https://img.shields.io/badge/3D-Three.js-7fd4ff?style=flat-square&logo=threedotjs&logoColor=white" alt="Three.js">
-<img src="https://img.shields.io/badge/offline%20tests-97%20passing-3df58a?style=flat-square" alt="97 offline tests passing">
+<img src="https://img.shields.io/badge/offline%20tests-110%20passing-3df58a?style=flat-square" alt="110 offline tests passing">
 <img src="https://img.shields.io/badge/AI%20agents-read%20AGENTS.md-ffb35c?style=flat-square" alt="AI agents: read AGENTS.md">
 
 ### Your PC is the core. Your phone is the display.
@@ -72,9 +72,17 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 | 🎵 | **PC controls** | *"Pause the music."* · *"Volume up."* · *"Open calculator."* | Acts on your PC (fixed allow-list) |
 | 💻 | **Code & tables** | *"How do I build a table in Python?"* | Display panel with **Copy** |
 | 🎛️ | **Model picker** | **Systems** → pick from models rated *Fast / Good / Slow / Too big* for your GPU | Recommended model ★, one-click download |
-| 📰 | **Daily briefing** | Tap **Mission Briefing → Read my briefing** | Weather, events and objectives, spoken |
+| 📰 | **Daily briefing** | Tap **Mission Briefing → Read my briefing**, or set a time in **Systems** and she reads it herself | Weather, events and objectives, spoken |
+| 🔔 | **She speaks first** | New documents in your folders, finished downloads (opt-in), calendar heads-ups | Spoken + Windows pop-up |
+| 📝 | **Make files** | *"Turn these notes into a Word document."* · *"Make a CSV of my expenses."* | Approval card → Documents\\Cortana |
+| 🧮 | **Exact numbers** | *"What's 17% of 230?"* · *"Total the Sales column in sales.csv."* | Spoken + Chat |
+| 🧹 | **Tidy folders** | *"Tidy my downloads."* | Approval card with the move plan · duplicates listed, never deleted |
+| 🩺 | **PC health** | *"Why is my PC so slow?"* · *"Something keeps crashing."* | Disk, memory, CPU, biggest programs, recent crashes |
+| ✉️ | **Email drafts** | *"Email my landlord that the boiler is fixed."* | Approval card → draft in your mail app (you press Send) |
+| 🖼️ | **Pictures** | 📎 a screenshot or photo · *"What does this error mean?"* | Read by the local Qwen model, not saved |
+| 🧠 | **Deep thinking** | 🧠 in Chat, or *"Think carefully about which laptop to buy."* | Slower, more careful answers |
 
-> Abilities can be switched off in **Systems** (*Screen, clipboard and file access* has its own switch). She never runs programs, scripts or shortcuts, opens only files she just found for you, and screenshots go only to the AI on your PC.
+> Abilities can be switched off in **Systems** (*Screen, clipboard and file access* has its own switch). She never runs programs, scripts or shortcuts, opens only files she just found or made for you, asks before changing anything (files, folders, email drafts), and screenshots and pictures go only to the AI on your PC.
 
 ---
 
@@ -241,7 +249,7 @@ cortana-ai/
 ## 🧪 Tests
 
 ```bash
-python -m unittest discover -s tests -v     # 97 offline tests, about 3 seconds, no GPU or internet needed
+python -m unittest discover -s tests -v     # 110 offline tests, about 3 seconds, no GPU or internet needed
 ```
 
 They cover the sentence streamer, storage, every tool, model recommendations, calendar parsing, the whole HTTP API (streaming chat with tool calls, objectives, memory, settings) and the security rules, including a regression test for phone QR pairing. See [TESTING.md](docs/TESTING.md).

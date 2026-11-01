@@ -64,14 +64,86 @@ TOOLS = [
         'number': {'type': 'integer', 'description': 'Its number in the last results.'},
         'read': {'type': 'boolean', 'description': 'true = read it into your documents instead of opening it.'}}, ['number']),
 ]
+# Work abilities (1.6, work.py) are offered only when the question is about them (or the context is large), so the
+# 6,144-token budget for ordinary turns is unchanged (D-034). Tools in CONFIRM wait for the user's approval (D-035).
+WORK_TOOLS = [
+    _fn('create_file', 'Save something you wrote as a file in Documents\\Cortana (Word document, CSV spreadsheet, text, Markdown or web page). The user approves it on screen first.', {
+        'name': {'type': 'string', 'description': 'Short file name, e.g. "Project plan".'},
+        'kind': {'type': 'string', 'enum': ['document', 'spreadsheet', 'text', 'markdown', 'webpage']},
+        'content': {'type': 'string', 'description': 'The full content. Documents: Markdown headings (#), bullets (-), **bold**. Spreadsheets: CSV with a header row.'}}, ['name', 'kind', 'content']),
+    _fn('analyse_table', 'Exact totals, averages, min and max for a CSV in the documents. Use instead of adding numbers yourself.', {
+        'document': {'type': 'string', 'description': 'Words from its file name.'},
+        'column': {'type': 'string', 'description': 'Optional column name.'}}, ['document']),
+    _fn('calculate', 'Exact arithmetic. Use for any sum, percentage or conversion instead of working it out yourself.', {
+        'expression': {'type': 'string', 'description': 'e.g. "(1200*0.2)+45" or "15% of 80".'}}, ['expression']),
+    _fn('organise_files', "Tidy the loose files in the user's Downloads, Desktop or Documents into folders by type (Images, Documents, Installers...) and spot identical copies. Moves only, never deletes. The user approves it first.", {
+        'folder': {'type': 'string', 'enum': ['downloads', 'desktop', 'documents']}}, ['folder']),
+    _fn('pc_health', "Check the PC: free disk space, memory, processor load, the biggest programs running, recent app crashes and uptime. Use when the PC is slow, full or something keeps crashing.", {}),
+    _fn('draft_email', "Open an email draft in the user's mail app. It is not sent: the user presses Send. The user approves it first.", {
+        'to': {'type': 'string', 'description': 'Email address, if the user gave one.'},
+        'subject': {'type': 'string'}, 'body': {'type': 'string'}}, ['subject', 'body']),
+]
+WORK_TRIGGERS = {
+    'create_file': r'\b(document|doc|word file|report|spreadsheet|csv|excel|file|letter|essay|notes|readme|web ?page|save (it|this|that))\b',
+    'analyse_table': r'\b(csv|spreadsheet|table|totals?|average|sum|columns?|rows?)\b',
+    'calculate': r'\b(calculate|work out|how much|how many|percent(age)?|total|divide|multiply|convert)\b|%|\d\s*[-+*/x×÷^]\s*\d',
+    'organise_files': r'\b(organi[sz]e|tidy|clean ?up|sort (out|my)|duplicates?|messy|declutter)\b',
+    'pc_health': r'\b(slow|lag(gy|ging)?|crash(es|ing|ed)?|freez|disk|space|storage|memory|ram|cpu|processor|health|performance|uptime|troubleshoot|keeps? (closing|crashing))\b',
+    'draft_email': r'\b(e-?mail|mail)\b',
+}
+CONFIRM = {'create_file', 'organise_files', 'draft_email'}
+
+
+def tools_for(text, context=6144):
+    """Core tools always; a work tool when the question is about it, or all of them when the context is large."""
+    if context >= 12288:
+        return TOOLS + WORK_TOOLS
+    text = str(text or '').lower()
+    return TOOLS + [t for t in WORK_TOOLS if re.search(WORK_TRIGGERS[t['function']['name']], text)]
+
+
+def preview(name, args, store):
+    """What an ask-before-doing tool would do, for the confirm card. Never raises; never changes anything."""
+    import work
+    args = args if isinstance(args, dict) else {}
+    try:
+        if name == 'create_file':
+            return work.preview_create_file(args)
+        if name == 'organise_files':
+            if not store.get('pc_access', True):
+                return {'error': 'Screen, clipboard and file access is switched off in Settings.'}
+            return work.preview_organise(args)
+        if name == 'draft_email':
+            return work.preview_email(args)
+        return {'error': f'{name} does not need approval.'}
+    except (ValueError, RuntimeError, OSError) as e:
+        return {'error': str(e)[:200]}
+
+
+def done_text(name, result):
+    """One spoken sentence after an approved action."""
+    if result.get('error'):
+        return "That didn't work: " + result['error']
+    if name == 'create_file':
+        return f"Done. {result['file']} is in Documents, Cortana folder. Say open it if you want to see it."
+    if name == 'organise_files':
+        extra = ' I also found identical copies; they are listed on screen.' if result.get('identical_copies') else ''
+        return f"Done, Chief. I {result['done']} in {result['folder']}.{extra}"
+    if name == 'draft_email':
+        return 'The draft is open in your mail app. Check it and press Send.'
+    return 'Done.'
+
+
 TOOL_LABELS = {'set_timer': 'SETTING TIMER', 'set_reminder': 'SETTING REMINDER', 'add_task': 'UPDATING OBJECTIVES',
                'list_objectives': 'CHECKING OBJECTIVES', 'complete_objective': 'UPDATING OBJECTIVES', 'remember': 'SAVING TO MEMORY',
                'forget': 'UPDATING MEMORY', 'get_weather': 'CHECKING WEATHER', 'web_search': 'SEARCHING',
                'pc_control': 'CONTROLLING PC', 'get_calendar': 'CHECKING CALENDAR', 'add_event': 'UPDATING CALENDAR',
                'search_documents': 'READING DOCUMENTS', 'summarise_document': 'READING DOCUMENT', 'look_at_screen': 'LOOKING AT SCREEN',
-               'clipboard': 'CHECKING CLIPBOARD', 'find_files': 'SEARCHING FILES', 'open_file': 'OPENING FILE'}
+               'clipboard': 'CHECKING CLIPBOARD', 'find_files': 'SEARCHING FILES', 'open_file': 'OPENING FILE',
+               'create_file': 'PREPARING FILE', 'analyse_table': 'CRUNCHING NUMBERS', 'calculate': 'CALCULATING',
+               'organise_files': 'PLANNING TIDY-UP', 'pc_health': 'CHECKING PC HEALTH', 'draft_email': 'DRAFTING EMAIL'}
 # Longer results for tools whose text is the answer (the default is 2,500 characters; see DECISIONS D-004/D-023).
-RESULT_LIMIT = {'web_search': 3500, 'clipboard': 3500, 'search_documents': 3200, 'summarise_document': 3200, 'open_file': 3200}
+RESULT_LIMIT = {'pc_health': 3000, 'web_search': 3500, 'clipboard': 3500, 'search_documents': 3200, 'summarise_document': 3200, 'open_file': 3200}
 CHANGES = {'set_timer': 'objectives', 'set_reminder': 'objectives', 'add_task': 'objectives', 'complete_objective': 'objectives',
            'remember': 'memory', 'forget': 'memory', 'add_event': 'objectives'}
 
@@ -577,11 +649,16 @@ def screen_for(name, result):
 # ------------------------------------------------------------------ dispatcher
 FOUND = []   # paths from the last find_files: open_file may only open these (never a model-provided path)
 
-def run(name, args, store, llm=None):
+def run(name, args, store, llm=None, approved=False):
     """Run one tool. Returns (result_dict, change) where change is 'objectives', 'memory', 'documents' or None.
-    llm(prompt, images=None, max_tokens=300) -> str asks the local model (documents and screen need it)."""
+    llm(prompt, images=None, max_tokens=300) -> str asks the local model (documents and screen need it).
+    Tools in CONFIRM only run with approved=True, i.e. from /api/confirm after the user said yes."""
     args = args if isinstance(args, dict) else {}
+    if name in CONFIRM and not approved:
+        return {'error': 'This needs the user to approve it first.'}, None
     try:
+        if name in {t['function']['name'] for t in WORK_TOOLS}:
+            return work_tool(name, args, store)
         if name == 'set_timer':
             minutes = float(args.get('minutes', 0))
             if not 0 < minutes <= 24 * 60:
@@ -644,6 +721,26 @@ def run(name, args, store, llm=None):
         return {'error': str(e)[:200]}, None
     except Exception as e:
         return {'error': f'{name} failed: {str(e)[:160]}'}, None
+
+def work_tool(name, args, store):
+    import work
+    if name == 'calculate':
+        return work.calculate(args.get('expression')), None
+    if name == 'analyse_table':
+        return work.analyse_table(store, args), None
+    if name == 'create_file':
+        result = work.create_file(args)
+        FOUND[:] = [result.pop('path')]   # "open it" -> open_file number 1 opens exactly this file
+        return result, None
+    if not store.get('pc_access', True):
+        return {'error': 'Screen, clipboard and file access is switched off in Settings.'}, None
+    if name == 'organise_files':
+        return work.organise(args), None
+    if name == 'pc_health':
+        return work.pc_health(), None
+    if name == 'draft_email':
+        return work.draft_email(args), None
+    return {'error': f'Unknown tool {name}.'}, None
 
 def documents_tool(name, args, store, llm):
     import files

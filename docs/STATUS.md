@@ -2,7 +2,14 @@
 
 _Last updated: 1 November 2026._
 
-## 1.6 step 1 (speed and fixes): verification
+## 1.6 (unreleased): verification
+
+- Offline suite: 110 tests passed on Linux (Python 3.13). New tests cover the voice unpack/warm-up, reminder backoff, recap offset, context sizing, deep thinking, watchers and briefing, the approval gate end to end (nothing written until approved, one use, expiry, origin/auth), every work tool, picture validation and privacy.
+- Browser check (Playwright/Chromium, fake Ollama): six layouts, approval card via tap and via typed "yes", deep thinking toggle, new Systems sections, no page errors.
+- **[Unverified]** everything that needs the real models or Windows: how well qwen3.5 9B/4B choose the new tools and phrase approval requests, deep-thinking quality and time, the Auto context on a real graphics card, `pc_health`'s PowerShell output, the Word file opening in Word, mailto drafts in the user's mail app, folder tidying on a real Downloads folder, Windows pop-ups for notices. The release workflow's real-model job runs only on a tag.
+- Real ZipVoice on a 2-core cloud CPU (step 1): first launch load + one-time unpack + warm-up 64.9 s; second launch 9.8 s; first reply sentence 7.6–7.9 s after warm-up.
+
+### Step 1 (speed and fixes)
 
 - Offline suite: 86 tests passed on Linux (Python 3.13); the 6 new regression tests fail on the 1.5.0 code.
 - Real ZipVoice on a 2-core cloud CPU: first launch load + one-time unpack + warm-up 64.9 s; second launch 9.8 s; first reply sentence 7.6–7.9 s after warm-up.
@@ -79,4 +86,5 @@ Repository metadata currently reports **public**. The docs previously described 
 4. Refine the estimated mouth poses and assess them against real speech.
 5. Streaming the Windows-voice fallback per sentence with lower latency.
 6. Validate the small keyword detector and playback echo rejection with real microphones.
-7. Optional: more abilities (music service, smart-home) behind the same allow-list rules.
+7. Optional: more abilities (music service, smart-home) behind the same allow-list rules and the approval gate.
+8. Not built yet, on purpose (D-035): website automation (filling in forms), desktop app control by clicking/typing, running model-written code, whole multi-tool "missions" beyond the 6-step deep-thinking loop, a plugin system. Each needs a real sandbox or browser engine; revisit after the 1.6 abilities are proven on the real models.

@@ -165,3 +165,6 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 - Settings GET/POST add `context_mode` (`auto` default / `standard`); GET also returns `context`, the token window in use.
 - Settings GET/POST add `briefing_time` (`"HH:MM"` or `""`, default empty), `watch_folders` (boolean, default true) and `watch_downloads` (boolean, default false).
 - `alerts` in `GET /api/status` can now include `kind:"notice"` (spoken as-is: new document, finished download) and `kind:"briefing"` (the page opens Mission Briefing and reads it). Both are acknowledged like other alerts and never appear in `GET /api/objectives`.
+- Stream event `{type:"confirm",id,label,summary,detail}`: an action is waiting for approval (create a file, tidy a folder, open an email draft). Nothing has happened yet.
+- `POST /api/confirm {id:str, approve:bool}` → `{ok, say, result?, refresh?}`. Runs (or drops) the held action once; ids expire after 10 minutes; unknown/expired ids → 400.
+- `POST /api/chat-stream` accepts optional `images`: up to 2 base64 PNG/JPEG/WebP pictures (≤1.8 MB each) for the current question only; the request limit is 4 MB only when pictures are attached (64 KB otherwise). Pictures are never stored.

@@ -141,3 +141,9 @@ button,select{touch-action:manipulation}
 .chat-card-head span{display:flex;gap:6px}
 .holo-link{color:#9fe2ff;font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .holo-body.drop-on{outline:2px dashed var(--cyan);outline-offset:-6px;background:rgba(92,200,255,.06)}
+/* Ask-before-doing card (1.6) */
+.chat-confirm{margin-top:8px;padding:10px 12px;border:1px solid rgba(92,200,255,.55);border-radius:8px;background:rgba(10,40,80,.55);display:grid;gap:8px}
+.chat-confirm pre{margin:0;max-height:160px;overflow:auto;white-space:pre-wrap;font-size:12.5px;color:var(--text-dim)}
+.chat-confirm span{display:flex;gap:8px;flex-wrap:wrap}
+.chat-confirm[data-state="done"]{border-color:rgba(61,245,138,.6)}.chat-confirm[data-state="failed"]{border-color:rgba(255,140,140,.6)}
+.chat-confirm[data-state="cancelled"]{opacity:.6}

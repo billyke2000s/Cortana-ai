@@ -48,6 +48,8 @@ storage, tools); a phone can open the same page through a paired HTTPS tunnel. S
 | `app/runtime.py` | `Runtime`: Ollama/Whisper/tunnel lifecycle, model selection & fallback, `SYSTEM_PROMPT`, `system_prompt()`, `SpokenStream`, `chat_stream()`, `transcribe()`. Also download/extract helpers and QR. | HTTP parsing, UI strings for pages |
 | `app/tools.py` | `TOOLS` (schemas the model sees), `TOOL_LABELS`, `CHANGES`, `run()` dispatcher, weather/search/PC/calendar implementations. | Anything that runs arbitrary commands |
 | `app/store.py` | SQLite schema and all reads/writes (settings, facts, messages, items, documents + doc_chunks, events). | Network, model calls |
+| `app/work.py` | Work abilities (1.6): `create_file` (Documents\\Cortana only, never overwrites), `analyse_table`, `calculate` (AST arithmetic, no `eval`), `organise_files` (fixed folders, moves only), `pc_health` (fixed read-only PowerShell), `draft_email` (mailto). Previews for the approval gate. | Model-provided paths or commands, deleting files |
+| `app/proactive.py` | Folder/download watchers and the daily briefing; adds `notice`/`briefing` items only. | Network, model calls |
 | `app/files.py` | Text extraction (pypdf, docx/pptx XML), chunking + BM25 search, file-name search, screenshot and clipboard (fixed PowerShell scripts / ctypes). | Model calls (tools.py passes `llm`), network |
 | `app/hardware.py` | GPU/RAM detection (`nvidia-smi`, then the display-adapter registry), `CATALOG` of Qwen models, `rate()`/`recommend()`. | Network calls, UI |
 | `app/voice.py` | Piper install, voices, the long-running `PiperProcess`, Windows voice fallback via `speech.ps1`. | Chat logic |
@@ -74,6 +76,7 @@ storage, tools); a phone can open the same page through a paired HTTPS tunnel. S
 | `refresh` | `what`: `"objectives"` or `"memory"` | tool loop (`tools.CHANGES`) | dispatches `cortana:refresh` so open pages re-render |
 | `screen` | `markdown` | after stream ends | opens display panel |
 | `done` | `reply`, `raw` | last event | history stores `raw` (keeps the model's own format) |
+| `confirm` | `id`, `label`, `summary`, `detail` | tool loop, for tools in `tools.CONFIRM` (1.6) | approval card in Chat; Approve/Cancel or a spoken "yes"/"cancel" calls `POST /api/confirm` |
 | `error` | `error` | server on exception | client throws; shows message |
 
 Rules: `done` is always last on success. Never send HTML in any field. Never add a type without handling it in `app.js`.
@@ -93,6 +96,8 @@ The model speaks a short summary, then writes a line `[[SCREEN]]`, then Markdown
 - `run(name, args, store, llm=None)`: tools that need the model (document summaries, screen, copied images) call `llm(prompt, images=None, max_tokens)` = `Runtime.complete`, a separate non-streaming request.
 - Cards that must always appear (weather, files found, event added) are built from the result by `tools.screen_for()`, not by the model.
 - Schema descriptions are prompts: keep examples **neutral** (never a real person's name; see §14 #9).
+- **Work tools** (`WORK_TOOLS`, 1.6) are offered only when `WORK_TRIGGERS` match the question, or always at a context ≥ 12,288 (`tools_for`), so ordinary turns keep the tested budget (D-034). A new work tool needs a trigger.
+- **Ask before doing** (D-035): a tool that changes anything outside Cortana's own data (files, folders, mail) goes in `CONFIRM`, has a `preview()` branch and a `done_text()` line. `run()` refuses it unless `approved=True`, which only `Runtime.confirm()` (from `POST /api/confirm`) passes. Never auto-approve.
 
 ### 3.4 Status: `GET /api/status`
 
@@ -127,7 +132,7 @@ Don't rename them; other modules and tests use them.
 4. **Pairing material is PC-only:** `/api/phone-qr` and `/api/phone` MUST refuse non-local requests.
 5. **Static files are a whitelist** in `Handler.do_GET`. Python files, the database and logs MUST NEVER be served. New web files are added explicitly (§10.1), never by widening to "any file".
 6. **Never put untrusted text into `innerHTML`.** Model output, tool results, settings and memory MUST go through `holoEsc`/`CortanaDisplay.esc` or `textContent`. The Markdown renderer escapes first, then adds tags. Don't add raw-HTML passthrough.
-7. **Tools never execute arbitrary input.** No `subprocess`/`os.system`/`eval` with model-provided strings. PC controls are a fixed map (`APPS`, `VK`); websites must be `http(s)` and opened with `webbrowser.open`. Adding an app means adding a fixed entry.
+7. **Tools never execute arbitrary input.** No `subprocess`/`os.system`/`eval` with model-provided strings (`calculate` walks the AST and allows only numbers, arithmetic and a few maths functions). Files are written only inside Documents\\Cortana with sanitised names and never overwritten; `organise_files` only moves loose files inside Downloads/Desktop/Documents and never deletes. Pictures sent with a question go only to the local model and are never stored. PC controls are a fixed map (`APPS`, `VK`); websites must be `http(s)` and opened with `webbrowser.open`. Adding an app means adding a fixed entry.
 8. **Secrets** (`calendar_url`, `brave_key`, `phone_token`, pairing token) MUST NEVER be logged, returned by the API, put in URLs other than their own request, committed, or shown in screenshots.
 9. **Network access** only to: Ollama (local), the download sources in `runtime.py`/`voice.py` (GitHub releases, Hugging Face `rhasspy/piper-voices`, whisper.cpp model), Open-Meteo, Bing (RSS results feed), DuckDuckGo (instant answers + HTML results page), Wikipedia, the public pages of search results (read by `tools.fetch`, which refuses private/loopback addresses and redirects to them), Brave Search (only with a key), the user's calendar URL, and the tunnel. Adding a host = update `SECURITY.md` and ask the user.
 10. **Downloads** MUST be verified (SHA-256 from the release digest, or the MD5 from `voices.json` for voices) when a checksum exists, and archives MUST be extracted with `extract()` (path-traversal check).

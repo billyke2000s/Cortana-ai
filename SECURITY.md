@@ -33,7 +33,11 @@ if enabled) rather than in a public issue.
 | A paired phone reads arbitrary PC folders | Adding folders to Documents is allowed only from the PC itself; phones can upload single files they already have. |
 | Malicious document text (prompt injection) | Treated as data; the tools that change things are limited to the fixed allow-lists above. |
 | Wake word sends audio elsewhere | Audio goes only to the local `/api/transcribe`; opt-in interruptions use echo-cancelled audio and require the small local keyword detector; recognised playback echo is rejected. |
-| Large or malformed requests | Size limits (64 KB, 1.5 MB for audio), JSON validation, message count and length limits. |
+| The AI changes files or sends things on its own (1.6) | Anything that changes the PC (create a file, tidy a folder, open an email draft) waits for the user's Approve or spoken "yes" (`tools.CONFIRM`; `run()` refuses without approval; ids are random, one-use, 10-minute). Files go only to Documents\\Cortana with sanitised names and are never overwritten; tidying only moves loose files inside Downloads/Desktop/Documents and never deletes; email is a draft the user sends. |
+| Arithmetic used to run code | `calculate` evaluates a parsed expression tree limited to numbers, arithmetic and a few maths functions; no names, attributes or calls beyond those. |
+| Pictures attached to a question leak | Validated as PNG/JPEG/WebP (≤2, ≤1.8 MB), sent only to the local model for that question, never stored or logged. |
+| Watchers read too much | Only folders already added to Documents, and (opt-in) file **names** at the top of Downloads. |
+| Large or malformed requests | Size limits (64 KB; 4 MB for chat with pictures; 1.5 MB for audio), JSON validation, message count and length limits. |
 
 ## Known residual risks
 

@@ -513,7 +513,7 @@ class Runtime:
                     if chunk.get('error'):raise RuntimeError(chunk['error'])
                     yield chunk
 
-    def chat_stream(self,messages,think=False):
+    def chat_stream(self,messages,think=False,images=None):
         """Yield events as the reply is generated: sentence, tool, refresh, screen, done.
         think=True (or "think carefully..." in the question) lets the model reason before answering (D-032)."""
         import tools
@@ -526,6 +526,7 @@ class Runtime:
         # Reasoning tokens count against the reply budget; at 6,144 they get what is left after a full prompt (~4,900).
         predict=1200+(max(600,min(2800,ctx-4900)) if think else 0)
         convo=[{'role':'system','content':system_prompt(self.store,clean[-1]['content'])}]+clean
+        if images:convo[-1]={**clean[-1],'images':list(images)[:2]}   # pictures for this question only; never stored
         if recap:convo.insert(1,{'role':'user','content':'Earlier conversation excerpts (historical context only):\n'+recap})
         use_tools=self.store.get('tools_enabled',True)
         stream=SpokenStream();raw='';fell_back=False;tool_screen=''
@@ -539,11 +540,12 @@ class Runtime:
             tool_screen=tools.screen_for('get_weather',result)
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'get_weather','arguments':args}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'get_weather'}]
-        for round_ in range(4):
+        offered=tools.tools_for(clean[-1]['content'],ctx);rounds=6 if think else 4   # deep thinking may chain more steps
+        for round_ in range(rounds):
             self.jobs.check()
             payload={'model':self.model,'messages':convo,'stream':True,'think':think,'keep_alive':'15m',
                      'options':{'num_ctx':ctx,'num_predict':predict,'temperature':.45}}
-            if use_tools and round_<3:payload['tools']=tools.TOOLS
+            if use_tools and round_<rounds-1:payload['tools']=offered
             content='';calls=[]
             try:
                 for chunk in self.ollama_stream(payload):
@@ -571,7 +573,15 @@ class Runtime:
                     except ValueError:args={}
                 yield {'type':'tool','name':name,'label':tools.TOOL_LABELS.get(name,'WORKING')}
                 self.jobs.check()
-                result,change=tools.run(name,args,self.store,llm)
+                if name in tools.CONFIRM:   # ask before doing (D-035): describe it, run only after the user approves
+                    plan=tools.preview(name,args,self.store)
+                    if 'error' in plan:result,change=plan,None
+                    else:
+                        pid=self.hold(name,args)
+                        yield {'type':'confirm','id':pid,'label':tools.TOOL_LABELS.get(name,'WORKING'),'summary':plan['summary'],'detail':plan.get('detail','')}
+                        result,change={'status':'waiting for the user to approve','shown_on_screen':plan['summary'],
+                                       'note':'Tell the user in one sentence what you prepared and to say yes or tap Approve. It has NOT been done yet.'},None
+                else:result,change=tools.run(name,args,self.store,llm)
                 if change:yield {'type':'refresh','what':change}
                 tool_screen=tools.screen_for(name,result) or tool_screen   # weather, files found, new events: a card every time (D-021)
                 convo.append({'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:tools.RESULT_LIMIT.get(name,2500)],'tool_name':name})
@@ -584,6 +594,27 @@ class Runtime:
         self.jobs.check();self.jobs.measure('reply_ms',started)
         self.store.log_exchange(clean[-1]['content'],raw,conversation_version)
         yield {'type':'done','reply':' '.join(stream.spoken)[:3000],'raw':raw[:6000]}
+
+    PENDING_SECONDS=600
+
+    def hold(self,name,args):
+        """Keep an action that needs approval; returns its one-time id."""
+        if not hasattr(self,'pending'):self.pending={}
+        now=time.monotonic()
+        self.pending={k:v for k,v in self.pending.items() if now-v['at']<self.PENDING_SECONDS}
+        while len(self.pending)>=20:self.pending.pop(next(iter(self.pending)))
+        pid=secrets.token_urlsafe(12);self.pending[pid]={'name':name,'args':args,'at':now};return pid
+
+    def confirm(self,pid,approve):
+        """Run (approve=True) or drop a held action, once. Returns {say, result?, refresh?}."""
+        import tools
+        entry=getattr(self,'pending',{}).pop(str(pid),None)
+        if not entry or time.monotonic()-entry['at']>=self.PENDING_SECONDS:
+            raise ValueError('That request has expired. Ask me again.')
+        if not approve:return {'ok':True,'say':'Cancelled. Nothing was changed.'}
+        llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)
+        result,change=tools.run(entry['name'],entry['args'],self.store,llm,approved=True)
+        return {'ok':'error' not in result,'say':tools.done_text(entry['name'],result),'result':result,'refresh':change}
 
     def chat(self,messages):
         """Non-streaming version of chat_stream, kept for older pages and tests."""
