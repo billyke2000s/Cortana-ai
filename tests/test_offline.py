@@ -265,11 +265,14 @@ ARTICLE = """<html><head><script>var ignore='me';</script><style>.a{}</style></h
 
 class WebSearchTests(unittest.TestCase):
     def setUp(self):
-        self._fetch, self._public = tools.fetch, tools._public_url
+        self._fetch, self._public, self._get_json = tools.fetch, tools._public_url, tools.get_json
         self.calls = []
+        def offline(url, *a, **k):   # no real network in the offline suite (CI runners do have internet)
+            raise OSError('offline test')
+        tools.get_json = offline
 
     def tearDown(self):
-        tools.fetch, tools._public_url = self._fetch, self._public
+        tools.fetch, tools._public_url, tools.get_json = self._fetch, self._public, self._get_json
 
     def fake(self, pages):
         def fetch(url, timeout=8, limit=0):
