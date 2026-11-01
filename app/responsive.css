@@ -147,3 +147,8 @@ button,select{touch-action:manipulation}
 .chat-confirm span{display:flex;gap:8px;flex-wrap:wrap}
 .chat-confirm[data-state="done"]{border-color:rgba(61,245,138,.6)}.chat-confirm[data-state="failed"]{border-color:rgba(255,140,140,.6)}
 .chat-confirm[data-state="cancelled"]{opacity:.6}
+/* Hologram projection (1.7, D-039): light-based, so dark parts of the render let the scene show through; glitches add a
+   brief colour split and sideways jump on top of the slice displacement done in the shader. */
+#cortana-sprite.holo-fx canvas{mix-blend-mode:screen}
+#cortana-sprite.holo-glitch canvas{filter:drop-shadow(3px 0 rgba(255,40,140,.55)) drop-shadow(-3px 0 rgba(40,230,255,.6));transform:translateX(1.5px)}
+@media(prefers-reduced-motion:reduce){#cortana-sprite.holo-glitch canvas{filter:none;transform:none}}

@@ -120,7 +120,7 @@ the client derives mouth shapes from loudness (`envelopeCues`). Viseme ids follo
 ### 3.7 Client globals
 
 `window.Cortana` (`speak, stop, send, api, state, wake, setWake`), `window.CortanaDisplay` (`show, hide, render, panel, esc, page, body`),
-`window.CortanaPages` (`open(target)` → bool), `window.CortanaAvatar` (`ready, setState, setFull, setCharacter, startSpeech, extendSpeech, stopSpeech, inspect`).
+`window.CortanaPages` (`open(target)` → bool), `window.CortanaAvatar` (`ready, setState, setFull, setCharacter, setHologram, startSpeech, extendSpeech, stopSpeech, inspect`).
 Don't rename them; other modules and tests use them.
 
 ---

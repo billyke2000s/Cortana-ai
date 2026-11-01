@@ -18,6 +18,47 @@ let nextLook=0,eyeLook={x:0,y:0},eyeTarget={x:0,y:0};
 let expression={smile:.06,brow:.025,squint:0,smirk:0,tilt:0,pitch:0,yaw:0};
 let characterStrength=1.3,performanceStyle='warm',lastPointer=0;
 const lights=[];
+/* ---- Hologram projection look (1.7, original procedural effect, D-039): edge glow with a dimmer core, fine scan lines
+   drifting upward, a brighter interference band sweeping up, light streams running over her surface, a slight flicker,
+   and now and then a short glitch where a horizontal slice jumps sideways with a colour split. Strength: 0 off, .6, 1. */
+const HOLO={uTime:{value:0},uHolo:{value:1},uGlitch:{value:0},uGlitchY:{value:0},uGlitchH:{value:.04},uRes:{value:new THREE.Vector2(1,1)}};
+let holoLevel=1,nextGlitch=0,glitchEnd=0;
+function holoMaterial(mat){
+ mat.onBeforeCompile=shader=>{
+  Object.assign(shader.uniforms,HOLO);
+  shader.vertexShader='uniform float uTime,uGlitch,uGlitchY,uGlitchH;\nvarying vec3 vHoloPos;\n'+shader.vertexShader.replace('#include <project_vertex>',`#include <project_vertex>
+   vHoloPos=(modelMatrix*vec4(transformed,1.0)).xyz;
+   float hy=gl_Position.y/gl_Position.w;
+   if(uGlitch!=0.0&&abs(hy-uGlitchY)<uGlitchH)gl_Position.x+=uGlitch*0.035*gl_Position.w;`);
+  shader.fragmentShader=`uniform float uTime,uHolo;uniform vec2 uRes;varying vec3 vHoloPos;
+   float hHash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+   `+shader.fragmentShader.replace('#include <dithering_fragment>',`#include <dithering_fragment>
+   if(uHolo>0.0){
+    vec3 nrm=normalize(normal);float facing=abs(dot(nrm,normalize(vViewPosition)));
+    float rim=pow(1.0-facing,2.2);
+    float sy=gl_FragCoord.y/uRes.y;
+    float scan=0.5+0.5*sin(gl_FragCoord.y*1.35-uTime*5.0);
+    float band=smoothstep(0.035,0.0,abs(sy-fract(uTime*0.16)))+0.45*smoothstep(0.012,0.0,abs(sy-fract(uTime*0.16+0.37)));
+    vec2 cell=vec2(floor(vHoloPos.x*170.0),0.0);float speed=0.6+hHash(cell)*1.6;
+    cell.y=floor(vHoloPos.y*120.0-uTime*speed*9.0);
+    float fx=fract(vHoloPos.x*170.0),fy=fract(vHoloPos.y*120.0-uTime*speed*9.0);
+    float stream=step(0.935,hHash(cell))*step(0.4,fx)*step(fx,0.6)*smoothstep(0.0,0.5,fy);   // thin streaks with a fading tail
+    float flick=0.95+0.05*sin(uTime*37.0)*sin(uTime*13.0);
+    vec3 holo=gl_FragColor.rgb*(0.78+0.22*facing);
+    holo*=1.0-0.2*(1.0-scan);
+    holo+=vec3(0.25,0.75,1.0)*(rim*0.9+band*0.22+stream*0.3*(1.15-facing));   // streams show most where she curves away
+    gl_FragColor.rgb=mix(gl_FragColor.rgb,holo*flick,uHolo);
+   }`);
+ };
+ mat.customProgramCacheKey=()=>'cortana-holo';
+}
+function holoTick(t){
+ HOLO.uTime.value=motion.matches?0:t;HOLO.uHolo.value=holoLevel;   // reduced motion: the look stays, nothing moves
+ if(!holoLevel||motion.matches){HOLO.uGlitch.value=0;mount.classList.remove('holo-glitch');return;}
+ if(t>=nextGlitch){glitchEnd=t+.08+Math.random()*.14;nextGlitch=t+(holoLevel<1?11:5)+Math.random()*7;
+  HOLO.uGlitchY.value=Math.random()*1.6-.8;HOLO.uGlitchH.value=.02+Math.random()*.07;HOLO.uGlitch.value=(Math.random()<.5?-1:1)*(.6+Math.random()*.6);}
+ const on=t<glitchEnd;if(!on)HOLO.uGlitch.value=0;mount.classList.toggle('holo-glitch',on);
+}
 const vec=new THREE.Vector3(),q=new THREE.Quaternion();
 function bell(t,start,duration){const u=(t-start)/duration;return u>0&&u<1?Math.sin(Math.PI*u)**2:0;}
 function changeState(s){
@@ -34,7 +75,7 @@ function framing(){
 function resize(){
  if(!renderer)return;
  const {width,height}=mount.getBoundingClientRect();
- renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();
+ renderer.setSize(width,height,false);renderer.getDrawingBufferSize(HOLO.uRes.value);camera.aspect=width/height;camera.updateProjectionMatrix();
 }
 function rotate(name,axis,angle){
  const b=bones.get(name);if(!b||!rig[name])return;
@@ -91,6 +132,7 @@ function frame(now){
  const dt=Math.min(.05,(now-last)/1000);last=now;
  if(!model||document.hidden)return;
  const t=now/1000;
+ holoTick(t);
  const strength=motion.matches?0:characterStrength;
  for(const b of bones.values()){b.node.quaternion.copy(b.rotation);b.node.position.copy(b.position);}
  for(const m of morphs)m.morphTargetInfluences.fill(0);
@@ -163,6 +205,7 @@ function frame(now){
  renderer.render(scene,camera);
 }
 window.CortanaAvatar={ready:false,setState:changeState,setFull(v){full=v;framing();},
+ setHologram(level){holoLevel=THREE.MathUtils.clamp(Number(level)||0,0,1);mount.classList.toggle('holo-fx',holoLevel>0);},
  setCharacter(value){characterStrength=THREE.MathUtils.clamp(Number(value)||1.3,.5,1.8);},
  startSpeech(cues,clock,duration,style='warm'){performanceStyle=style;speech={cues,index:0,clock,duration};},
  setPerformance(style){performanceStyle=style;},
@@ -222,6 +265,7 @@ try{
     // overdraw each other and the face in whatever order the GPU compiled them: the intermittent 'helmet' hair (D-010).
     mat.depthWrite=true;mat.blending=THREE.NormalBlending;mat.alphaToCoverage=true;}
    if(/^Eye/.test(mat.name)){mat.color.setRGB(.35,.8,1);mat.emissive.setRGB(.1,.35,.55);mat.emissiveIntensity=.25;mat.roughness=.3;}
+   holoMaterial(mat);
    mat.needsUpdate=true;
   }
  });

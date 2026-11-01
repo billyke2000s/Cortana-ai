@@ -153,6 +153,7 @@ The PC window shows a QR for the phone link. Scanning pairs the phone for that l
 The model loads from `assets/cortana.glb` + `rig.json`; textures are validated and the model reloaded (up to 3 attempts) if any
 are missing; graphics-context loss is recovered; Back/Forward restores keep the animation running. Without a model, a message
 explains how to add one and everything else works.
+Hologram effect (Systems dialog, per device, default Full): edge glow, scan lines, sweeping interference bands, thin light streaks, slight flicker and an occasional split-second sideways glitch with a colour split (D-039). Subtle halves the glitch rate; Off removes it; reduced-motion keeps the look without movement.
 
 ## 11. Character and voice setup
 

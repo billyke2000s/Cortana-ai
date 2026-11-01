@@ -167,12 +167,13 @@ function openDialog(id){$(id).showModal();}
 for(const d of document.querySelectorAll('dialog')){d.querySelector('.close-dialog').addEventListener('click',()=>d.close());}
 function preference(key,fallback){try{return localStorage.getItem('cortana.'+key)??fallback;}catch{return fallback;}}
 function savePreference(key,value){try{localStorage.setItem('cortana.'+key,value);}catch{}}
-$('character').value=preference('character','1.3')==='1.8'?'1.8':'1.3';$('rate').value=preference('rate','0');$('hologramView').value=preference('view','portrait');
-function applySettings(){avatar()?.setCharacter($('character').value);avatar()?.setFull($('hologramView').value==='full');}
+$('character').value=preference('character','1.3')==='1.8'?'1.8':'1.3';$('rate').value=preference('rate','0');$('hologramView').value=preference('view','portrait');$('hologramFx').value=['1','0.6','0'].includes(preference('holoFx','1'))?preference('holoFx','1'):'1';
+function applySettings(){avatar()?.setCharacter($('character').value);avatar()?.setFull($('hologramView').value==='full');avatar()?.setHologram?.($('hologramFx').value);}
 $('character').addEventListener('change',()=>{savePreference('character',$('character').value);applySettings();api('/api/settings',{expression_mode:$('character').value==='1.8'?'expressive':'normal'}).catch(()=>{});});
 $('rate').addEventListener('change',()=>savePreference('rate',$('rate').value));
 deepThinking=preference('deep','0')==='1';
 $('hologramView').addEventListener('change',()=>{savePreference('view',$('hologramView').value);applySettings();});
+$('hologramFx').addEventListener('change',()=>{savePreference('holoFx',$('hologramFx').value);applySettings();});
 applySettings();document.addEventListener('cortana:avatar-ready',applySettings);
 mic.addEventListener('click',listen);
 document.querySelector('[aria-label="Type a message"]').addEventListener('click',()=>navigate('chat'));
