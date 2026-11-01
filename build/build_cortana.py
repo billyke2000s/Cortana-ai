@@ -27,7 +27,7 @@ args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onefile', '--wind
         '--distpath', str(dist), '--workpath', str(work / 'pyinstaller'), '--specpath', str(work), '--paths', str(app)]
 for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'sherpa_onnx', 'numpy']:
     args += ['--hidden-import', name]
-args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx', '--collect-all']
+args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx']
 for name in ['PIL', 'torch', 'cv2', 'matplotlib', 'scipy', 'pandas']:
     args += ['--exclude-module', name]
 for name in WEB_FILES:
