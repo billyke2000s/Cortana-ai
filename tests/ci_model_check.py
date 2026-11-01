@@ -42,9 +42,11 @@ CASES = [   # (ask, expected tool or None, check on arguments)
 
 results = []
 print(f'=== Tool choice: {MODEL}, real prompt ({len(system["content"])} chars) and {len(tools.TOOLS)} tool schemas ===')
-for ask, want, check in [c for c in CASES for _ in range(REPEAT)]:
+ONLY = os.environ.get('ONLY', '').lower()   # e.g. ONLY=weather runs just the matching asks
+for ask, want, check in [c for c in CASES if ONLY in c[0].lower() for _ in range(REPEAT)]:
     t = time.time()
-    msg = chat([system, {'role': 'user', 'content': ask}])
+    hint = runtime.tool_hint(ask)   # the app adds this nudge just before weather questions
+    msg = chat([system] + ([{'role': 'system', 'content': hint}] if hint else []) + [{'role': 'user', 'content': ask}])
     calls = [c['function'] for c in msg.get('tool_calls') or []]
     got = calls[0]['name'] if calls else None
     args = calls[0].get('arguments') if calls else {}
@@ -56,6 +58,8 @@ for ask, want, check in [c for c in CASES for _ in range(REPEAT)]:
     print(f"{'OK ' if ok else 'BAD'} {time.time() - t:5.1f}s  {ask!r} -> {got} {json.dumps(args)[:120]}"
           + ('' if calls else f" | reply: {(msg.get('content') or '')[:100]!r}"))
 
+if ONLY:
+    print(f'\nPASSED {sum(results)}/{len(results)}'); sys.exit(0 if all(results) else 1)
 print('\n=== Vision: can the model read an error from a screenshot-like image? ===')
 try:
     from PIL import Image, ImageDraw, ImageFont

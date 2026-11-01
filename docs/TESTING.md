@@ -42,6 +42,12 @@ Actions → **Live check (search + wake word)** → Run workflow. Two jobs:
 - **model** (Linux, CPU): installs Ollama + `qwen3.5:4b` and runs `tests/ci_model_check.py`: tool choice for 11 asks with the
   real prompt and schemas, and reading an error from an image. (9B is too slow on a CPU runner; check it on the PC.)
 
+## 2c. Release smoke test (automatic)
+
+`release.yml` starts the built `dist\Cortana.exe --headless --no-open --no-tunnel --port 8777` on Windows and runs
+`tests/exe_smoke.py`: page, scripts, 3D model, `/api/models` hardware detection and reading a PDF. The release is only
+published if it passes.
+
 ## 3. Real-model prompt check (whenever the prompt or tool schemas change)
 
 Against Ollama with the real `SYSTEM_PROMPT` and `TOOLS`, for **both** `qwen3.5:9b` and `qwen3.5:4b`:

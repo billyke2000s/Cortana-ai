@@ -45,6 +45,14 @@ def split_reply(text):
     if screen and not spoken:spoken="I've put it on screen for you."
     return spoken[:1500],screen[:12000]
 
+# Questions a small model may answer from imagination: a short nudge right before the question (measured: 4B invented
+# a London forecast in 1 of 2 runs without it; see docs/STATUS.md).
+_WEATHER=re.compile(r"\b(weather|forecast|temperature|rain(ing|y)?|snow(ing)?|sunny|umbrella|degrees outside|how (hot|cold|warm) is it)\b",re.I)
+def tool_hint(text):
+    if _WEATHER.search(text or ''):
+        return 'This question is about the weather: call get_weather first and answer only from its result.'
+    return None
+
 def system_prompt(store=None):
     """SYSTEM_PROMPT plus the PC's current local date and time and what Cortana remembers about the user."""
     from datetime import datetime
@@ -443,6 +451,8 @@ class Runtime:
         if not self.ai_ready:raise RuntimeError(self.status if not self.error else self.error)
         clean=self.clean_messages(messages)
         convo=[{'role':'system','content':system_prompt(self.store)}]+clean
+        hint=tool_hint(clean[-1]['content']) if self.store.get('tools_enabled',True) and clean else None
+        if hint:convo.insert(-1,{'role':'system','content':hint})   # small models sometimes invent these instead of calling the tool
         use_tools=self.store.get('tools_enabled',True)
         stream=SpokenStream();raw='';fell_back=False;tool_screen=''
         llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)

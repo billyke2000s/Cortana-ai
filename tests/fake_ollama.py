@@ -8,7 +8,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LAST_REQUEST = {}
 INSTALLED = ['qwen3.5:9b', 'qwen3.5:4b']
-COMPLETIONS = []   # non-streaming requests (document notes, screenshots), newest last
+COMPLETIONS = []
+FIRST_REQUEST = {}   # non-streaming requests (document notes, screenshots), newest last
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -46,6 +47,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._stream([{'status': 'pulling manifest'}] + [{'status': 'downloading', 'total': 100, 'completed': c} for c in (25, 50, 100)] + [{'status': 'success'}])
         LAST_REQUEST.clear()
         LAST_REQUEST.update(body)
+        if body.get('messages') and body['messages'][-1].get('role') == 'user':
+            FIRST_REQUEST.clear(); FIRST_REQUEST.update(body)   # the request that started this turn
         messages = body['messages']
         if body.get('stream') is False:   # real Ollama returns one JSON object when stream is false
             m = messages[-1]

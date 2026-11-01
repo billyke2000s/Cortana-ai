@@ -566,6 +566,29 @@ class WebSearchTests(unittest.TestCase):
                 tools.fetch(url)
 
 
+class ToolHintTests(unittest.TestCase):
+    def test_weather_questions_get_a_nudge(self):
+        for q in ("What's the weather in London?", 'Will it rain tomorrow?', 'Do I need an umbrella?', 'Forecast for Leeds'):
+            self.assertIn('get_weather', runtime.tool_hint(q) or '', q)
+        for q in ('Tell me a joke', 'Set a timer', 'What is a rainbow made of?', 'Summarise this'):
+            self.assertIsNone(runtime.tool_hint(q), q)
+
+    def test_hint_sits_just_before_the_question(self):
+        rt = runtime.Runtime(lambda text: None)
+        rt.tag_exists = {m['tag']: True for m in hardware.CATALOG}
+        rt.ensure_ai()
+        old = tools.weather
+        tools.weather = lambda place, home: {'error': 'offline'}
+        try:
+            list(rt.chat_stream([{'role': 'user', 'content': "What's the weather in London?"}]))
+        finally:
+            tools.weather = old
+        first = fake_ollama.FIRST_REQUEST['messages']
+        self.assertEqual(first[-1]['role'], 'user')
+        self.assertIn('get_weather', first[-2]['content'])
+        rt.close()
+
+
 class WeatherDisplayTests(unittest.TestCase):
     def test_weather_always_shows_the_forecast_card(self):
         today = date.today()
