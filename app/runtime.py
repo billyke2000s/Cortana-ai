@@ -121,7 +121,13 @@ def weather_question(text):
     place=m.group(1).strip(" ?.!,'") if m else ''
     return '' if place.lower() in _NOT_PLACE or place.split(' ')[0].lower() in _NOT_PLACE else place
 
-def system_prompt(store=None,query=None):
+FULL_ON=(" Full access is ON (the user switched it on): you can control this PC. Use run_command for anything a PowerShell "
+         "command can do (install, settings, files, apps) and computer_task to use the mouse and keyboard in any app or site "
+         "(e.g. play a song in Spotify). The user approves each one on screen first, so call the tool; never claim it is done before it runs.")
+FULL_OFF=(" Full access is OFF. If the user wants you to control the PC beyond your tools (click around, run commands, install "
+          "things), tell them they can switch on Full access in Systems on the PC.")
+FULL_PHONE=" Full access (running commands, using the mouse and keyboard) only works when the user talks to you on the PC itself, not on the phone."
+def system_prompt(store=None,query=None,full=None):
     """SYSTEM_PROMPT plus the PC's current local date and time and what Cortana remembers about the user."""
     from datetime import datetime
     now=datetime.now().astimezone()
@@ -133,6 +139,8 @@ def system_prompt(store=None,query=None):
         if facts:text+=" Things you remember about the user: "+'; '.join(f['text'] for f in facts)+'.'
         docs=store.documents()[:8]
         if docs:text+=" Documents the user added, newest first (\"this\" or \"it\" means the first): "+'; '.join(d['name'][:60] for d in docs)+'.'
+    if full is not None:   # True: on and asked on the PC; False: off; 'phone': on, but asked from the phone (D-040)
+        text+=FULL_ON if full is True else FULL_PHONE if full=='phone' else FULL_OFF
     return text
 
 _SENTENCE_END=re.compile(r'(?<=[.!?\u2026])["\'\u201d\u2019)\]]*\s+|\n+')
@@ -587,7 +595,9 @@ class Runtime:
         think=bool(think) or wants_deep_thought(clean[-1]['content'])
         # Reasoning tokens count against the reply budget; at 6,144 they get what is left after a full prompt (~4,900).
         predict=1200+(max(600,min(2800,ctx-4900)) if think else 0)
-        convo=[{'role':'system','content':system_prompt(self.store,clean[-1]['content'])}]+clean
+        full=bool(local) and self.store.get('full_access',False)   # full access: PC only, owner switched it on (D-038)
+        state=True if full else 'phone' if self.store.get('full_access',False) else False
+        convo=[{'role':'system','content':system_prompt(self.store,clean[-1]['content'],state)}]+clean
         if images:convo[-1]={**clean[-1],'images':list(images)[:2]}   # pictures for this question only; never stored
         if recap:convo.insert(1,{'role':'user','content':'Earlier conversation excerpts (historical context only):\n'+recap})
         use_tools=self.store.get('tools_enabled',True)
@@ -617,7 +627,6 @@ class Runtime:
             if change:yield {'type':'refresh','what':change}
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'set_reminder','arguments':reminder}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'set_reminder'}]
-        full=bool(local) and self.store.get('full_access',False)   # full access: PC only, owner switched it on (D-038)
         offered=tools.tools_for(clean[-1]['content'],ctx,full);rounds=6 if think else 4   # deep thinking may chain more steps
         done_in_code={n for n,v in (('set_timer',timer),('set_reminder',reminder)) if v}
         offered=[t for t in offered if t['function']['name'] not in done_in_code]   # never a second, duplicate timer/reminder

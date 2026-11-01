@@ -2,6 +2,11 @@
 
 All notable changes. Dates are UK time.
 
+## [1.7.1] - 2026-11-01
+
+### Fixed
+- She knows about full access: when it's on she says so and uses it; when it's off she tells you to switch it on in Systems; on the phone she explains it only works on the PC. (In 1.7.0 she answered "do you have full system control?" from the old ability list and said no.)
+
 ## [1.7.0] - 2026-11-01
 
 ### Added

@@ -183,3 +183,7 @@ The owner asked for full system access ("it can't move a cursor and do things").
 ### D-039: Hologram projection look
 
 The owner asked for the projected-hologram look of the character in the games ("not a regular CRT look"). Built as an original procedural effect, not copied assets: every material gets a shader addition (fresnel edge glow over a dimmer core, screen-space scan lines drifting up, two interference bands sweeping up, thin light streaks running up the surface in world space, strongest where the surface turns away so the face stays readable, a slight flicker), the canvas is screen-blended so dark parts of the render let the scene through, and every 5–12 s a 80–220 ms glitch shifts one horizontal slice sideways in the vertex shader with a brief CSS colour split. Full/Subtle/Off per device (Subtle halves the glitch rate); reduced-motion freezes time. Checked by rendering in headless Chromium (software GL); real-GPU appearance and cost on phones are **[Unverified]**.
+
+### D-040: The prompt states whether full access is on
+
+In 1.7.0 the owner asked "do you have full system control?" and she said no: full access was still off (default), and nothing in her instructions mentioned it, so she answered from the old ability list. The system prompt now ends with one sentence for the state: on (asked on the PC), on but asked from the phone, or off with where to switch it on (~45–90 tokens; checked by the release model checks).

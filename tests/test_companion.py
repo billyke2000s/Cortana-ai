@@ -615,3 +615,17 @@ class LauncherTests(unittest.TestCase):
             with patch.object(launcher.sys,'_MEIPASS',str(mine),create=True),patch('tempfile.gettempdir',return_value=str(temp)):
                 launcher.clean_old_unpacks()
             self.assertFalse(old.exists());self.assertTrue(mine.exists() and other.exists())   # only old Cortana copies go
+
+class FullAccessPromptTests(unittest.TestCase):
+    """D-040: she is told whether full access is on, off, or unavailable because the user is on the phone."""
+    def prompt_for(self,setting,local):
+        rt=base.runtime.Runtime();rt.store.close();rt.store=base.store.Store(':memory:');rt.ai_ready=True;self.addCleanup(rt.store.close)
+        if setting:rt.store.set('full_access',True)
+        seen=[]
+        def model(payload):seen.append(payload['messages'][0]['content']);yield {'message':{'content':'Yes, Chief.'}}
+        with patch.object(rt,'ollama_stream',model):list(rt.chat_stream([{'role':'user','content':'Do you have full system control?'}],local=local))
+        return seen[0]
+    def test_states(self):
+        self.assertIn('Full access is ON',self.prompt_for(True,True))
+        self.assertIn('switch on Full access in Systems',self.prompt_for(False,True))
+        on_phone=self.prompt_for(True,False);self.assertIn('only works when the user talks to you on the PC',on_phone);self.assertNotIn('Full access is ON',on_phone)
