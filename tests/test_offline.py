@@ -589,11 +589,11 @@ class WeatherFirstTests(unittest.TestCase):
         finally:
             tools.weather = old
         self.assertEqual(asked[0], 'Paris')
-        self.assertEqual(events[0], {'type': 'tool', 'name': 'get_weather', 'label': 'CHECKING WEATHER'})
+        self.assertIn({'type': 'tool', 'name': 'get_weather', 'label': 'CHECKING WEATHER'}, events)
         first = fake_ollama.CHAT_REQUESTS[0]['messages']
         self.assertEqual(first[-1]['role'], 'user')  # No Python intent pre-routing: the model chose the weather tool.
-        second = fake_ollama.CHAT_REQUESTS[1]['messages']
-        self.assertEqual([m['role'] for m in second[-3:]], ['user', 'assistant', 'tool'])
+        second = next(r['messages'] for r in fake_ollama.CHAT_REQUESTS if r['messages'][-1].get('tool_name')=='get_weather')
+        self.assertEqual([m['role'] for m in second[-2:]], ['assistant', 'tool'])
         self.assertIn('offline', second[-1]['content'])
         rt.close()
 
@@ -713,7 +713,7 @@ class ApiTests(unittest.TestCase):
     def test_stream_with_tool_updates_objectives(self):
         events = self.chat('Set a 10 minute timer for the pasta')
         types_ = [e['type'] for e in events]
-        self.assertEqual([t for t in types_ if t!='activity'][:2], ['tool', 'refresh'])
+        self.assertEqual([e['type'] for e in events if e['type']!='activity' and e.get('name')!='discover_tools'][:2], ['tool', 'refresh'])
         self.assertEqual(types_[-1], 'done')
         items = json.loads(self.request('GET', '/api/objectives')[2])['items']
         self.assertTrue(any(i['text'] == 'pasta' for i in items))

@@ -109,7 +109,7 @@ function chatMsg(m,i){
  if(m.role==='user')return `<div class="chat-msg chat-you"><small>YOU</small><p>${esc(m.text)}</p></div>`;
  const card=m.screen?(()=>{const r=D.render(m.screen);return `<div class="chat-card"><div class="chat-card-head">◆ ${esc(r.title)}<span><button type="button" class="pg-btn" data-act="card-copy" data-i="${i}">Copy</button> <button type="button" class="pg-btn" data-act="chat-display" data-i="${i}">Expand</button></span></div>${r.html}</div>`;})():'';
  const body=m.text?`<p>${esc(m.text)}</p>`:m.pending?`<p class="chat-typing">${esc(m.working?m.working+'…':'Thinking')}<i></i><i></i><i></i></p>`:'';
- return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
+ return `<div class="chat-msg chat-her${m.error?' chat-err':''}"><small>CORTANA</small>${body}${card}${(m.artifacts||[]).filter(a=>/^[a-f0-9]{32}$/.test(a.id)).map(a=>`<p><a href="/api/artifacts/${a.id}" download>${esc(a.name)}</a></p>`).join('')}${m.approval?'<button type="button" class="pg-btn" data-act="agent-activity">Review action in Activity</button>':''}${m.error?`<p class="pg-err">${esc(m.error)}</p>`:''}</div>`;
 }
 function renderChatLog(){
  const log=document.getElementById('chatLog');if(!log)return;
@@ -119,7 +119,7 @@ function renderChatLog(){
  if(atEnd)box.scrollTop=box.scrollHeight;
 }
 function chat(){
- page('chat','Chat',`<div id="chatLog" class="chat-log" aria-live="polite"></div>
+ page('chat','Chat',`<button type="button" class="pg-btn" data-act="agent-activity">Activity and files</button><div id="chatLog" class="chat-log" aria-live="polite"></div>
   <form id="chatForm" class="chat-compose"><label class="sr-only" for="chatInput">Message</label>
    <button type="button" class="pg-btn chat-attach" data-act="attach" aria-label="Add a file for Cortana to read" title="Add a PDF, Word, PowerPoint or text file">📎</button>
    <textarea id="chatInput" rows="1" maxlength="3000" placeholder="Message Cortana…" enterkeyhint="send"></textarea>
@@ -189,8 +189,10 @@ function chooseModel(){
  renderModels().then(()=>[...document.querySelectorAll('#sModels .pg-model')].find(li=>li.querySelector('.pg-r-rec'))?.scrollIntoView({block:'center'}));
 }
 async function systems(){
+ const navigation=window.CortanaPages.navigation;
  try{
-  const s=await get('/api/settings');
+  const s=await get('/api/settings'),status=await get('/api/status');
+  if(navigation!==window.CortanaPages.navigation)return;
   const opt=(v,t,sel)=>`<option value="${esc(v)}"${sel?' selected':''}>${esc(t)}</option>`;
   page('settings','Systems',`
    <h3>Assistant</h3><button type="button" class="pg-btn pg-wide" data-act="agent-abilities">Abilities, connections and Activity…</button>
@@ -207,7 +209,7 @@ async function systems(){
    <p class="pg-muted">${esc(s.voice_status)} Trained voices: put the .onnx and .onnx.json in %LOCALAPPDATA%\\CortanaAI\\voices, then restart.</p>
    <button type="button" class="pg-btn pg-wide" data-act="voice-preview">Save and preview voice</button>
    <label class="pg-check"><input type="checkbox" id="sNotifications"${s.native_notifications!==false?' checked':''}> Windows reminders while the browser is closed (keep the launcher running)</label>
-   <p class="pg-muted">${Object.entries((await get('/api/status')).latency||{}).map(([k,v])=>esc(({tts_ms:'Speech preparation',first_token_ms:'First model token',transcription_ms:'Transcription',playback_ms:'Send to playback',reply_ms:'Full reply'})[k]||k)+': '+esc(v)+' ms').join(' · ')||'Timings appear after your first conversation.'}</p>
+   <p class="pg-muted">${Object.entries(status.latency||{}).map(([k,v])=>esc(({tts_ms:'Speech preparation',first_token_ms:'First model token',transcription_ms:'Transcription',playback_ms:'Send to playback',reply_ms:'Full reply'})[k]||k)+': '+esc(v)+' ms').join(' · ')||'Timings appear after your first conversation.'}</p>
    <label class="pg-check"><input type="checkbox" id="sWake"${C.wake?' checked':''}> “Hey Cortana” wake word (this device; listens locally)</label>
    <h3>Briefing</h3>
    <label>Home town (for weather)<input id="sHome" value="${esc(s.home_location||'')}" maxlength="80" placeholder="e.g. London"></label>
@@ -251,6 +253,7 @@ D.body().addEventListener('click',async e=>{
   else if(act==='clear'){if(!confirmClear.armed){confirmClear.armed=true;btn.textContent='Tap again to clear everything';setTimeout(()=>{confirmClear.armed=false;},4000);return;}
    await post('/api/memory',{action:'clear_history'});C.clearConversation();memory();}
   else if(act==='read'&&lastBriefing)C.speak(briefingSpeech(lastBriefing));
+  else if(act==='agent-activity')window.CortanaPages?.open('activity');
   else if(act==='agent-abilities')window.CortanaPages?.open('abilities');
   else if(act==='save')saveSystems();
   else if(act==='expression-preview'){C.applyMode(document.getElementById('sExpression').value,true);C.speak('Still with me, Chief? Of course you are. What is our next move?');}

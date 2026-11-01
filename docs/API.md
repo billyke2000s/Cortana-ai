@@ -6,7 +6,7 @@ Base URL: `http://127.0.0.1:<port>` on the PC, or the paired tunnel URL on a pho
 
 - **Local** (Host `localhost`/`127.0.0.1`, no proxy headers): always allowed.
 - **Remote** (phone): Host must equal the tunnel host **and** the `cortana_session` cookie must match. Otherwise: `403` HTML pairing page (GET) or `403 {"error"}` (POST).
-- **POST**: `Content-Type: application/json` required (`415`); `Origin`, if present, must equal this host (`403`); body size 1–64,000 bytes (1,500,000 for `/api/transcribe`, 16,000,000 for `/api/documents`) (`400`).
+- **POST**: `Content-Type: application/json` required (`415`); `Origin`, if present, must equal this host (`403`); body size 1–64,000 bytes (1,500,000 for `/api/transcribe`, 16,000,000 for `/api/documents`, 45,000,000 for `/api/agent-upload`) (`400`).
 - Errors: `400` invalid input, `403` not allowed, `404` unknown, `503` service problem. Body `{"error": "plain English message"}`.
 
 ## Pairing
@@ -144,7 +144,7 @@ Weather is cached for 10 minutes; the calendar for 5. `events` merges Cortana's 
 
 ## Static files
 
-Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js`, `/responsive.css`, `/manifest.webmanifest`,
+Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/agent-pages.js`, `/avatar.js`, `/mic-worklet.js`, `/responsive.css`, `/manifest.webmanifest`,
 `/app-icon.svg`, `/assets/*`, `/vendor/*`. Anything else, and any path containing `..`, returns `404`.
 
 ## Companion additions (1.5.0)
@@ -158,3 +158,30 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 - `GET /api/memory` adds `conflicts`, an array of potentially conflicting fact-ID groups. `POST /api/memory {action:"edit",id,text}` replaces one existing fact (1–300 chars).
 - `POST /api/objectives {action:"snooze",id,minutes:10}` re-arms a timer/reminder for 1–1440 minutes. GET adds `recent_alerts`: at most 20 acknowledged timers from the last day. Items have additive `notified` state.
 - `voice-profile/*`, Python modules, downloaded weights and temporary audio are never static web files. All additions keep the existing auth/origin/JSON/size guards.
+
+## Agent additions
+
+All access/origin/JSON checks above apply. `done` stays last on success. Additional chat events:
+
+- `activity`: `{name,status:finished|failed|pending,artifact|null,artifacts:[],undo|null}`. Client updates inline file links and Activity.
+- `approval`: `{id,reason}`. Client offers Activity review; this event never authorizes execution.
+
+`GET /api/agent` returns `{settings:{reasoning,context_tokens,context_choices},roots:[labels],canConfigure,connections:[{name,type,configured}],missions,activity,approvals,jobs,artifacts}`. No raw connection configs, credentials, browser cookies or stored tool arguments are returned. Review contexts intentionally contain the concrete outgoing body/recipient or form fields.
+
+`POST /api/agent` actions:
+
+| action | fields | scope |
+|---|---|---|
+| `preferences` | `reasoning:fast|deep`, `context_tokens` from rated choices | PC only; persisted |
+| `root` | `name,path`, or `name,remove:true` | PC only; add/revoke work folder |
+| `connection` | `name,config`, or `name,remove:true` | PC only; see ABILITIES.md for write-only configs |
+| `review` | `id,allow:boolean` | Runs the exact stored call once, or denies; ten-minute expiry |
+| `undo` | change `id` | Hash-guarded file restoration; PC access must be enabled |
+| `target` | artifact `id` | Select current file; PC access must be enabled |
+| `job` | `job_action:pause|resume|remove`, job `id` | Control a scheduled goal |
+
+`POST /api/agent-upload {name,data:base64}` accepts a single file up to 32 MiB. Returns an artifact `{id,name,path,bytes,download,verified}`; persists under workspace/Uploads with a unique prefix. This differs from `/api/documents`, which indexes text.
+
+`GET /api/artifacts/<id>` requires authentication and a registered ID whose path still resolves inside approved folders. Returns an attachment, at most 32 MiB, `application/octet-stream`, `nosniff`, sandbox CSP. It does not permit arbitrary paths or inline HTML execution.
+
+New settings: `reasoning` default `fast`; `context_tokens` default 6144 (clamped when read if hardware rating decreases); `work_roots` default `[]`; `service_connections` default `{}` (secret, never GET); internal `active_file`. Agent metadata uses additive `agent_records`, not public static files.

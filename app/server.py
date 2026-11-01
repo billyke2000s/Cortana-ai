@@ -127,6 +127,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if action=='review':
                     if not isinstance(data.get('allow'),bool):raise ValueError('Choose approve or deny.')
                     return self.send_json(runtime.agent.review(data.get('id'),data['allow']))
+                if action in ('undo','target') and not runtime.store.get('pc_access',True):raise ValueError('PC access is switched off.')
                 if action=='undo':return self.send_json(runtime.agent.workspace.undo(data.get('id')))
                 if action=='target':
                     item=runtime.store.agent_get(data.get('id'),'artifact')
@@ -138,6 +139,9 @@ class Handler(SimpleHTTPRequestHandler):
                     from connections import configure
                     result=configure(runtime.store,data);runtime.agent.connection_clients.clear();return self.send_json({'connections':result})
                 if action=='root':
+                    if data.get('remove'):
+                        roots=[r for r in runtime.store.get('work_roots',[]) if r['name']!=data.get('name')]
+                        runtime.store.set('work_roots',roots);return self.send_json({'ok':True})
                     folder=Path(str(data.get('path','')).strip().strip('"')).expanduser().resolve()
                     name=str(data.get('name','')).strip()
                     if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,30}',name) or name=='Workspace':raise ValueError('Choose a unique folder label with letters and digits.')

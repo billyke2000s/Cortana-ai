@@ -145,3 +145,15 @@ Rhubarb 1.14 phonetic recognition supplies nine audio-aligned mouth poses; it is
 ### D-030: Bounded memory, cancellable turns, background reminders
 
 Rank up to 12 facts/1,800 chars by query terms and recency. Keep fact conflicts visible for explicit editing instead of deleting facts heuristically. Recap is extractive (≤800 chars) and reduces the existing history allowance, so context does not grow. IDs group chat/speech cancellation; active native chunks may finish but output is discarded. Reminders have a native-delivery flag separate from browser acknowledgement. Clear History increments a version checked atomically when saving an exchange.
+
+### D-031: Semantic tool discovery and bounded missions (supersedes D-027)
+
+The owner explicitly requires Qwen to choose tools from any natural wording/context. Remove weather pre-routing as well. Retain the old helper solely for compatibility tests, never call it to activate tools. Add core discovery/mission schemas; expose a selected domain at a time and budget actual serialized schemas/history. Initial schemas are approximately 1.4 KB; selected domains are usually smaller. This costs an extra discovery round but avoids sending every domain schema at 6144 context. Small models remain fallible; real 4B/9B selection tests are required.
+
+### D-032: Explicit roots, isolated code and concrete reviews
+
+The owner authorizes the new file/browser/desktop/code/service abilities and their dependencies. Generated Python has no host execution path: Docker uses no network, read-only root/inputs, an unprivileged user, capability drop, CPU/memory/PID/time limits and bounded temporary outputs. Collect output with a fixed script while the container is alive (Docker cp does not collect tmpfs reliably), then remove it. Dependencies in generated code are standard-library only. Workspace writes retain backups/hashes and office outputs stage before replacement. External effects use stored exact-once approval, never an AI confirmation field. This adds setup and review latency; a plan or process exit is not proof of a user-visible application outcome.
+
+### D-033: Configured providers rather than pretending accounts are connected
+
+Email supports TLS IMAP/SMTP with app credentials/existing OAuth tokens; CalDAV supports actual remote read/write; Home Assistant supports a bounded service map. MCP discovers actual installed-server capabilities for further calendar/music/tools. Keep configuration PC-only and credentials out of model/public settings. HTTP 2025-family support is explicit; no stdio command execution or unsupported 2026 claim. Automatic provider OAuth setup/refresh and direct Spotify integration are not shipped. Connections can share selected request data, so privacy copy must say so.

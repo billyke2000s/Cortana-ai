@@ -59,7 +59,7 @@ Errors in startup set `runtime.error`, are shown in the window and page, and the
 2. **Chat:** `send(text)` → `POST /api/chat-stream` with the last ≤18 messages.
 3. **Runtime:** `chat_stream()` builds `[system_prompt(store)] + history`, calls Ollama `/api/chat` with `stream: true`, `think: false`, `tools: TOOLS`, `num_ctx: 6144`.
    - Content tokens go through `SpokenStream.feed()` → whole sentences → `sentence` events.
-   - Tool calls → `tools.run()` → `tool` (+ `refresh`) events → results appended as `role: tool` → next round (max 4 rounds).
+   - Tool calls → `tools.run()` → `tool` (+ `refresh`) events → results appended as `role: tool` → next round (max 18 rounds).
    - At the end: optional `screen` event, then `done`. The exchange is logged to SQLite.
 4. **Voice:** each `sentence` is immediately sent to `POST /api/speech` (`SpeechQueue.add`); the server synthesises with Piper (one process, serialised by a lock). The client schedules buffers back to back on the `AudioContext` clock.
 5. **Lip sync:** cues come from SAPI visemes or Rhubarb phonetic audio alignment (envelope fallback if unavailable), shifted to the shared timeline; `avatar.js` blends mouth poses per frame.
@@ -86,7 +86,7 @@ reminder item 10 minutes before. Alerts = `done=0 AND announced=0 AND due<=now`.
 
 ## Frontend structure
 
-- `index.html`: layout (header, greeting, hologram stage, transcript, tiles, controls, nav, dialogs). Loads modules in order: `avatar.js` → `app.js` → `pages.js`.
+- `index.html`: layout (header, greeting, hologram stage, transcript, tiles, controls, nav, dialogs). Loads modules in order: `avatar.js` → `app.js` → `pages.js` → `agent-pages.js`.
 - `app.js`: state machine (`idle | listening | thinking | speaking`), streaming reader, `SpeechQueue`, mic, wake word, alerts, display panel and Markdown renderer, navigation.
 - `pages.js`: pages rendered inside the display panel; listens for `cortana:refresh`.
 - `avatar.js`: three.js scene; `CortanaAvatar.startSpeech(cues, clock, duration)` + `extendSpeech(duration)`; texture validation and retry; context-loss recovery.
@@ -111,3 +111,13 @@ reminder item 10 minutes before. Alerts = `done=0 AND announced=0 AND due<=now`.
 `companion.Jobs` tracks bounded per-client request IDs, cancellation events, active Ollama sockets and text-free last-request timings. The browser synthesises sentences in order while previously prepared audio plays. Stop closes active Ollama reads, aborts queued calls and rejects cancelled output before/after native synthesis. Native chunks and already executing tools may finish.
 
 The reminder loop checks every two seconds; calendar refresh stays at five minutes. A fixed PowerShell notification program receives reminder text on stdin. `items.notified` is an additive migration separate from browser `announced`; snooze clears both. `Store.log_exchange` atomically checks a history version so Clear History cannot be undone by a stale reply. Recap consumes part of the existing 6,000-character history allowance; query-ranked facts have a separate 1,800-character cap.
+
+## Agent layer
+
+`agent.py` holds typed domain schemas, discovery, mission state, approval leases, scheduling and hardware-rated context preferences. `runtime.py` remains the sole chat orchestrator and sends the model's actual calls to legacy `tools.run` or `Agent.run`. It does not classify the user's words in Python. Category schemas replace, rather than accumulate beside, the previous domain. A per-tool lock serializes mutable PC operations; no lock is held across a streamed yield.
+
+`workspace.py` resolves approved roots, creates office files, maintains `file-history/<id>` backups/hashes and runs Docker. `browser_agent.py` owns Playwright and its persistent profile on a dedicated worker thread; observed refs/revisions bind actions to a current snapshot. `pc_agent.py` owns fixed Windows accessibility/diagnostic scripts and local media rendering. `connections.py` owns explicitly configured authenticated providers and the MCP HTTP client. `agent-pages.js` provides Abilities/Activity after the original page modules.
+
+SQLite `agent_records(id,kind,data,updated)` stores artifacts, missions, approvals, activity, drafts and automations additively. Files live under `workspace/`; backups under `file-history/`; signed-in browser state under `browser-profile/`. None is a static web directory. Artifact downloads recheck approved-root membership.
+
+The reminder thread polls schedules without running a model itself. One background goal worker at a time uses the normal model loop, and new background work defers while a foreground turn runs. Folder fingerprints establish a new baseline on restart; offline file events are not replayed. Closing signals cancellation and closes the browser worker; bounded current native/subprocess actions may finish first.

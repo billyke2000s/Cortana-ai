@@ -1,5 +1,6 @@
 """Bounded file operations and generated deliverables inside owner-approved folders."""
 import csv
+from itertools import islice
 import hashlib
 import io
 import json
@@ -113,6 +114,7 @@ class Workspace:
             text=str(args.get('text',''))
             if len(text.encode('utf8'))>MAX_BYTES:raise ValueError('Text exceeds 12 MB.')
             old=path.read_text(encoding='utf8') if action=='append' and path.exists() else ''
+            if len((old+text).encode('utf8'))>MAX_BYTES:raise ValueError('The resulting text file exceeds 12 MB.')
             record=self.checkpoint(action,[path]);path.parent.mkdir(parents=True,exist_ok=True)
             temp=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp');temp.write_text(old+text,encoding='utf8');temp.replace(path)
             return {'artifact':self.artifact(path),'undo':self.finish(record),'verified':path.read_text(encoding='utf8')==old+text}
@@ -146,8 +148,9 @@ class Workspace:
         except (ValueError,OSError):return False
 
     def _walk(self,root,recursive=True):
-        count=0
-        for p in root.rglob('*') if recursive else root.iterdir():
+        count=0;started=time.monotonic()
+        for index,p in enumerate(root.rglob('*') if recursive else root.iterdir()):
+            if index>=5000 or time.monotonic()-started>5:break
             self.runtime.jobs.check()
             if p.is_file() and self._inside(p):yield p;count+=1
             if count>=1000:break
@@ -158,36 +161,40 @@ class Workspace:
         title=str(args.get('title') or 'Report')[:200];sections=args.get('sections') or []
         if not isinstance(sections,list) or len(sections)>100:raise ValueError('Use at most 100 document sections.')
         record=self.checkpoint('document',[path]);path.parent.mkdir(parents=True,exist_ok=True)
-        if fmt=='docx':
-            from docx import Document
-            doc=Document();doc.add_heading(title,0)
-            for item in sections:
-                if item.get('heading'):doc.add_heading(str(item['heading'])[:300],1)
-                for line in str(item.get('text','')).split('\n'):doc.add_paragraph(line[:10000])
-                for bullet in (item.get('bullets') or [])[:100]:doc.add_paragraph(str(bullet)[:2000],style='List Bullet')
-                rows=item.get('table') or []
-                if rows:
-                    width=max(len(row) for row in rows);table=doc.add_table(rows=0,cols=min(20,width));table.style='Light Shading Accent 1'
-                    for row in rows[:300]:
-                        cells=table.add_row().cells
-                        for i,value in enumerate(row[:20]):cells[i].text=str(value)[:1000]
-            doc.save(path);Document(path)
-        else:
-            from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,ListFlowable,ListItem,Table,TableStyle
-            from reportlab.lib.styles import getSampleStyleSheet
-            from reportlab.lib import colors
-            styles=getSampleStyleSheet();flow=[Paragraph(escape(title),styles['Title']),Spacer(1,16)]
-            for item in sections:
-                if item.get('heading'):flow.append(Paragraph(escape(str(item['heading'])[:300]),styles['Heading2']))
-                for line in str(item.get('text','')).split('\n'):flow.extend([Paragraph(escape(line[:10000]),styles['BodyText']),Spacer(1,6)])
-                if item.get('bullets'):flow.append(ListFlowable([ListItem(Paragraph(escape(str(v)[:2000]),styles['BodyText'])) for v in item['bullets'][:100]],bulletType='bullet'))
-                if item.get('table'):
-                    rows=[[Paragraph(escape(str(v)[:1000]),styles['BodyText']) for v in row[:10]] for row in item['table'][:300]]
-                    table=Table(rows,repeatRows=1,hAlign='LEFT');table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#cce8f5')),('GRID',(0,0),(-1,-1),.3,colors.grey)]));flow.append(table)
-            SimpleDocTemplate(str(path),title=title).build(flow)
-            from pypdf import PdfReader
-            if not len(PdfReader(path).pages):raise RuntimeError('The PDF has no pages.')
-        return {'artifact':self.artifact(path),'undo':self.finish(record),'verified':True}
+        final=path;path=path.with_name('.'+uuid.uuid4().hex+path.suffix)
+        try:
+            if fmt=='docx':
+                from docx import Document
+                doc=Document();doc.add_heading(title,0)
+                for item in sections:
+                    if item.get('heading'):doc.add_heading(str(item['heading'])[:300],1)
+                    for line in str(item.get('text','')).split('\n'):doc.add_paragraph(line[:10000])
+                    for bullet in (item.get('bullets') or [])[:100]:doc.add_paragraph(str(bullet)[:2000],style='List Bullet')
+                    rows=item.get('table') or []
+                    if rows:
+                        width=max(len(row) for row in rows);table=doc.add_table(rows=0,cols=min(20,width));table.style='Light Shading Accent 1'
+                        for row in rows[:300]:
+                            cells=table.add_row().cells
+                            for i,value in enumerate(row[:20]):cells[i].text=str(value)[:1000]
+                doc.save(path);Document(path)
+            else:
+                from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,ListFlowable,ListItem,Table,TableStyle
+                from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.lib import colors
+                styles=getSampleStyleSheet();flow=[Paragraph(escape(title),styles['Title']),Spacer(1,16)]
+                for item in sections:
+                    if item.get('heading'):flow.append(Paragraph(escape(str(item['heading'])[:300]),styles['Heading2']))
+                    for line in str(item.get('text','')).split('\n'):flow.extend([Paragraph(escape(line[:10000]),styles['BodyText']),Spacer(1,6)])
+                    if item.get('bullets'):flow.append(ListFlowable([ListItem(Paragraph(escape(str(v)[:2000]),styles['BodyText'])) for v in item['bullets'][:100]],bulletType='bullet'))
+                    if item.get('table'):
+                        rows=[[Paragraph(escape(str(v)[:1000]),styles['BodyText']) for v in row[:10]] for row in item['table'][:300]]
+                        table=Table(rows,repeatRows=1,hAlign='LEFT');table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#cce8f5')),('GRID',(0,0),(-1,-1),.3,colors.grey)]));flow.append(table)
+                SimpleDocTemplate(str(path),title=title).build(flow)
+                from pypdf import PdfReader
+                if not len(PdfReader(path).pages):raise RuntimeError('The PDF has no pages.')
+            path.replace(final)
+            return {'artifact':self.artifact(final),'undo':self.finish(record),'verified':True}
+        finally:path.unlink(missing_ok=True)
 
     def spreadsheet(self,args):
         action=args.get('action','read');path=self.path(args.get('path') or 'workbook.xlsx',action not in ('write','chart'))
@@ -196,21 +203,25 @@ class Workspace:
             if any(isinstance(v,str) and v.startswith(('=','+','-','@')) and ('|' in v or '[' in v or 'WEBSERVICE(' in v.upper()) for row in rows if isinstance(row,list) for v in row):raise ValueError('External spreadsheet formulas and DDE commands are not supported.')
             if not isinstance(rows,list) or len(rows)>10000 or any(not isinstance(row,list) or len(row)>100 for row in rows):raise ValueError('Use at most 10,000 rows and 100 columns.')
             record=self.checkpoint('spreadsheet',[path]);path.parent.mkdir(parents=True,exist_ok=True)
-            if path.suffix.lower()=='.csv':
-                with path.open('w',newline='',encoding='utf-8-sig') as f:csv.writer(f).writerows(rows)
-            elif path.suffix.lower()=='.xlsx':
-                from openpyxl import Workbook,load_workbook
-                from openpyxl.styles import Font,PatternFill
-                wb=Workbook();ws=wb.active;ws.title=str(args.get('sheet') or 'Sheet1')[:31]
-                for row in rows:ws.append(row)
-                if rows:
-                    for c in ws[1]:c.font=Font(bold=True,color='FFFFFF');c.fill=PatternFill('solid',fgColor='16436C')
-                ws.freeze_panes='A2';ws.auto_filter.ref=ws.dimensions
-                for column in ws.columns:
-                    ws.column_dimensions[column[0].column_letter].width=min(55,max(12,max(len(str(c.value or '')) for c in column[:100])+2))
-                wb.save(path);load_workbook(path,read_only=True).close()
-            else:raise ValueError('Write an xlsx or csv file.')
-            return {'artifact':self.artifact(path),'undo':self.finish(record),'rows':len(rows),'verified':True}
+            final=path;path=path.with_name('.'+uuid.uuid4().hex+path.suffix)
+            try:
+                if path.suffix.lower()=='.csv':
+                    with path.open('w',newline='',encoding='utf-8-sig') as f:csv.writer(f).writerows(rows)
+                elif path.suffix.lower()=='.xlsx':
+                    from openpyxl import Workbook,load_workbook
+                    from openpyxl.styles import Font,PatternFill
+                    wb=Workbook();ws=wb.active;ws.title=str(args.get('sheet') or 'Sheet1')[:31]
+                    for row in rows:ws.append(row)
+                    if rows:
+                        for c in ws[1]:c.font=Font(bold=True,color='FFFFFF');c.fill=PatternFill('solid',fgColor='16436C')
+                    ws.freeze_panes='A2';ws.auto_filter.ref=ws.dimensions
+                    for column in ws.columns:
+                        ws.column_dimensions[column[0].column_letter].width=min(55,max(12,max(len(str(c.value or '')) for c in column[:100])+2))
+                    wb.save(path);load_workbook(path,read_only=True).close()
+                else:raise ValueError('Write an xlsx or csv file.')
+                path.replace(final)
+                return {'artifact':self.artifact(final),'undo':self.finish(record),'rows':len(rows),'verified':True}
+            finally:path.unlink(missing_ok=True)
         rows=self._rows(path,args.get('sheet'))
         if action=='read':return {'path':self.label(path),'rows':rows[:100],'total_rows':len(rows),'note':'Formula results may be stale until recalculated in Excel.'}
         if action=='analyse':
@@ -235,14 +246,16 @@ class Workspace:
             value=int(args.get('column',1))+1;label=int(args.get('label_column',0))+1
             if not 1<=value<=ws.max_column or not 1<=label<=ws.max_column:raise ValueError('Choose existing label/value columns.')
             chart.add_data(Reference(ws,min_col=value,min_row=1,max_row=min(ws.max_row,1000)),titles_from_data=True)
-            chart.set_categories(Reference(ws,min_col=label,min_row=2,max_row=min(ws.max_row,1000)));ws.add_chart(chart,'H2');wb.save(path)
+            chart.set_categories(Reference(ws,min_col=label,min_row=2,max_row=min(ws.max_row,1000)));ws.add_chart(chart,'H2');temp=path.with_name('.'+uuid.uuid4().hex+'.xlsx')
+            try:wb.save(temp);load_workbook(temp,read_only=True).close();temp.replace(path)
+            finally:temp.unlink(missing_ok=True)
             return {'artifact':self.artifact(path),'undo':self.finish(record),'verified':True}
         raise ValueError('Unknown spreadsheet action.')
 
     def _rows(self,path,sheet=None):
         if path.stat().st_size>MAX_BYTES:raise ValueError('Spreadsheet exceeds 12 MB.')
         if path.suffix.lower()=='.csv':
-            with path.open(newline='',encoding='utf-8-sig') as f:return [r for i,r in enumerate(csv.reader(f)) if i<10000]
+            with path.open(newline='',encoding='utf-8-sig') as f:return list(islice(csv.reader(f),10000))
         if path.suffix.lower()=='.xlsx':
             from openpyxl import load_workbook
             wb=load_workbook(path,read_only=True,data_only=False)
@@ -279,8 +292,14 @@ class Workspace:
                     try:stdout,stderr=process.communicate(timeout=.2);break
                     except subprocess.TimeoutExpired:
                         if time.monotonic()>deadline:raise RuntimeError('Python exceeded its 60-second limit.')
-                copied=subprocess.run([docker,'cp',name+':/output/.',str(output)],capture_output=True,timeout=20,creationflags=HIDDEN)
+                collector="import pathlib,json,base64;root=pathlib.Path('/output');files=[];total=0\nfor p in root.rglob('*'):\n if len(files)>=20:break\n if p.is_symlink() or not p.is_file() or not p.resolve().is_relative_to(root):continue\n data=p.read_bytes() if p.stat().st_size<=12*1024*1024-total else b''\n if data:files.append({'name':p.relative_to(root).as_posix(),'data':base64.b64encode(data).decode()});total+=len(data)\nprint(json.dumps(files))"
+                copied=subprocess.run([docker,'exec',name,'python','-I','-c',collector],capture_output=True,timeout=20,creationflags=HIDDEN)
                 if copied.returncode:raise RuntimeError('Could not collect the sandbox outputs.')
+                import base64
+                for item in json.loads(copied.stdout):
+                    target=self.path(str(output/item['name']))
+                    if not target.is_relative_to(output.resolve()):raise RuntimeError('Invalid sandbox output path.')
+                    target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(base64.b64decode(item['data'],validate=True))
             finally:
                 subprocess.run([docker,'rm','-f',name],capture_output=True,timeout=10,creationflags=HIDDEN)
                 if process.poll() is None:process.kill();process.communicate(timeout=5)

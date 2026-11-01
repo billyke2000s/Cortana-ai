@@ -134,3 +134,41 @@ class AgentApiTests(unittest.TestCase):
         self.assertEqual(self.request('POST','/api/agent',{'action':'preferences','reasoning':'fast','context_tokens':6144},extra={'Origin':'https://evil.invalid'})[0],403)
         for module in ('agent','workspace','browser_agent','pc_agent','connections'):
             self.assertEqual(self.request('GET','/'+module+'.py')[0],404)
+
+class ConnectionProtocolTests(unittest.TestCase):
+    def setUp(self):
+        from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+        self.calls=[];outer=self
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self,*args):pass
+            def send(self,value,mime='application/json'):
+                raw=value.encode() if isinstance(value,str) else json.dumps(value).encode();self.send_response(200);self.send_header('Content-Type',mime);self.send_header('Mcp-Session-Id','fixture-session');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
+            def do_POST(self):
+                body=json.loads(self.rfile.read(int(self.headers['Content-Length'])));outer.calls.append((self.path,body,dict(self.headers)))
+                method=body['method']
+                if method=='notifications/initialized':self.send({});return
+                result={'initialize':{'protocolVersion':'2025-11-25','capabilities':{}},'tools/list':{'tools':[{'name':'calendar_list','description':'Read calendar fixture','inputSchema':{'type':'object','properties':{}}}]},'tools/call':{'content':[{'type':'text','text':'Study at 15:00'}]}}[method]
+                self.send({'jsonrpc':'2.0','id':body['id'],'result':result})
+            def do_REPORT(self):
+                outer.calls.append(('REPORT',self.rfile.read(int(self.headers['Content-Length'])),dict(self.headers)))
+                self.send('<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:response><d:propstat><d:prop><c:calendar-data>BEGIN:VEVENT\nSUMMARY:Study\nEND:VEVENT</c:calendar-data></d:prop></d:propstat></d:response></d:multistatus>','application/xml')
+            def do_PUT(self):
+                outer.calls.append(('PUT',self.rfile.read(int(self.headers['Content-Length'])),dict(self.headers)));self.send('','text/plain')
+        self.srv=ThreadingHTTPServer(('127.0.0.1',0),Handler);threading.Thread(target=self.srv.serve_forever,daemon=True).start()
+        self.url='http://127.0.0.1:'+str(self.srv.server_address[1]);self.r=b.runtime.Runtime();self.r.store.close();self.r.store=b.store.Store(':memory:')
+    def tearDown(self):self.srv.shutdown();self.srv.server_close();self.r.close();self.r.store.close()
+    def test_real_mcp_handshake_catalog_and_explicit_read_tool(self):
+        connections.configure(self.r.store,{'name':'plugin','config':{'type':'mcp','url':self.url+'/mcp','token':'do-not-return','read_tools':['calendar_list']}})
+        catalog=connections.operate(self.r.agent,{'action':'tools','connection':'plugin'})
+        self.assertEqual(catalog['tools'][0]['name'],'calendar_list')
+        result=connections.operate(self.r.agent,{'action':'call','connection':'plugin','tool':'calendar_list','arguments':{}})
+        self.assertIn('Study at 15:00',json.dumps(result));self.assertEqual(self.calls[-1][2]['Mcp-Session-Id'],'fixture-session')
+        self.assertNotIn('do-not-return',json.dumps(connections.summaries(self.r.store)))
+    def test_real_caldav_report_and_reviewed_write(self):
+        connections.configure(self.r.store,{'name':'calendar','config':{'type':'caldav','url':self.url+'/calendar','username':'user','password':'never-return'}})
+        result=connections.operate(self.r.agent,{'action':'calendar_list','connection':'calendar'});self.assertIn('SUMMARY:Study',result['calendar_data'][0])
+        args={'action':'calendar_add','connection':'calendar','arguments':{'title':'Study, revision','day':'tomorrow','time':'15:00','minutes':45}}
+        pending=self.r.agent.run('connected_service',args,['connections'])[0]
+        self.assertTrue(pending['approval_required']);self.assertFalse(any(c[0]=='PUT' for c in self.calls))
+        result=self.r.agent.review(pending['approval_id'],True);self.assertTrue(result['created_on_server'])
+        written=next(c for c in self.calls if c[0]=='PUT');self.assertIn(b'SUMMARY:Study\\, revision',written[1]);self.assertIn('Basic ',written[2]['Authorization'])
