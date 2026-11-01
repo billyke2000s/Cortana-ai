@@ -45,13 +45,19 @@ def split_reply(text):
     if screen and not spoken:spoken="I've put it on screen for you."
     return spoken[:1500],screen[:12000]
 
-# Questions a small model may answer from imagination: a short nudge right before the question (measured: 4B invented
-# a London forecast in 1 of 2 runs without it; see docs/STATUS.md).
+# Weather questions are answered from real data fetched before the model runs: qwen3.5:4b invented a forecast in 2 of 4
+# runs even with a hint (DECISIONS D-027), and a wrong forecast is worse than none.
 _WEATHER=re.compile(r"\b(weather|forecast|temperature|rain(ing|y)?|snow(ing)?|sunny|umbrella|degrees outside|how (hot|cold|warm) is it)\b",re.I)
-def tool_hint(text):
-    if _WEATHER.search(text or ''):
-        return 'This question is about the weather: call get_weather first and answer only from its result.'
-    return None
+_PLACE=re.compile(r"\b(?:in|for|at|near)\s+((?:[a-z][\w'.-]*)(?:\s+(?!today|tomorrow|tonight|this|next|on|at|right|now|later|morning|afternoon|evening|weekend|please)[a-z][\w'.-]*){0,3})",re.I)
+_NOT_PLACE={'the','a','my','general','celsius','fahrenheit','degrees','it','there','here','case','time','an','hour','minutes','days','week'}
+def weather_question(text):
+    """None if not a weather question, else the place named in it ('' = home town)."""
+    text=text or ''
+    if not _WEATHER.search(text):return None
+    if re.search(r'\b(rainbow|brainstorm|weather(ed|ing) the)\b',text,re.I):return None
+    m=_PLACE.search(text)
+    place=m.group(1).strip(" ?.!,'") if m else ''
+    return '' if place.lower() in _NOT_PLACE or place.split(' ')[0].lower() in _NOT_PLACE else place
 
 def system_prompt(store=None):
     """SYSTEM_PROMPT plus the PC's current local date and time and what Cortana remembers about the user."""
@@ -451,11 +457,17 @@ class Runtime:
         if not self.ai_ready:raise RuntimeError(self.status if not self.error else self.error)
         clean=self.clean_messages(messages)
         convo=[{'role':'system','content':system_prompt(self.store)}]+clean
-        hint=tool_hint(clean[-1]['content']) if self.store.get('tools_enabled',True) and clean else None
-        if hint:convo.insert(-1,{'role':'system','content':hint})   # small models sometimes invent these instead of calling the tool
         use_tools=self.store.get('tools_enabled',True)
         stream=SpokenStream();raw='';fell_back=False;tool_screen=''
         llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)
+        place=weather_question(clean[-1]['content']) if use_tools and clean else None
+        if place is not None:   # fetch the forecast first, as if the model had called get_weather (D-027)
+            args={'place':place}
+            yield {'type':'tool','name':'get_weather','label':tools.TOOL_LABELS['get_weather']}
+            result,_=tools.run('get_weather',args,self.store,llm)
+            tool_screen=tools.screen_for('get_weather',result)
+            convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'get_weather','arguments':args}}]},
+                    {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'get_weather'}]
         for round_ in range(4):
             payload={'model':self.model,'messages':convo,'stream':True,'think':False,'keep_alive':'15m',
                      'options':{'num_ctx':CONTEXT,'num_predict':1200,'temperature':.45}}

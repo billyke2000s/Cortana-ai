@@ -566,26 +566,33 @@ class WebSearchTests(unittest.TestCase):
                 tools.fetch(url)
 
 
-class ToolHintTests(unittest.TestCase):
-    def test_weather_questions_get_a_nudge(self):
-        for q in ("What's the weather in London?", 'Will it rain tomorrow?', 'Do I need an umbrella?', 'Forecast for Leeds'):
-            self.assertIn('get_weather', runtime.tool_hint(q) or '', q)
-        for q in ('Tell me a joke', 'Set a timer', 'What is a rainbow made of?', 'Summarise this'):
-            self.assertIsNone(runtime.tool_hint(q), q)
+class WeatherFirstTests(unittest.TestCase):
+    def test_weather_questions_and_places(self):
+        cases = {"What's the weather in London?": 'London', 'Will it rain tomorrow?': '', 'Do I need an umbrella in New York today?': 'New York',
+                 'weather for leeds this weekend': 'leeds', 'Forecast at Lake Como please': 'Lake Como', "What's the temperature in the room?": '',
+                 'How cold is it in Oslo right now': 'Oslo'}
+        for q, place in cases.items():
+            self.assertEqual(runtime.weather_question(q), place, q)
+        for q in ('Tell me a joke', 'Set a timer', 'What is a rainbow made of?', 'Summarise this', 'Let us brainstorm ideas'):
+            self.assertIsNone(runtime.weather_question(q), q)
 
-    def test_hint_sits_just_before_the_question(self):
+    def test_forecast_is_fetched_before_the_model_answers(self):
         rt = runtime.Runtime(lambda text: None)
         rt.tag_exists = {m['tag']: True for m in hardware.CATALOG}
         rt.ensure_ai()
+        asked = []
         old = tools.weather
-        tools.weather = lambda place, home: {'error': 'offline'}
+        tools.weather = lambda place, home: asked.append(place) or {'error': 'offline'}
+        fake_ollama.CHAT_REQUESTS.clear()
         try:
-            list(rt.chat_stream([{'role': 'user', 'content': "What's the weather in London?"}]))
+            events = list(rt.chat_stream([{'role': 'user', 'content': "What's the weather in Paris?"}]))
         finally:
             tools.weather = old
-        first = fake_ollama.FIRST_REQUEST['messages']
-        self.assertEqual(first[-1]['role'], 'user')
-        self.assertIn('get_weather', first[-2]['content'])
+        self.assertEqual(asked[0], 'Paris')
+        self.assertEqual(events[0], {'type': 'tool', 'name': 'get_weather', 'label': 'CHECKING WEATHER'})
+        first = fake_ollama.CHAT_REQUESTS[0]['messages']   # the model's first request already holds the real result
+        self.assertEqual([m['role'] for m in first[-3:]], ['user', 'assistant', 'tool'])
+        self.assertIn('offline', first[-1]['content'])
         rt.close()
 
 

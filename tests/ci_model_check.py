@@ -45,8 +45,18 @@ print(f'=== Tool choice: {MODEL}, real prompt ({len(system["content"])} chars) a
 ONLY = os.environ.get('ONLY', '').lower()   # e.g. ONLY=weather runs just the matching asks
 for ask, want, check in [c for c in CASES if ONLY in c[0].lower() for _ in range(REPEAT)]:
     t = time.time()
-    hint = runtime.tool_hint(ask)   # the app adds this nudge just before weather questions
-    msg = chat([system] + ([{'role': 'system', 'content': hint}] if hint else []) + [{'role': 'user', 'content': ask}])
+    if runtime.weather_question(ask) is not None:   # the app fetches the forecast first (D-027): is the answer faithful to it?
+        fake = {'place': 'London, England, United Kingdom', 'now': {'summary': 'sleet', 'temp_c': 7, 'feels_like_c': 3, 'wind_kmh': 30},
+                'days': [{'date': '2026-11-01', 'summary': 'sleet', 'high_c': 8, 'low_c': 2, 'rain_chance_pct': 90}], 'source': 'Open-Meteo'}
+        msg = chat([system, {'role': 'user', 'content': ask},
+                    {'role': 'assistant', 'content': '', 'tool_calls': [{'function': {'name': 'get_weather', 'arguments': {'place': 'London'}}}]},
+                    {'role': 'tool', 'content': json.dumps(fake), 'tool_name': 'get_weather'}])
+        reply = msg.get('content') or ''
+        ok = '7' in reply and 'sleet' in reply.lower()
+        results.append(ok)
+        print(f"{'OK ' if ok else 'BAD'} {time.time() - t:5.1f}s  {ask!r} (forecast given: 7°C, sleet) -> {reply[:140]!r}")
+        continue
+    msg = chat([system, {'role': 'user', 'content': ask}])
     calls = [c['function'] for c in msg.get('tool_calls') or []]
     got = calls[0]['name'] if calls else None
     args = calls[0].get('arguments') if calls else {}
