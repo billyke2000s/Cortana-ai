@@ -5,6 +5,7 @@ Usage: python tests/ci_model_check.py [model]   (default qwen3.5:4b; OLLAMA_URL 
 """
 import base64, io, json, os, sys, tempfile, time, urllib.request
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # Windows consoles default to cp1252
 os.environ.setdefault('CORTANA_DATA_DIR', tempfile.mkdtemp())
 import runtime, store, tools  # noqa: E402
 

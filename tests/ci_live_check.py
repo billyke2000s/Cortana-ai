@@ -6,6 +6,7 @@
 """
 import base64, json, os, subprocess, sys, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # Windows consoles default to cp1252
 import tools, runtime  # noqa: E402
 
 failures = []
