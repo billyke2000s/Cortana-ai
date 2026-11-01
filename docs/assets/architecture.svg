@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img" aria-label="Architecture: browser or phone talks to the local gateway, which uses Ollama, Whisper, Piper, SQLite and tools on the PC">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#051634"/><stop offset="1" stop-color="#01050f"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <style>
+      .box{fill:#082044;fill-opacity:.85;stroke:#5cc8ff;stroke-opacity:.75;stroke-width:1.4}
+      .hub{fill:#0b2c5e;stroke:#9fe2ff;stroke-width:2}
+      .h{font:700 17px 'Segoe UI',Arial,sans-serif;fill:#e8f4ff}
+      .s{font:500 12.5px 'Segoe UI',Arial,sans-serif;fill:#a9c6e6}
+      .k{font:700 11px 'Segoe UI',Arial,sans-serif;letter-spacing:3px;fill:#5cc8ff}
+      .wire{fill:none;stroke:#3d9ee6;stroke-opacity:.55;stroke-width:1.6;stroke-dasharray:5 6;animation:dash 1.4s linear infinite}
+      .wire.slow{animation-duration:2.4s}
+      @keyframes dash{to{stroke-dashoffset:-22}}
+      .hubglow{animation:hub 3s ease-in-out infinite}
+      @keyframes hub{50%{stroke-opacity:.25}}
+      .title{font:800 22px 'Segoe UI',Arial,sans-serif;letter-spacing:8px;fill:#9fe2ff}
+      @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+    </style>
+  </defs>
+  <rect width="1200" height="560" rx="16" fill="url(#bg)"/>
+  <text x="40" y="52" class="title" filter="url(#glow)">SYSTEM ARCHITECTURE</text>
+  <text x="40" y="76" class="s">Everything inside the dashed frame runs on your Windows PC. The phone only displays the page.</text>
+  <rect x="330" y="104" width="840" height="430" rx="14" fill="none" stroke="#5cc8ff" stroke-opacity=".35" stroke-dasharray="8 8"/>
+  <text x="350" y="128" class="k">YOUR PC</text>
+
+  <!-- wires (ids used by moving pulses) -->
+  <path id="w1" class="wire" d="M250 220 C 300 220, 330 300, 420 300"/>
+  <path id="w2" class="wire" d="M250 400 C 300 400, 330 320, 420 320"/>
+  <path id="w3" class="wire" d="M640 290 C 700 290, 720 170, 800 170"/>
+  <path id="w4" class="wire slow" d="M640 300 C 720 300, 730 245, 800 245"/>
+  <path id="w5" class="wire" d="M640 310 C 720 310, 730 320, 800 320"/>
+  <path id="w6" class="wire slow" d="M640 320 C 720 320, 730 395, 800 395"/>
+  <path id="w7" class="wire" d="M640 330 C 700 330, 720 470, 800 470"/>
+
+  <!-- left: clients -->
+  <g><rect class="box" x="40" y="170" width="210" height="100" rx="10"/>
+    <text x="60" y="203" class="k">PC</text><text x="60" y="228" class="h">Browser page</text><text x="60" y="250" class="s">index · app · pages · avatar</text></g>
+  <g><rect class="box" x="40" y="350" width="210" height="100" rx="10"/>
+    <text x="60" y="383" class="k">PHONE</text><text x="60" y="408" class="h">Paired via QR</text><text x="60" y="430" class="s">Cloudflare or Tailscale HTTPS</text></g>
+
+  <!-- hub -->
+  <rect class="hub hubglow" x="420" y="240" width="220" height="140" rx="12" filter="url(#glow)"/>
+  <text x="440" y="272" class="k">GATEWAY</text>
+  <text x="440" y="298" class="h">server.py</text>
+  <text x="440" y="320" class="s">pairing · origin check</text>
+  <text x="440" y="340" class="s">NDJSON chat stream</text>
+  <text x="440" y="360" class="s">runtime.py orchestrates</text>
+
+  <!-- right: services -->
+  <g><rect class="box" x="800" y="135" width="340" height="66" rx="10"/><text x="820" y="162" class="h">Qwen 3.5 9B / 4B</text><text x="820" y="184" class="s">Ollama · streaming · tool calls</text></g>
+  <g><rect class="box" x="800" y="212" width="340" height="66" rx="10"/><text x="820" y="239" class="h">Whisper.cpp</text><text x="820" y="261" class="s">speech recognition · wake word</text></g>
+  <g><rect class="box" x="800" y="289" width="340" height="66" rx="10"/><text x="820" y="316" class="h">Piper voice</text><text x="820" y="338" class="s">voice.py · Windows voice backup</text></g>
+  <g><rect class="box" x="800" y="366" width="340" height="66" rx="10"/><text x="820" y="393" class="h">SQLite</text><text x="820" y="415" class="s">store.py · memory · objectives · settings</text></g>
+  <g><rect class="box" x="800" y="443" width="340" height="66" rx="10"/><text x="820" y="470" class="h">Tools</text><text x="820" y="492" class="s">weather · search · calendar · PC controls</text></g>
+
+  <!-- moving pulses -->
+  <g fill="#bff0ff" filter="url(#glow)">
+    <circle r="4"><animateMotion dur="1.8s" repeatCount="indefinite"><mpath href="#w1"/></animateMotion></circle>
+    <circle r="4"><animateMotion dur="2.3s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w2"/></animateMotion></circle>
+    <circle r="3.5"><animateMotion dur="1.6s" repeatCount="indefinite"><mpath href="#w3"/></animateMotion></circle>
+    <circle r="3.5"><animateMotion dur="1.6s" begin=".8s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w3"/></animateMotion></circle>
+    <circle r="3.5"><animateMotion dur="2.2s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#w4"/></animateMotion></circle>
+    <circle r="3.5"><animateMotion dur="1.9s" repeatCount="indefinite"><mpath href="#w5"/></animateMotion></circle>
+    <circle r="3.5"><animateMotion dur="2.6s" repeatCount="indefinite"><mpath href="#w6"/></animateMotion></circle>
+    <circle r="3.5"><animateMotion dur="2.1s" begin=".5s" repeatCount="indefinite"><mpath href="#w7"/></animateMotion></circle>
+  </g>
+</svg>

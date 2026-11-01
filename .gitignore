@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Build output
+dist/
+build/work/
+build/deps/
+*.spec
+
+# The 3D character model is NOT part of this repository (third-party fan asset, licence unverified).
+app/assets/*.glb
+app/assets/*.gltf
+
+# Local data and secrets: never commit
+*.db
+*.db-wal
+*.db-shm
+*.log
+.env
+voices/
+runs/
+base_checkpoints/
+*.onnx
+*.onnx.json
+*.ckpt
+*.wav
+*.mp3
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+live-check-report.json

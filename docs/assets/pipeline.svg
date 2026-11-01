@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="Voice pipeline: you speak, Whisper transcribes, Qwen streams, sentences are split, Piper speaks while the display panel shows code or tables">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#051634"/><stop offset="1" stop-color="#01050f"/></linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5cc8ff" stop-opacity="0"/><stop offset=".8" stop-color="#9fe2ff"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <style>
+      .node{fill:#082044;stroke:#5cc8ff;stroke-opacity:.45;stroke-width:1.5;animation:lit 7s infinite}
+      @keyframes lit{0%,100%{stroke-opacity:.45;fill:#082044}6%,16%{stroke-opacity:1;fill:#11407e}24%{stroke-opacity:.45;fill:#082044}}
+      .n2{animation-delay:1s}.n3{animation-delay:2s}.n4{animation-delay:3s}.n5{animation-delay:4s}.n6{animation-delay:5s}
+      .h{font:700 15px 'Segoe UI',Arial,sans-serif;fill:#e8f4ff}
+      .s{font:500 11.5px 'Segoe UI',Arial,sans-serif;fill:#a9c6e6}
+      .num{font:800 12px 'Segoe UI',Arial,sans-serif;letter-spacing:2px;fill:#5cc8ff}
+      .title{font:800 20px 'Segoe UI',Arial,sans-serif;letter-spacing:8px;fill:#9fe2ff}
+      .run{animation:run 7s linear infinite}
+      @keyframes run{0%{transform:translateX(0)}86%,100%{transform:translateX(1000px)}}
+      .wave rect{transform-origin:center;transform-box:fill-box;animation:w .9s ease-in-out infinite}
+      @keyframes w{50%{transform:scaleY(.3)}}
+      .panel{animation:panel 7s infinite;transform-origin:1040px 250px}
+      @keyframes panel{0%,58%{opacity:0;transform:translateY(12px) scaleY(.6)}64%,92%{opacity:1;transform:none}100%{opacity:0}}
+      @media (prefers-reduced-motion:reduce){*{animation:none!important}.panel{opacity:1}}
+    </style>
+  </defs>
+  <rect width="1200" height="300" rx="16" fill="url(#bg)"/>
+  <text x="40" y="46" class="title" filter="url(#glow)">ONE QUESTION, START TO FINISH</text>
+  <line x1="100" y1="150" x2="1100" y2="150" stroke="#3d9ee6" stroke-opacity=".35" stroke-width="2"/>
+  <g class="run"><rect x="40" y="148" width="70" height="4" rx="2" fill="url(#bar)" filter="url(#glow)"/></g>
+
+  <g><rect class="node" x="40" y="96" width="160" height="108" rx="12"/><text x="58" y="122" class="num">01</text><text x="58" y="148" class="h">You speak</text><text x="58" y="168" class="s">or say "Hey Cortana"</text>
+    <g class="wave" fill="#5cc8ff"><rect x="58" y="180" width="3" height="14" rx="1"/><rect x="66" y="176" width="3" height="22" rx="1" style="animation-delay:-.3s"/><rect x="74" y="181" width="3" height="12" rx="1" style="animation-delay:-.6s"/><rect x="82" y="178" width="3" height="18" rx="1" style="animation-delay:-.15s"/></g></g>
+  <g><rect class="node n2" x="230" y="96" width="160" height="108" rx="12"/><text x="248" y="122" class="num">02</text><text x="248" y="148" class="h">Whisper</text><text x="248" y="168" class="s">speech to text,</text><text x="248" y="184" class="s">on your PC</text></g>
+  <g><rect class="node n3" x="420" y="96" width="160" height="108" rx="12"/><text x="438" y="122" class="num">03</text><text x="438" y="148" class="h">Qwen streams</text><text x="438" y="168" class="s">uses tools when</text><text x="438" y="184" class="s">it needs them</text></g>
+  <g><rect class="node n4" x="610" y="96" width="160" height="108" rx="12"/><text x="628" y="122" class="num">04</text><text x="628" y="148" class="h">Sentence split</text><text x="628" y="168" class="s">speech vs. screen</text><text x="628" y="184" class="s">[[SCREEN]] marker</text></g>
+  <g><rect class="node n5" x="800" y="96" width="160" height="108" rx="12"/><text x="818" y="122" class="num">05</text><text x="818" y="148" class="h">Piper voice</text><text x="818" y="168" class="s">each sentence voiced</text><text x="818" y="184" class="s">while she talks</text></g>
+  <g><rect class="node n6" x="990" y="96" width="160" height="108" rx="12"/><text x="1008" y="122" class="num">06</text><text x="1008" y="148" class="h">Lip sync</text><text x="1008" y="168" class="s">mouth follows</text><text x="1008" y="184" class="s">the audio</text></g>
+
+  <g class="panel"><path d="M760 228H1160V266L1148 278H748V240Z" fill="#082044" stroke="#9fe2ff" stroke-opacity=".8"/>
+    <text x="770" y="250" class="num">CORTANA // DISPLAY</text><text x="770" y="268" class="s">code, tables and steps slide up on screen instead of being read aloud</text></g>
+</svg>

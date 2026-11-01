@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#030b1c">
+<title>Cortana - Holographic Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700&family=Exo+2:wght@400;500;600;700&family=Rajdhani:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-0:#020814;
+  --bg-1:#041232;
+  --bg-2:#06204f;
+  --cyan:#5cc8ff;
+  --cyan-hi:#9fe2ff;
+  --cyan-dim:#2a7fc0;
+  --line:rgba(92,200,255,.38);
+  --line-dim:rgba(92,200,255,.18);
+  --panel:rgba(8,28,64,.55);
+  --text:#e8f4ff;
+  --text-dim:#a9c6e6;
+  --green:#3df58a;
+  --chamfer:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+body{
+  background:var(--bg-0);
+  color:var(--text);
+  font-family:"Exo 2",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  min-height:100%;
+  display:flex;justify-content:center;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+
+/* ---------- App shell ---------- */
+.app{
+  position:relative;
+  width:100%;max-width:430px;min-height:100vh;min-height:100dvh;
+  padding:14px 12px calc(14px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;
+  background:
+    radial-gradient(ellipse 80% 45% at 50% 40%, rgba(30,110,220,.28), transparent 70%),
+    radial-gradient(ellipse 120% 60% at 50% 100%, rgba(10,60,150,.35), transparent 70%),
+    linear-gradient(180deg,var(--bg-1) 0%,var(--bg-0) 55%,#010612 100%);
+  overflow:hidden;
+}
+/* circuit traces in the corners */
+.circuit{position:absolute;pointer-events:none;opacity:.55}
+.circuit.tl{top:0;left:0;width:220px;height:260px}
+.circuit.tr{top:0;right:0;width:200px;height:140px}
+.circuit.br{bottom:180px;right:0;width:90px;height:260px;opacity:.3}
+.circuit.bl{bottom:200px;left:0;width:60px;height:220px;opacity:.3}
+
+/* ---------- Chamfered panel helper ---------- */
+.chamfer{
+  --c:var(--chamfer);
+  position:relative;isolation:isolate;
+  clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c));
+}
+.chamfer::before,.chamfer::after{
+  content:"";position:absolute;z-index:-1;
+  clip-path:polygon(var(--c) 0,100% 0,100% calc(100% - var(--c)),calc(100% - var(--c)) 100%,0 100%,0 var(--c));
+}
+.chamfer::before{inset:0;background:linear-gradient(160deg,rgba(130,215,255,.75),rgba(60,150,230,.35) 40%,rgba(92,200,255,.55))}
+.chamfer::after{inset:1.2px;background:linear-gradient(170deg,rgba(14,44,96,.92),rgba(5,20,48,.94))}
+
+/* ---------- Header ---------- */
+.header{position:relative;display:flex;align-items:flex-start;gap:10px;z-index:2}
+.menu-btn{
+  --c:10px;width:62px;height:58px;flex:none;
+  display:grid;place-items:center;
+  filter:drop-shadow(0 0 6px rgba(92,200,255,.35));
+}
+.menu-btn svg{width:30px;height:30px}
+.brand{padding-top:0;min-width:0}
+.brand small{
+  display:block;font-family:Rajdhani,sans-serif;font-weight:600;
+  font-size:13px;letter-spacing:.06em;color:var(--text-dim);
+}
+.brand h1{
+  font-family:Orbitron,sans-serif;font-weight:700;
+  font-size:31px;letter-spacing:.09em;line-height:1.05;margin-top:2px;
+  color:var(--cyan-hi);
+  text-shadow:0 0 10px rgba(92,200,255,.55),0 0 22px rgba(92,200,255,.25);
+}
+.status{
+  --c:9px;margin-left:auto;margin-top:42px;flex:none;
+  display:flex;align-items:center;gap:8px;
+  padding:6px 10px 6px 12px;white-space:nowrap;
+  font-family:Rajdhani,sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.13em;color:var(--text);
+}
+.status .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+
+/* ---------- Greeting ---------- */
+.greeting{text-align:center;margin-top:18px;position:relative;z-index:2}
+.greeting .date{font-family:Rajdhani,sans-serif;font-weight:600;font-size:14px;letter-spacing:.24em;color:var(--text-dim)}
+.greeting h2{font-weight:700;font-size:34px;letter-spacing:.01em;margin-top:6px;text-shadow:0 0 18px rgba(120,190,255,.25)}
+.greeting p{font-size:15.5px;color:var(--text-dim);margin-top:4px}
+
+/* ---------- Hologram stage ---------- */
+.stage{position:relative;height:440px;margin-top:4px;flex:none}
+.stage .rings{position:absolute;left:50%;top:6px;width:370px;height:370px;transform:translateX(-50%)}
+.rings .spin{transform-origin:200px 200px;animation:spin 60s linear infinite}
+.rings .spin.rev{animation-duration:90s;animation-direction:reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stage .particles{position:absolute;inset:0;pointer-events:none}
+.particles i{
+  position:absolute;width:2px;height:2px;border-radius:50%;background:var(--cyan-hi);
+  box-shadow:0 0 4px var(--cyan);opacity:0;animation:float var(--d,6s) linear infinite;animation-delay:var(--dl,0s);
+}
+@keyframes float{
+  0%{opacity:0;transform:translateY(0)}
+  15%{opacity:var(--o,.8)}
+  85%{opacity:var(--o,.8)}
+  100%{opacity:0;transform:translateY(-60px)}
+}
+.stage .platform{position:absolute;left:50%;bottom:0;width:420px;height:150px;transform:translateX(-50%)}
+.platform .beam{animation:beam 3s ease-in-out infinite}
+@keyframes beam{50%{opacity:.55}}
+.platform .ripple{transform-origin:210px 108px;animation:ripple 4s ease-out infinite}
+.platform .ripple.r2{animation-delay:2s}
+@keyframes ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.15);opacity:0}}
+
+/* Sprite slot: empty until a sprite sheet is loaded via CortanaSprite.load() */
+#cortana-sprite{
+  position:absolute;left:50%;bottom:28px;
+  width:288px;height:384px;transform:translateX(-50%);
+  background-repeat:no-repeat;image-rendering:auto;
+  z-index:1;pointer-events:none;
+  -webkit-mask-image:linear-gradient(to bottom,#000 70%,rgba(0,0,0,.35) 86%,transparent 96%);
+          mask-image:linear-gradient(to bottom,#000 70%,rgba(0,0,0,.35) 86%,transparent 96%);
+  filter:drop-shadow(0 0 14px rgba(92,200,255,.35));
+  animation:holo 5s ease-in-out infinite;
+}
+@keyframes holo{50%{opacity:.9;transform:translateX(-50%) translateY(-3px)}}
+#cortana-sprite .layer{position:absolute;inset:0;background-repeat:no-repeat}
+#cortana-sprite .layer.talk{visibility:hidden}
+#cortana-sprite.talking .layer.talk{visibility:visible}
+#cortana-sprite.talking .layer.idle{visibility:hidden}
+.app.speaking #cortana-sprite{filter:drop-shadow(0 0 22px rgba(120,215,255,.7)) brightness(1.08)}
+
+/* ---------- Listening ---------- */
+.listening{text-align:center;position:relative;z-index:2;margin-top:6px}
+.listening .label{font-family:Rajdhani,sans-serif;font-weight:600;font-size:15px;letter-spacing:.26em;color:var(--text)}
+.wave{display:flex;justify-content:center;align-items:center;gap:6px;height:44px;margin-top:8px}
+.wave span{
+  width:3px;border-radius:2px;background:var(--cyan);
+  box-shadow:0 0 6px var(--cyan);height:var(--h);
+  animation:wave 1.1s ease-in-out infinite;animation-delay:var(--dl);
+}
+.wave span.dot{width:3px;height:3px;animation:none;opacity:.6}
+@keyframes wave{50%{transform:scaleY(.45)}}
+.app.idle .wave span{animation-play-state:paused;opacity:.45}
+.transcript{min-height:40px;margin:4px 16px 0;font-size:14.5px;line-height:1.35;color:var(--text-dim)}
+.transcript .you{color:var(--text)}
+.transcript .err{color:#ff9a9a}
+
+/* ---------- Tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:22px;position:relative;z-index:2}
+.tile{--c:12px;text-align:left;padding:13px 9px 14px 11px;min-height:72px;transition:filter .2s}
+.tile:active,.wide:active{filter:brightness(1.3)}
+.tile svg{width:26px;height:26px;display:block;margin-bottom:6px}
+.tile b{display:block;font-weight:600;font-size:clamp(12px,3.3vw,14.5px);line-height:1.15;white-space:nowrap}
+.tile span{display:block;font-size:clamp(11px,2.9vw,12.5px);white-space:nowrap;color:var(--text-dim);margin-top:3px}
+.wide{
+  --c:12px;display:flex;align-items:center;gap:24px;width:100%;
+  margin-top:13px;padding:16px 20px;text-align:left;position:relative;z-index:2;
+}
+.wide svg{width:30px;height:30px;flex:none}
+.wide b{display:block;font-weight:600;font-size:17px}
+.wide span{display:block;font-size:14px;color:var(--text-dim);margin-top:2px}
+
+/* ---------- Controls ---------- */
+.controls{display:flex;justify-content:center;align-items:center;gap:36px;margin-top:10px;position:relative;z-index:2}
+.side-btn{
+  width:70px;height:46px;border-radius:16px;display:grid;place-items:center;
+  border:1px solid var(--line);background:rgba(8,28,64,.6);
+  box-shadow:inset 0 0 12px rgba(92,200,255,.12);
+}
+.side-btn svg{width:28px;height:28px}
+.mic{
+  position:relative;width:118px;height:118px;border-radius:50%;
+  display:grid;place-items:center;
+}
+.mic::before{ /* outer glow ring */
+  content:"";position:absolute;inset:0;border-radius:50%;
+  border:2px solid rgba(140,220,255,.85);
+  box-shadow:0 0 18px rgba(92,200,255,.8),0 0 40px rgba(92,200,255,.45),inset 0 0 18px rgba(92,200,255,.5);
+}
+.mic::after{ /* inner disc */
+  content:"";position:absolute;inset:12px;border-radius:50%;
+  background:radial-gradient(circle at 50% 40%,#1b5fb0 0%,#0b2f6c 60%,#071c44 100%);
+  border:1.5px solid rgba(140,220,255,.6);
+  box-shadow:inset 0 0 22px rgba(92,200,255,.45);
+}
+.mic svg{position:relative;z-index:1;width:46px;height:46px;filter:drop-shadow(0 0 6px rgba(160,225,255,.9))}
+.app:not(.idle) .mic::before{animation:micGlow 2s ease-in-out infinite}
+@keyframes micGlow{50%{box-shadow:0 0 26px rgba(92,200,255,1),0 0 60px rgba(92,200,255,.6),inset 0 0 22px rgba(92,200,255,.6)}}
+
+/* ---------- Bottom nav ---------- */
+.nav{
+  --c:14px;display:grid;grid-template-columns:repeat(5,1fr);
+  margin-top:auto;padding:12px 4px 10px;position:relative;z-index:2;
+}
+.nav-wrap{margin-top:10px;position:relative}
+.nav-wrap .accent{
+  position:absolute;left:10px;top:-5px;width:120px;height:3px;
+  background:linear-gradient(90deg,transparent,var(--cyan) 30%,var(--cyan));
+  box-shadow:0 0 8px var(--cyan);clip-path:polygon(4px 0,100% 0,calc(100% - 4px) 100%,0 100%);
+  transition:transform .3s ease;
+}
+.nav button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0;color:var(--text-dim);font-size:13.5px;position:relative}
+.nav button svg{width:30px;height:30px}
+.nav button.active{color:var(--text)}
+.nav button.active svg{filter:drop-shadow(0 0 6px rgba(92,200,255,.9))}
+.nav button.active::before{
+  content:"";position:absolute;inset:-12px 6px -10px;z-index:-1;
+  background:radial-gradient(ellipse at 50% 70%,rgba(60,150,255,.35),transparent 70%);
+}
+
+/* icons */
+.ic{fill:none;stroke:var(--cyan-hi);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.nav .ic{stroke:currentColor}
+.nav button.active .ic{stroke:var(--cyan-hi)}
+
+@media (max-width:380px){
+  .brand h1{font-size:26px}
+  .status{font-size:11px;padding:6px 10px;letter-spacing:.12em}
+  .greeting h2{font-size:29px}
+  .controls{gap:22px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+
+.transcript.err{color:#ffaaaa}
+</style>
+
+<style>
+#cortana-sprite.model3d{width:100%;height:422px;bottom:16px;filter:drop-shadow(0 0 8px #258ed530);animation:none;mask-image:linear-gradient(#000 78%,transparent 100%);-webkit-mask-image:linear-gradient(#000 78%,transparent 100%)}
+.model3d canvas{display:block;width:100%;height:100%}
+.stage::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;opacity:.12;background:repeating-linear-gradient(transparent 0 3px,#49afff28 3px 4px);mask-image:radial-gradient(ellipse,#000,transparent 68%)}
+#modelNote{position:absolute;top:45%;left:10%;width:80%;text-align:center;font-size:14px;color:var(--text-dim);z-index:3}
+.demo-controls{display:flex;justify-content:center;gap:9px;margin:8px 0;position:relative;z-index:3}
+.demo-controls button{border:1px solid var(--line);border-radius:7px;padding:8px 12px;font-size:12px;background:#082044}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--cyan-hi);outline-offset:3px}
+button:disabled{opacity:.45;cursor:wait}
+.connection-note{text-align:center;font-size:12px;color:var(--text-dim);margin:8px 5px 0}
+dialog{color:var(--text);background:#06162e;border:1px solid var(--cyan-dim);border-radius:12px;padding:24px;width:min(92vw,440px);margin:auto;box-shadow:0 0 70px #1263a34d}
+dialog::backdrop{background:#010611cc;backdrop-filter:blur(6px)}
+dialog h2{font-size:22px;margin-bottom:12px}dialog p{font-size:14px;color:var(--text-dim);line-height:1.5;margin:12px 0}
+dialog label{display:block;margin:16px 0 6px;font-size:14px}dialog textarea,dialog select{width:100%;padding:10px;background:#0a2345;color:var(--text);border:1px solid var(--line);border-radius:6px;font:inherit}dialog textarea{min-height:110px;resize:vertical}
+.dialog-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.dialog-actions button{border:1px solid var(--line);padding:9px 13px;border-radius:6px;background:#10365f}
+.close-dialog{float:right;font-size:22px;padding:0 4px}
+@media(prefers-reduced-motion:reduce){.stage::after{opacity:.07}}
+
+.transcript.err{color:#ffaaaa}
+</style>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+<style>
+#cortana-sprite.materialising{animation:materialise 1.8s ease-out both}
+@keyframes materialise{0%{clip-path:inset(100% 0 0);filter:drop-shadow(0 0 16px #79dfff) brightness(1.3)}60%{clip-path:inset(0);filter:drop-shadow(0 0 12px #5cc8ff88) brightness(1.08)}100%{clip-path:inset(0);filter:drop-shadow(0 0 8px #258ed530)}}
+@media(prefers-reduced-motion:reduce){#cortana-sprite.materialising{animation:none}}
+</style>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%235cc8ff' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./responsive.css"><link rel="manifest" href="./manifest.webmanifest"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="./app-icon.svg"></head>
+<body>
+<main class="app idle" id="app">
+
+  <!-- Circuit traces -->
+  <svg class="circuit tl" viewBox="0 0 220 260" aria-hidden="true">
+    <g fill="none" stroke="#3d9ee6" stroke-width="1">
+      <path d="M0 210 L40 170 L40 120 L80 80 L200 80"/>
+      <path d="M0 230 L55 175 L55 130 L92 93 L170 93"/>
+      <path d="M0 160 L25 135 L25 40 L60 5 L220 5"/>
+      <path d="M10 20 L30 0"/>
+    </g>
+    <g fill="#5cc8ff"><circle cx="200" cy="80" r="2"/><circle cx="170" cy="93" r="2"/></g>
+  </svg>
+  <svg class="circuit tr" viewBox="0 0 200 140" aria-hidden="true">
+    <g fill="none" stroke="#3d9ee6" stroke-width="1">
+      <path d="M0 10 L150 10 L170 30 L200 30"/>
+      <path d="M60 22 L140 22 L160 42 L160 100 L200 130"/>
+      <path d="M190 0 L190 60"/>
+    </g>
+  </svg>
+  <svg class="circuit br" viewBox="0 0 90 260" aria-hidden="true">
+    <g fill="none" stroke="#3d9ee6" stroke-width="1"><path d="M90 0 L60 30 L60 200 L90 230"/><path d="M90 40 L72 58 L72 160"/></g>
+  </svg>
+  <svg class="circuit bl" viewBox="0 0 60 220" aria-hidden="true">
+    <g fill="none" stroke="#3d9ee6" stroke-width="1"><path d="M0 0 L30 30 L30 180 L0 210"/></g>
+  </svg>
+
+  <!-- Header -->
+  <header class="header">
+    <button class="menu-btn chamfer" aria-label="Menu">
+      <svg viewBox="0 0 30 30" class="ic" style="stroke-width:2.4"><path d="M5 8h20M5 15h20M5 22h20"/></svg>
+    </button>
+    <div class="brand">
+      <small>UNSC // AI INTERFACE</small>
+      <h1>CORTANA</h1>
+    </div>
+    <div class="status chamfer" id="status"><span class="dot"></span><span id="statusText">STARTING</span></div>
+  </header>
+
+  <!-- Greeting -->
+  <section class="greeting">
+    <div class="date" id="date">SATURDAY, 31 OCTOBER</div>
+    <h2 id="greet">Good evening, Chief.</h2>
+    <p>Ready when you are, Chief.</p>
+  </section>
+
+  <!-- Hologram stage -->
+  <section class="stage" aria-label="Cortana hologram">
+    <svg class="rings" viewBox="0 0 400 400">
+      <defs>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g class="spin" filter="url(#glow)">
+        <circle cx="200" cy="200" r="186" fill="none" stroke="rgba(92,200,255,.35)" stroke-width="1"/>
+        <!-- heavy segments left/right -->
+        <circle cx="200" cy="200" r="186" fill="none" stroke="#5cc8ff" stroke-width="5"
+          stroke-dasharray="70 220 40 250 90 499" stroke-dashoffset="-120" opacity=".85"/>
+      </g>
+      <g class="spin rev" filter="url(#glow)">
+        <circle cx="200" cy="200" r="170" fill="none" stroke="rgba(92,200,255,.25)" stroke-width="1" stroke-dasharray="2 6"/>
+        <circle cx="200" cy="200" r="170" fill="none" stroke="#7fd4ff" stroke-width="2.5"
+          stroke-dasharray="14 8 14 8 14 260 30 470" opacity=".7"/>
+      </g>
+      <g filter="url(#glow)" opacity=".8">
+        <circle cx="200" cy="200" r="158" fill="none" stroke="rgba(92,200,255,.18)" stroke-width="1"/>
+      </g>
+    </svg>
+
+    <div class="particles" id="particles"></div>
+
+    <!-- Sprite sheet goes here -->
+    <div id="cortana-sprite"></div><p id="modelNote" role="status">Initialising hologram...</p>
+
+    <svg class="platform" viewBox="0 0 420 150">
+      <defs>
+        <radialGradient id="pool" cx="50%" cy="50%" r="50%">
+          <stop offset="0" stop-color="#bff0ff" stop-opacity=".9"/>
+          <stop offset=".35" stop-color="#3fa9ff" stop-opacity=".45"/>
+          <stop offset="1" stop-color="#0a3a8a" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="beamG" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0" stop-color="#7fd4ff" stop-opacity=".55"/>
+          <stop offset="1" stop-color="#7fd4ff" stop-opacity="0"/>
+        </linearGradient>
+        <filter id="pglow" x="-30%" y="-80%" width="160%" height="260%">
+          <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <!-- light column -->
+      <rect class="beam" x="150" y="0" width="120" height="110" fill="url(#beamG)" opacity=".35"/>
+      <g stroke="#9fe2ff" stroke-width="1" opacity=".35" class="beam">
+        <line x1="165" y1="30" x2="165" y2="105"/><line x1="182" y1="10" x2="182" y2="108"/>
+        <line x1="200" y1="40" x2="200" y2="110"/><line x1="222" y1="20" x2="222" y2="108"/>
+        <line x1="240" y1="50" x2="240" y2="105"/><line x1="255" y1="25" x2="255" y2="104"/>
+      </g>
+      <ellipse cx="210" cy="108" rx="200" ry="34" fill="url(#pool)" opacity=".55"/>
+      <g fill="none" filter="url(#pglow)">
+        <ellipse cx="210" cy="108" rx="196" ry="30" stroke="#3fa9ff" stroke-width="1.2" opacity=".6"/>
+        <ellipse cx="210" cy="108" rx="170" ry="25" stroke="#5cc8ff" stroke-width="2.4" stroke-dasharray="90 18 40 12 160 22" opacity=".9"/>
+        <ellipse cx="210" cy="108" rx="138" ry="19" stroke="#9fe2ff" stroke-width="1.6" opacity=".8"/>
+        <ellipse cx="210" cy="108" rx="100" ry="13" stroke="#cdf3ff" stroke-width="1.2" stroke-dasharray="3 5" opacity=".75"/>
+        <ellipse class="ripple" cx="210" cy="108" rx="150" ry="22" stroke="#7fd4ff" stroke-width="1"/>
+        <ellipse class="ripple r2" cx="210" cy="108" rx="150" ry="22" stroke="#7fd4ff" stroke-width="1"/>
+      </g>
+      <!-- centre flare -->
+      <ellipse cx="210" cy="110" rx="46" ry="4" fill="#eaffff" filter="url(#pglow)" opacity=".95"/>
+      <ellipse cx="210" cy="110" rx="12" ry="2.2" fill="#ffffff"/>
+      <g stroke="#9fe2ff" stroke-width="1" opacity=".5"><line x1="210" y1="116" x2="210" y2="140"/><line x1="200" y1="118" x2="200" y2="132"/><line x1="220" y1="118" x2="220" y2="132"/></g>
+    </svg>
+  </section>
+
+  <!-- Listening -->
+  <section class="listening">
+    <div class="label" id="listenLabel">TAP THE MIC TO SPEAK</div>
+    <div class="wave" id="wave" aria-hidden="true"></div>
+    <div class="transcript" id="transcript" aria-live="polite"></div>
+  </section>
+
+  <p class="connection-note" id="connectionNote">Checking local speech...</p>
+  <!-- Tiles -->
+  <section class="tiles">
+    <button class="tile chamfer" data-target="briefing">
+      <svg viewBox="0 0 26 26" class="ic"><rect x="3" y="5" width="20" height="17" rx="2.5"/><path d="M3 10h20M8 3v4M18 3v4M8 14l2 2 3-3M15 15h4M8 19h3M15 19h4"/></svg>
+      <b>Mission Briefing</b><span>Today's agenda</span>
+    </button>
+    <button class="tile chamfer" data-target="tasks">
+      <svg viewBox="0 0 26 26" class="ic"><path d="M3 6l2 2 3-4M3 13l2 2 3-4M3 20l2 2 3-4M12 6h11M12 13h11M12 20h11"/></svg>
+      <b>Objectives</b><span>Tasks &amp; reminders</span>
+    </button>
+    <button class="tile chamfer" data-target="memory">
+      <svg viewBox="0 0 26 26" class="ic"><path d="M4.5 9A9.5 9.5 0 1 1 3.6 15"/><path d="M3 4.5V9.5h5"/><path d="M13 8v5.5l3.5 2.5"/></svg>
+      <b>Memory</b><span>Conversations</span>
+    </button>
+  </section>
+
+  <button class="wide chamfer" data-target="settings">
+    <svg viewBox="0 0 30 30" class="ic">
+      <path d="M15 3.5l2 2.6 3.2-.6.8 3.2 3 1.4-1.3 3 1.3 3-3 1.4-.8 3.2-3.2-.6-2 2.6-2-2.6-3.2.6-.8-3.2-3-1.4 1.3-3-1.3-3 3-1.4.8-3.2 3.2.6z"/>
+      <circle cx="15" cy="13.5" r="3.4"/><path d="M12.5 21.5h5M13 24h4"/>
+    </svg>
+    <div><b>Systems</b><span>Configuration</span></div>
+  </button>
+
+  <!-- Controls -->
+  <section class="controls">
+    <button class="side-btn" aria-label="Type a message">
+      <svg viewBox="0 0 28 28" class="ic"><rect x="3" y="7" width="22" height="14" rx="2.5"/><path d="M7 11h1M10.5 11h1M14 11h1M17.5 11h1M21 11h0M7 14.5h1M10.5 14.5h1M14 14.5h1M17.5 14.5h1M21 14.5h0M9 18h10"/></svg>
+    </button>
+    <button class="mic" id="mic" aria-label="Start listening" aria-pressed="false">
+      <svg viewBox="0 0 46 46" class="ic" style="stroke-width:2.6;stroke:#d8f5ff">
+        <rect x="16.5" y="5" width="13" height="23" rx="6.5"/>
+        <path d="M10.5 22a12.5 12.5 0 0 0 25 0M23 34.5V41M17 41h12"/>
+      </svg>
+    </button>
+    <button class="side-btn" aria-label="Voice mode">
+      <svg viewBox="0 0 28 28" class="ic" style="stroke-width:2"><path d="M4 12.5v3M8 10v8M12 7v14M16 9v10M20 11v6M24 13v2"/></svg>
+    </button>
+  </section>
+
+  <!-- Bottom nav -->
+  <div class="nav-wrap">
+    <div class="accent" id="navAccent"></div>
+    <nav class="nav chamfer" id="nav">
+      <button class="active" data-tab="home">
+        <svg viewBox="0 0 30 30" class="ic" style="fill:currentColor;fill-opacity:.15"><path d="M4.5 14L15 5l10.5 9M7.5 12v13h5.5v-7h4v7h5.5V12"/></svg>Home
+      </button>
+      <button data-tab="chat">
+        <svg viewBox="0 0 30 30" class="ic"><path d="M5 6.5h20a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5H13l-5 4v-4H5A1.5 1.5 0 0 1 3.5 20V8A1.5 1.5 0 0 1 5 6.5z"/><path d="M10 14h.01M15 14h.01M20 14h.01" style="stroke-width:2.6"/></svg>Chat
+      </button>
+      <button data-tab="tasks">
+        <svg viewBox="0 0 30 30" class="ic"><path d="M23 15.5V24a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 5 24V9a1.5 1.5 0 0 1 1.5-1.5H18"/><path d="M10 15l4 4 12-12"/></svg>Tasks
+      </button>
+      <button data-tab="memory">
+        <svg viewBox="0 0 30 30" class="ic"><path d="M15 8.5C12 6.5 8 6 4 6.5v17c4-.5 8 0 11 2 3-2 7-2.5 11-2v-17c-4-.5-8 0-11 2z"/><path d="M15 8.5v17M18.5 12h4M18.5 16h4M18.5 20h4"/></svg>Memory
+      </button>
+      <button data-tab="settings">
+        <svg viewBox="0 0 30 30" class="ic"><circle cx="15" cy="15" r="3.8"/><path d="M15 3.5l1.6 2.7 3.1-.7.9 3 3 .9-.7 3.1 2.6 1.5-2.6 1.6.7 3.1-3 .9-.9 3-3.1-.7L15 26.5l-1.6-2.7-3.1.7-.9-3-3-.9.7-3.1L3.5 15l2.6-1.6-.7-3.1 3-.9.9-3 3.1.7z"/></svg>Settings
+      </button>
+    </nav>
+  </div>
+</main>
+
+
+<dialog id="messageDialog" aria-labelledby="messageTitle"><button class="close-dialog" aria-label="Close">&times;</button><h2 id="messageTitle">Talk to Cortana</h2><p id="messageHelp">Ask a question. Cortana replies using the AI running on your PC.</p><form id="messageForm"><label for="message">Message</label><textarea id="message" maxlength="3000" required placeholder="Hello, Cortana."></textarea><div class="dialog-actions"><button type="submit">Send message</button></div></form></dialog>
+<dialog id="settingsDialog" aria-labelledby="settingsTitle"><button class="close-dialog" aria-label="Close">&times;</button><h2 id="settingsTitle">Systems</h2><p id="voiceInfo">Local timed speech</p><label for="hologramView">Hologram view</label><select id="hologramView"><option value="portrait">Portrait</option><option value="full">Full hologram</option></select><label for="character">Character movement</label><select id="character"><option value="0.65">Subtle</option><option value="1" selected>Balanced</option><option value="1.3">Expressive</option></select><label for="rate">Speech pace</label><select id="rate"><option value="-1">Relaxed</option><option value="0" selected>Normal</option><option value="1">Brisk</option></select><p>Facial movement follows the voice engine&#8217;s timed mouth events. Mouth poses have been adapted for this model.</p><p id="aiInfo">Starting local assistant...</p><section id="phoneSection" hidden><h3>Connect your phone</h3><p id="phoneHelp">Preparing your secure phone connection...</p><img id="phoneQR" alt="Scan to open Cortana on your phone" hidden><p>On your phone, use the browser menu to add Cortana to your home screen. Scan a new QR after restarting the PC app.</p></section></dialog>
+<dialog id="infoDialog" aria-labelledby="infoTitle"><button class="close-dialog" aria-label="Close">&times;</button><h2 id="infoTitle"></h2><p id="infoText"></p></dialog>
+<script type="module" src="./avatar.js"></script>
+<script type="module" src="./app.js"></script>
+<script type="module" src="./pages.js"></script>
+</body></html>

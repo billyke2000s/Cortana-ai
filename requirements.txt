@@ -1,0 +1,4 @@
+# Runtime (running app/launcher.py from source on Windows)
+qrcode>=7.4
+python-dateutil>=2.8
+tzdata>=2024.1
