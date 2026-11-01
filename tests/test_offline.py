@@ -12,12 +12,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'app'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ['CORTANA_DATA_DIR'] = tempfile.mkdtemp(prefix='cortana-test-')
+os.environ['CORTANA_FAKE_VRAM_GB'] = '8'      # pretend to be the RTX 3070 the project targets
+os.environ['CORTANA_FAKE_RAM_GB'] = '32'
 
 import fake_ollama  # noqa: E402
 OLLAMA = fake_ollama.start()
 os.environ['CORTANA_OLLAMA_URL'] = f'http://127.0.0.1:{OLLAMA.server_address[1]}'
 
-import runtime, server, store, tools  # noqa: E402
+import hardware, runtime, server, store, tools  # noqa: E402
 
 
 def stream_all(text, chunk=3):
@@ -154,6 +156,34 @@ class ToolTests(unittest.TestCase):
             self.assertIn(t['function']['name'], tools.TOOL_LABELS)
 
 
+class HardwareTests(unittest.TestCase):
+    def pick(self, vram, ram=32):
+        return hardware.recommended_tag(hardware.recommend({'vram_gb': vram or None, 'ram_gb': ram}))
+
+    def test_recommendation_by_card(self):
+        self.assertEqual(self.pick(4), 'qwen3.5:2b')
+        self.assertEqual(self.pick(6), 'qwen3.5:4b')
+        self.assertEqual(self.pick(8), 'qwen3.5:9b')
+        self.assertEqual(self.pick(12), 'qwen3.5:9b')
+        self.assertEqual(self.pick(22), 'qwen3.5:27b')
+        self.assertEqual(self.pick(0, 16), 'qwen3.5:2b')
+
+    def test_too_big_models_are_not_selectable(self):
+        rows = {r['tag']: r for r in hardware.recommend({'vram_gb': 8, 'ram_gb': 32})}
+        self.assertFalse(rows['qwen3.5:27b']['selectable'])
+        self.assertFalse(rows['qwen3.5:35b-a3b']['selectable'])
+        self.assertTrue(rows['qwen3.5:9b']['selectable'])
+        self.assertEqual(sum(r['recommended'] for r in rows.values()), 1)
+
+    def test_low_ram_blocks_spilling(self):
+        rows = {r['tag']: r for r in hardware.recommend({'vram_gb': 16, 'ram_gb': 8})}
+        self.assertEqual(rows['qwen3.5:27b']['rating'], 'too_big')
+
+    def test_unavailable_tags_are_hidden(self):
+        rows = hardware.recommend({'vram_gb': 24, 'ram_gb': 64}, available={'qwen3.5:4b', 'qwen3.5:9b'})
+        self.assertEqual({r['tag'] for r in rows}, {'qwen3.5:4b', 'qwen3.5:9b'})
+
+
 ICS = '''BEGIN:VCALENDAR
 BEGIN:VEVENT
 DTSTART;TZID=Europe/London:20261101T093000
@@ -210,6 +240,7 @@ class ApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.rt = runtime.Runtime(lambda text: None)
+        cls.rt.tag_exists = {m['tag']: True for m in hardware.CATALOG}   # no registry lookups in tests
         cls.rt.ensure_ai()
         cls.rt.voice.speak = silent_voice
         cls.rt.voice.status = 'Test voice'
@@ -305,6 +336,32 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(self.request('GET', path)[0], 404, path)
         for path in ('/', '/app.js', '/pages.js', '/avatar.js', '/responsive.css'):
             self.assertEqual(self.request('GET', path)[0], 200, path)
+
+    def test_models_api_and_guards(self):
+        info = json.loads(self.request('GET', '/api/models')[2])
+        self.assertEqual(info['recommended'], 'qwen3.5:9b')
+        self.assertEqual(info['hardware']['vram_gb'], 8.0)
+        # too big for an 8 GB card: refused with a reason
+        status, _, raw = self.request('POST', '/api/models', {'action': 'download', 'tag': 'qwen3.5:27b'})
+        self.assertEqual(status, 400)
+        self.assertIn('too big', json.loads(raw)['error'])
+        status, _, _ = self.request('POST', '/api/settings', {'model': 'qwen3.5:27b'})
+        self.assertEqual(status, 400)
+        # not downloaded yet: can't switch to it
+        status, _, raw = self.request('POST', '/api/models', {'action': 'use', 'tag': 'qwen3.5:2b'})
+        self.assertIn('not downloaded', json.loads(raw)['error'])
+        # download with progress, then it becomes the active model
+        self.assertEqual(self.request('POST', '/api/models', {'action': 'download', 'tag': 'qwen3.5:2b'})[0], 200)
+        for _ in range(100):
+            info = json.loads(self.request('GET', '/api/models')[2])
+            if not info['pull']['active']:
+                break
+            time.sleep(.05)
+        self.assertEqual(info['pull']['status'], 'done')
+        self.assertEqual(info['current'], 'qwen3.5:2b')
+        self.assertEqual(self.rt.store.get('model'), 'qwen3.5:2b')
+        self.request('POST', '/api/models', {'action': 'use', 'tag': 'qwen3.5:9b'})
+        self.assertEqual(self.rt.model, 'qwen3.5:9b')
 
     def test_phone_pairing(self):
         # Unpaired phone: friendly 403 page

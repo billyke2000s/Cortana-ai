@@ -25,8 +25,14 @@ Escape or the stop button returns to `idle` from any state and cancels requests 
   the display panel. Trigger: the `[[SCREEN]]` marker, or (fallback) the first fenced code block or Markdown table row.
 - Spoken text never contains Markdown symbols (`* ` # _ > |`), and Markdown links are reduced to their text.
 - If the model returns only screen content, she says "I've put it on screen for you."
-- Model: `qwen3.5:9b` by default, `num_ctx` 6,144, `temperature` 0.45, up to 1,200 output tokens, thinking off.
-  If the model is missing, fails to load, or fails before producing text, she switches to `qwen3.5:4b` and retries once.
+- Model: on first run (no model chosen) Cortana detects the GPU and RAM and uses the **recommended** model if it's installed;
+  otherwise the best installed model that isn't too big (and says which one is recommended); if none is usable, she downloads
+  the recommended one. `num_ctx` 6,144, `temperature` 0.45, up to 1,200 output tokens, thinking off. If the model fails to load
+  or fails before producing text, she switches to `qwen3.5:4b` and retries once.
+- Recommendation (`hardware.py`): usable graphics memory = total − 1.5 GB; need = download size + 0.3 GB. Fast = fits;
+  Good = ≥80% fits; Slow = ≥60%; Too big = less, or the overflow doesn't fit in RAM − 6 GB (mixture-of-experts models: Good
+  from 35%). Recommended = the most capable Fast/Good dense model (no GPU: 2B). Typical picks: 4 GB → 2B, 6 GB → 4B,
+  8–16 GB → 9B, 20 GB+ → 27B.
 
 ## 3. Abilities (tools)
 
@@ -76,7 +82,7 @@ running timers; ✓ completes, ✕ deletes; reminders that have fired are highli
 **Memory:** remembered facts (✕ forget, add your own); last 30 conversation lines; **Clear conversation history** needs two
 taps within 4 s. Facts are not cleared by clearing history.
 
-**Systems:** AI model (installed Qwen/Llama/Gemma/Mistral/Phi models); Abilities on/off; PC controls on/off; voice engine
+**Systems:** AI model picker (detected GPU/RAM/disk; every Qwen 3.5 model with its size, rating badge, ★ Recommended, Download with live progress bar, or Use; too-big models greyed out and refused by the server); Abilities on/off; PC controls on/off; voice engine
 and voice; wake word (per device, stored in the browser); home town; calendar address (write-only, Disconnect button);
 Brave Search key (write-only); phone connection (Cloudflare/Tailscale, next launch); link to hologram view, movement, speech
 pace and the phone QR (original Settings dialog). **Save** applies changes.

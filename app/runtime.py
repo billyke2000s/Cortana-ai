@@ -145,7 +145,9 @@ class Runtime:
         if self.store.get('phone_access','cloudflare')=='tailscale':
             self.token=self.store.get('phone_token') or secrets.token_urlsafe(32);self.store.set('phone_token',self.token)
         else:self.token=secrets.token_urlsafe(32)
-        self.local_url=None;self.model=os.getenv('CORTANA_MODEL') or self.store.get('model',MODEL)
+        self.local_url=None;self.model=os.getenv('CORTANA_MODEL') or self.store.get('model') or MODEL
+        self.model_chosen=bool(os.getenv('CORTANA_MODEL') or self.store.get('model'))   # False: pick the recommended model for this PC
+        self.hw=None;self.tag_exists={};self.pull={'active':False,'tag':None,'status':'','pct':0,'error':None}
         self.ollama_url=os.getenv('CORTANA_OLLAMA_URL','http://127.0.0.1:11434').rstrip('/')
         self.ai_ready=False;self.stt_ready=False;self.status='Starting Cortana';self.error=None
         self.children=[];self.logs=[];self.closing=threading.Event();self.stt_lock=threading.Lock();self.ai_lock=threading.Lock();self.lifecycle_lock=threading.Lock()
@@ -185,21 +187,23 @@ class Runtime:
                 except Exception:pass
             else:raise RuntimeError('Ollama did not start. See ollama.log in the app data folder.')
         installed=[m['name'] for m in tags.get('models',[])]
+        if not self.model_chosen:
+            import hardware
+            self.hw=self.hw or hardware.detect()
+            rows=hardware.recommend(self.hw,installed,self.available_tags(installed))
+            best=hardware.recommended_tag(rows,MODEL)
+            usable=[r for r in rows if r['installed'] and r['selectable']]
+            if best in installed or not usable:self.model=best        # nothing usable installed yet: download the recommended one
+            else:
+                self.model=max(usable,key=lambda r:r['quality'])['tag']  # don't force a big download: use the best one already here
+                self.report(f'{best} is recommended for this PC; download it in Systems. Using {self.model} for now.')
         if self.model not in installed and FAST_MODEL in installed and self.model!=FAST_MODEL:
             self.report(self.model+' is not installed; using '+FAST_MODEL+'. Install it with: ollama pull '+self.model)
             self.model=FAST_MODEL
         if self.model not in installed:
             self.update('Downloading '+self.model+' on first launch...')
-            req=urllib.request.Request(self.ollama_url+'/api/pull',data=json.dumps({'model':self.model,'stream':True}).encode(),headers={'Content-Type':'application/json'})
-            with urllib.request.urlopen(req,timeout=180) as response:
-                last=0
-                for line in response:
-                    if self.closing.is_set():return
-                    msg=json.loads(line)
-                    if msg.get('error'):raise RuntimeError(msg['error'])
-                    if time.monotonic()-last>1:
-                        total=msg.get('total',0);progress=f" {int(msg.get('completed',0)/total*100)}%" if total else ''
-                        self.update('Qwen: '+msg.get('status','Downloading')+progress);last=time.monotonic()
+            self.pull_model(self.model,lambda status,pct:self.update(f'AI model: {status}'+(f' {pct}%' if pct else '')))
+            if self.closing.is_set():return
         self.update('Loading '+self.model+' into memory...')
         try:request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':CONTEXT}},timeout=180)
         except Exception:
@@ -267,6 +271,75 @@ class Runtime:
     def preload(self):
         try:request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':CONTEXT}},timeout=180);self.report('Model switched to '+self.model)
         except Exception as e:self.report('Could not load '+self.model+': '+str(e)[:100])
+
+    def pull_model(self,tag,progress):
+        """Download a model through Ollama, reporting (status, percent)."""
+        req=urllib.request.Request(self.ollama_url+'/api/pull',data=json.dumps({'model':tag,'stream':True}).encode(),headers={'Content-Type':'application/json'})
+        with urllib.request.urlopen(req,timeout=180) as response:
+            last=0
+            for line in response:
+                if self.closing.is_set():return
+                msg=json.loads(line)
+                if msg.get('error'):raise RuntimeError(msg['error'])
+                if time.monotonic()-last>.5 or msg.get('status')=='success':
+                    total=msg.get('total',0);progress(msg.get('status','downloading'),int(msg.get('completed',0)/total*100) if total else 0);last=time.monotonic()
+
+    def available_tags(self,installed=()):
+        """Catalog tags that exist in the Ollama library (checked once; installed ones always count)."""
+        import hardware
+        for m in hardware.CATALOG:
+            tag=m['tag']
+            if tag in installed:self.tag_exists[tag]=True
+            if tag in self.tag_exists:continue
+            name,_,version=tag.partition(':')
+            try:
+                req=urllib.request.Request(f'https://registry.ollama.ai/v2/library/{name}/manifests/{version}',method='HEAD',
+                    headers={'Accept':'application/vnd.docker.distribution.manifest.v2+json','User-Agent':'CortanaLocal/1.0'})
+                urllib.request.urlopen(req,timeout=6).close();self.tag_exists[tag]=True
+            except urllib.error.HTTPError as e:
+                if e.code==404:self.tag_exists[tag]=False
+            except Exception:
+                pass   # offline: decide again later; standard sizes are assumed to exist
+        return {m['tag'] for m in hardware.CATALOG if self.tag_exists.get(m['tag'],not m['moe'])}
+
+    def models_info(self):
+        import hardware
+        self.hw=self.hw or hardware.detect()
+        try:installed=[m['name'] for m in request_json(self.ollama_url+'/api/tags',timeout=3).get('models',[])]
+        except Exception:installed=[]
+        rows=hardware.recommend(self.hw,installed,self.available_tags(installed))
+        return {'hardware':self.hw,'models':rows,'current':self.model,'recommended':hardware.recommended_tag(rows),
+                'pull':dict(self.pull),'disk_free_gb':hardware.free_disk_gb(),'other_installed':[t for t in installed if t not in {r['tag'] for r in rows}]}
+
+    def check_model(self,tag,need_installed=True):
+        info=self.models_info();row=next((r for r in info['models'] if r['tag']==tag),None)
+        if row is None:
+            if tag in info['other_installed']:return info,None    # a model the user installed themselves: allowed
+            raise ValueError('Unknown model.')
+        if not row['selectable']:raise ValueError(row['label']+' is too big for this PC: '+row['note'])
+        if need_installed and not row['installed']:raise ValueError(row['label']+' is not downloaded yet.')
+        return info,row
+
+    def use_model(self,tag):
+        self.check_model(tag)
+        self.store.set('model',tag);self.model=tag;self.model_chosen=True
+        threading.Thread(target=self.preload,daemon=True).start()
+
+    def start_pull(self,tag,use_after=True):
+        if self.pull['active']:raise ValueError('A download is already running.')
+        info,row=self.check_model(tag,need_installed=False)
+        if row and row['installed']:raise ValueError(row['label']+' is already downloaded.')
+        free=info['disk_free_gb']
+        if row and free is not None and free<row['size_gb']*1.1+1:raise ValueError(f"Not enough disk space: {row['size_gb']:.0f} GB needed, {free:.0f} GB free.")
+        self.pull={'active':True,'tag':tag,'status':'starting','pct':0,'error':None}
+        def run():
+            try:
+                self.pull_model(tag,lambda status,pct:self.pull.update(status=status,pct=pct))
+                if use_after:self.use_model(tag)          # switch first, so nobody sees 'done' with the old model still active
+                self.pull.update(active=False,status='done',pct=100)
+            except Exception as e:
+                self.pull.update(active=False,status='failed',error=str(e)[:200])
+        threading.Thread(target=run,daemon=True).start()
 
     def clean_messages(self,messages,budget=6000):   # ~1,500 tokens of history inside the 6,144 context
         clean=[];remaining=budget

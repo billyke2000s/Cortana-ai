@@ -95,6 +95,25 @@ Any subset of: `model` (`[\w.:/-]{1,80}`), `voice_engine` (`piper`|`windows`), `
 `home_location` (≤80 chars), `calendar_url` (`https://…` or `""` to disconnect), `brave_key`, `pc_controls` (bool),
 `tools_enabled` (bool), `phone_access` (`cloudflare`|`tailscale`, applies next launch). → `{"ok": true}`.
 
+## Models
+
+### `GET /api/models`
+```json
+{"hardware": {"gpu": "NVIDIA GeForce RTX 3070", "vram_gb": 8.0, "ram_gb": 32.0, "source": "nvidia-smi"},
+ "models": [{"tag": "qwen3.5:9b", "label": "Qwen 3.5 9B", "size_gb": 6.6, "rating": "good", "gpu_pct": 94,
+             "note": "...", "blurb": "...", "selectable": true, "installed": true, "recommended": true, "moe": false, "quality": 4}],
+ "current": "qwen3.5:9b", "recommended": "qwen3.5:9b",
+ "pull": {"active": false, "tag": null, "status": "", "pct": 0, "error": null},
+ "disk_free_gb": 210.4, "other_installed": ["llama3:8b"]}
+```
+`rating`: `fast` (fits on the GPU) · `good` (≥80% on the GPU) · `slow` (≥60%) · `too_big` (not selectable).
+Catalog tags that don't exist in the Ollama library are omitted.
+
+### `POST /api/models`
+`{"action": "download", "tag"}` starts a background download (refused if too big, already installed, another download is
+running, or the disk is too full), then switches to it. `{"action": "use", "tag"}` switches to an installed, selectable model.
+Poll `GET /api/models` for `pull` progress. `POST /api/settings {"model"}` applies the same rules.
+
 ## Briefing
 
 ### `GET /api/briefing`

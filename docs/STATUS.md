@@ -6,7 +6,7 @@ _Last updated: 1 November 2026._
 
 | Area | How it was verified |
 |---|---|
-| Streaming chat with tools, screen events, memory in prompt, objectives/memory/settings APIs, security rules | Offline suite (32 tests) |
+| Streaming chat with tools, screen events, memory in prompt, objectives/memory/settings APIs, security rules | Offline suite (37 tests, incl. model recommendations) |
 | QR pairing from a scanner app | Reproduced the failure in Chromium over HTTPS with a cross-site link, fixed (`SameSite=Lax`), re-tested; regression test added |
 | Tool choice and `[[SCREEN]]` format | Real `qwen3.5:9b` and `qwen3.5:4b` on an RTX 3070 with the real prompt and schemas |
 | 9B speed | ~30 tok/s at 4,096 context, ~21 tok/s at 6,144 (≈5 GB of 6.3 GB on the GPU alongside Windows) |
@@ -23,6 +23,7 @@ _Last updated: 1 November 2026._
 - Tailscale mode (`tailscale serve --bg PORT`, Host header behaviour).
 - Real microphone wake word accuracy and false triggers; phone microphone over the tunnel.
 - Google Calendar with a real secret address.
+- GPU detection on real hardware (`nvidia-smi` / registry), the `qwen3.5:35b-a3b` tag name, real model downloads from the picker.
 
 ## Known issues / limitations
 

@@ -66,6 +66,7 @@ class Handler(SimpleHTTPRequestHandler):
                 'phone_access':store.get('phone_access','cloudflare'),'calendar_connected':bool(store.get('calendar_url')),'brave_connected':bool(store.get('brave_key')),
                 'voices':runtime.voice.catalog(),'models':runtime.installed_models(),'voice_status':runtime.voice.status})
         if parsed.path=='/api/briefing':return self.send_json(briefing(runtime))
+        if parsed.path=='/api/models':return self.send_json(runtime.models_info())
         if parsed.path=='/api/phone-qr':
             if not self.local:return self.send_json({'error':'Pairing is available on the PC only.'},403)
             if not runtime.phone_url:return self.send_json({'error':'Phone connection is starting.'},503)
@@ -104,8 +105,15 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path=='/api/objectives':return self.send_json(objectives_action(runtime.store,data))
             if self.path=='/api/memory':return self.send_json(memory_action(runtime.store,data))
             if self.path=='/api/settings':return self.send_json(settings_action(runtime,data))
+            if self.path=='/api/models':
+                tag=str(data.get('tag',''))
+                if data.get('action')=='download':runtime.start_pull(tag)
+                elif data.get('action')=='use':runtime.use_model(tag)
+                else:raise ValueError('Unknown action.')
+                return self.send_json(runtime.models_info())
             self.send_json({'error':'Unknown endpoint.'},404)
-        except (ValueError,TypeError,KeyError):self.send_json({'error':'Invalid request or audio format.'},400)
+        except ValueError as e:self.send_json({'error':str(e) if str(e) and not str(e).startswith(('invalid literal','could not convert','Expecting')) else 'Invalid request or audio format.'},400)
+        except (TypeError,KeyError):self.send_json({'error':'Invalid request or audio format.'},400)
         except (BrokenPipeError,ConnectionResetError):pass
         except Exception as e:self.send_json({'error':str(e) if isinstance(e,RuntimeError) else 'The local service could not finish. Check the Cortana launcher.'},503)
 def objectives_action(store,data):
@@ -135,7 +143,7 @@ def settings_action(runtime,data):
     if 'model' in data:
         model=str(data['model'])
         if not re.fullmatch(r'[\w.:/-]{1,80}',model):raise ValueError('Invalid model.')
-        store.set('model',model);runtime.model=model;threading.Thread(target=runtime.preload,daemon=True).start()
+        runtime.use_model(model)   # refuses models that are too big for this PC or not downloaded
     if 'home_location' in data:store.set('home_location',str(data['home_location']).strip()[:80])
     if 'calendar_url' in data:
         url=str(data['calendar_url']).strip()

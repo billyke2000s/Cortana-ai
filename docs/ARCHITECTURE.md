@@ -41,7 +41,7 @@ An Ollama instance that was already running before launch is left running.
 
 ## Startup sequence
 
-1. `Runtime()` creates the data folder and opens `cortana.db`, chooses the model (`CORTANA_MODEL` → setting → `qwen3.5:9b`),
+1. `Runtime()` creates the data folder and opens `cortana.db`, chooses the model (`CORTANA_MODEL` → setting → the hardware recommendation made in `ensure_ai()`),
    and creates the pairing token (persistent only in Tailscale mode).
 2. `AppServer` binds `127.0.0.1` (random port; fixed port 47817 in Tailscale mode); the URL is written to `launch-state.json`.
 3. Background: voice preparation starts in its own thread; then `ensure_ai()` (find/start/download Ollama, pull the model if
@@ -62,6 +62,8 @@ Errors in startup set `runtime.error`, are shown in the window and page, and the
 4. **Voice:** each `sentence` is immediately sent to `POST /api/speech` (`SpeechQueue.add`); the server synthesises with Piper (one process, serialised by a lock). The client schedules buffers back to back on the `AudioContext` clock.
 5. **Lip sync:** cues come from SAPI visemes (Windows voice) or `envelopeCues()` (loudness + zero-crossing for Piper), shifted to the shared timeline; `avatar.js` blends mouth poses per frame.
 6. **Display:** a `screen` event renders Markdown (escaped first) into the holographic panel.
+
+GPU/RAM detection and model ratings live in `hardware.py` (see D-019); `GET /api/models` exposes them to the Systems page.
 
 ## Storage
 

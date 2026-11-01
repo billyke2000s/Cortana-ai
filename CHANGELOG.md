@@ -2,6 +2,18 @@
 
 All notable changes. Dates are UK time.
 
+## [1.1.0] - 2026-11-01
+
+### Added
+- **Model recommendation & download**: detects GPU memory (nvidia-smi or the Windows display-adapter registry) and RAM,
+  rates every Qwen 3.5 model (Fast / Good / Slow / Too big), marks the recommended one, and downloads models from Systems
+  with a live progress bar. Too-big models can't be selected (enforced by the server). First run picks the recommended
+  model, or the best one already installed.
+- `GET/POST /api/models`; `app/hardware.py`; 5 new tests (37 total).
+
+### Fixed
+- Validation messages (e.g. "too big for this PC") now reach the page instead of a generic "Invalid request".
+
 ## [1.0.0] - 2026-11-01
 
 ### Added

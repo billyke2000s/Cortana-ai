@@ -48,6 +48,7 @@ storage, tools); a phone can open the same page through a paired HTTPS tunnel. S
 | `app/runtime.py` | `Runtime`: Ollama/Whisper/tunnel lifecycle, model selection & fallback, `SYSTEM_PROMPT`, `system_prompt()`, `SpokenStream`, `chat_stream()`, `transcribe()`. Also download/extract helpers and QR. | HTTP parsing, UI strings for pages |
 | `app/tools.py` | `TOOLS` (schemas the model sees), `TOOL_LABELS`, `CHANGES`, `run()` dispatcher, weather/search/PC/calendar implementations. | Anything that runs arbitrary commands |
 | `app/store.py` | SQLite schema and all reads/writes (settings, facts, messages, items). | Network, model calls |
+| `app/hardware.py` | GPU/RAM detection (`nvidia-smi`, then the display-adapter registry), `CATALOG` of Qwen models, `rate()`/`recommend()`. | Network calls, UI |
 | `app/voice.py` | Piper install, voices, the long-running `PiperProcess`, Windows voice fallback via `speech.ps1`. | Chat logic |
 | `app/speech.ps1` | Windows SAPI voice with viseme (mouth) events. | n/a |
 | `app/index.html` | Markup + base CSS for the main screen and dialogs. Loads `avatar.js`, `app.js`, `pages.js` as modules **in that order**. | Inline scripts with logic |
@@ -149,6 +150,7 @@ Don't rename them; other modules and tests use them.
 5. **The context budget is real.** `CONTEXT=6144` tokens must hold: system prompt (+ up to 40 facts) + tool schemas (~850 tokens) + history (`clean_messages(budget=6000)` chars) + tool results (2,500 chars each) + the reply (`num_predict=1200`). If you grow any of these, re-measure (see `docs/DECISIONS.md` D-004). Overflow silently drops the **start** of the prompt (her personality and rules).
 6. **Prompt changes MUST be tested on the real models** (`qwen3.5:9b` and `qwen3.5:4b`) with at least: a timer, "remember…", "how do I build a table in Python?", a reminder with a clock time, "tell me a joke". Report results. Small models follow **examples** better than rules.
 7. Model fallback: if the preferred model is missing or fails to load or stream, use `FAST_MODEL`. Don't remove this.
+7a. **Models:** never let the user switch to or download a model rated `too_big` (`Runtime.check_model` enforces this server-side; the UI only mirrors it). New models go in `hardware.CATALOG` with their real Ollama download size; keep thresholds in sync with `docs/DECISIONS.md` D-019 and `HardwareTests`. GPU detection must never crash startup (every probe is wrapped and falls back to "no GPU").
 8. Errors shown to users are plain English (`RuntimeError('…')`). Don't leak tracebacks, paths or exception reprs into the UI.
 9. Times: store UNIX timestamps (float, local clock); format with `when_text()`. The model gives reminders as `HH:MM` (today/tomorrow resolved by `parse_local_time`) because small models get dates wrong.
 10. SQLite: all access through `Store` methods (they hold the lock). Schema changes MUST be additive (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE … ADD COLUMN` guarded), never destructive. Existing users' databases must keep working.
@@ -287,7 +289,8 @@ Don't duplicate content between docs; link instead. Keep README claims true (e.g
 12. **Context overflow:** history + tools + results could exceed 4,096 tokens, silently cutting the system prompt. Context raised to 6,144 and budgets set. → D-004
 13. **Panel covered the navigation and her face.** `placeHolo()` keeps it above the nav and below ~40% of the screen height.
 14. **Weekday off by one west of UTC:** `new Date('2026-11-01')` is UTC midnight. Parse as local midday.
-15. **Test tooling:** `pkill -f <pattern>` killed the shell running it; unquoted `*` in shell variables globbed filenames; Playwright's Chromium picked up proxy env vars. Prefer PIDs, quote arguments, unset proxies for local HTTPS tests.
+15. **Download race:** marking a model download `done` before switching to it let the page see "done" with the old model still active, and it stopped polling. Switch first, then mark done.
+16. **Test tooling:** `pkill -f <pattern>` killed the shell running it; unquoted `*` in shell variables globbed filenames; Playwright's Chromium picked up proxy env vars. Prefer PIDs, quote arguments, unset proxies for local HTTPS tests.
 
 ---
 

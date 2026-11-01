@@ -12,7 +12,7 @@
 <img src="https://img.shields.io/badge/voice-Piper-7fd4ff?style=flat-square" alt="Piper">
 <img src="https://img.shields.io/badge/ears-Whisper.cpp-7fd4ff?style=flat-square" alt="Whisper.cpp">
 <img src="https://img.shields.io/badge/3D-Three.js-7fd4ff?style=flat-square&logo=threedotjs&logoColor=white" alt="Three.js">
-<img src="https://img.shields.io/badge/offline%20tests-32%20passing-3df58a?style=flat-square" alt="32 offline tests passing">
+<img src="https://img.shields.io/badge/offline%20tests-37%20passing-3df58a?style=flat-square" alt="32 offline tests passing">
 <img src="https://img.shields.io/badge/AI%20agents-read%20AGENTS.md-ffb35c?style=flat-square" alt="AI agents: read AGENTS.md">
 
 ### Your PC is the core. Your phone is the display.
@@ -38,7 +38,7 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 
 - 🗣️ **Talk naturally.** Tap the mic or just say *"Hey Cortana"*.
 - 🌊 **She answers while she's still thinking.** Replies stream sentence by sentence, so she starts speaking within about a second.
-- 🧠 **Smart and private.** Qwen 3.5 9B runs on your graphics card through Ollama, with an automatic fallback to the 4B model.
+- 🧠 **Smart and private.** Qwen 3.5 runs on your graphics card through Ollama. She **detects your GPU and recommends the best model it can run**, greys out ones that are too big, and downloads your pick with a progress bar.
 - 🛠️ **She can actually do things:** timers, reminders, a to-do list, long-term memory, weather, web search, your calendar, and media/volume/app control on your PC.
 - 🖥️ **Holographic display panel.** Code, tables and step-by-step answers slide up on screen instead of being read aloud, with syntax colours and a **Copy** button.
 - 📱 **Your phone becomes the screen.** Scan a QR code and the same interface runs on your phone, still powered by your PC.
@@ -63,6 +63,7 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 | 📅 | **Calendar** | *"What's on today?"* | Mission Briefing (read-only Google/iCal) |
 | 🎵 | **PC controls** | *"Pause the music."* · *"Volume up."* · *"Open calculator."* | Acts on your PC (fixed allow-list) |
 | 💻 | **Code & tables** | *"How do I build a table in Python?"* | Display panel with **Copy** |
+| 🎛️ | **Model picker** | **Systems** → pick from models rated *Fast / Good / Slow / Too big* for your GPU | Recommended model ★, one-click download |
 | 📰 | **Daily briefing** | Tap **Mission Briefing → Read my briefing** | Weather, events and objectives, spoken |
 
 > Abilities can be switched off in **Systems**. PC controls only ever do the listed actions: no shell commands, no file access.
@@ -193,6 +194,7 @@ cortana-ai/
 │   ├── tools.py            # abilities the AI can call
 │   ├── store.py            # SQLite: settings, memory, objectives, conversation log
 │   ├── voice.py            # Piper + Windows voice
+│   ├── hardware.py         # GPU/RAM detection, model ratings and recommendation
 │   ├── speech.ps1          # Windows voice with mouth timings
 │   ├── index.html · app.js · pages.js · avatar.js · responsive.css · mic-worklet.js
 │   ├── vendor/             # three.js (MIT)
@@ -229,10 +231,10 @@ cortana-ai/
 ## 🧪 Tests
 
 ```bash
-python -m unittest discover -s tests -v     # 32 offline tests, about 1 second, no GPU or internet needed
+python -m unittest discover -s tests -v     # 37 offline tests, about 1 second, no GPU or internet needed
 ```
 
-They cover the sentence streamer, storage, every tool, calendar parsing, the whole HTTP API (streaming chat with tool calls, objectives, memory, settings) and the security rules, including a regression test for phone QR pairing. See [TESTING.md](docs/TESTING.md).
+They cover the sentence streamer, storage, every tool, model recommendations, calendar parsing, the whole HTTP API (streaming chat with tool calls, objectives, memory, settings) and the security rules, including a regression test for phone QR pairing. See [TESTING.md](docs/TESTING.md).
 
 ---
 

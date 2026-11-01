@@ -16,7 +16,8 @@ python -m unittest discover -s tests -v
 | `StoreTests` | settings, fact de-duplication/forgetting, due alerts and acknowledgement rules |
 | `ToolTests` | every tool's success and failure paths, `HH:MM` reminders, past times refused, unknown tools never raise, PC control switch |
 | `CalendarTests` | iCal parsing: escaped text, all-day, weekly RRULE, EXDATE, cancelled events, ordering |
-| `ApiTests` | status, streaming with and without tools, screen events, memory reaching the prompt, objectives API, settings validation, **secrets never returned**, **cross-origin POST blocked**, **private files not served**, **phone pairing (SameSite=Lax regression)** |
+| `HardwareTests` | model recommendation per card size, too-big models unselectable, low RAM blocks spilling, unknown tags hidden |
+| `ApiTests` | status, streaming with and without tools, screen events, memory reaching the prompt, objectives API, settings validation, **secrets never returned**, **cross-origin POST blocked**, **private files not served**, **phone pairing (SameSite=Lax regression)**, model download/use guards and progress |
 
 ## 2. Live check (Windows, real services)
 

@@ -92,14 +92,35 @@ function briefingSpeech(b){
 }
 
 /* ---------------- Systems (settings) ---------------- */
-const MODEL_NAMES={'qwen3.5:9b':'Smart — Qwen 3.5 9B','qwen3.5:4b':'Fast — Qwen 3.5 4B','qwen3.5:27b':'Maximum — Qwen 3.5 27B (slow on 8 GB)'};
+/* AI model picker: rated for this PC's graphics card; models that are too big can't be chosen. */
+const RATING={fast:['FAST','pg-r-fast'],good:['GOOD','pg-r-good'],slow:['SLOW','pg-r-slow'],too_big:['TOO BIG','pg-r-big']};
+let modelPoll=null;
+async function renderModels(){
+ const box=document.getElementById('sModels');if(!box)return;
+ let m;try{m=await get('/api/models');}catch(e){box.innerHTML=`<p class="pg-err">${esc(e.message)}</p>`;return;}
+ const hw=m.hardware,gpu=hw.gpu?`${esc(hw.gpu)} · ${esc(hw.vram_gb)} GB graphics memory`:'No graphics card detected';
+ const pull=m.pull;
+ box.innerHTML=`<p class="pg-muted">${gpu} · ${esc(hw.ram_gb)} GB RAM${m.disk_free_gb!=null?` · ${esc(Math.round(m.disk_free_gb))} GB free disk`:''}</p>
+  <ul class="pg-list pg-models">${m.models.map(r=>{
+   const [badge,cls]=RATING[r.rating]||['?',''];const current=r.tag===m.current;const pulling=pull.active&&pull.tag===r.tag;
+   const action=current?'<span class="pg-ok">IN USE</span>':!r.selectable||pulling?'':r.installed?`<button type="button" class="pg-btn" data-act="use-model" data-tag="${esc(r.tag)}">Use</button>`:
+    `<button type="button" class="pg-btn" data-act="get-model" data-tag="${esc(r.tag)}"${pull.active?' disabled':''}>Download ${esc(r.size_gb)} GB</button>`;
+   return `<li class="pg-item pg-model${r.selectable?'':' pg-disabled'}${current?' pg-current':''}">
+    <span class="pg-text"><b>${esc(r.label)}</b> <span class="pg-badge ${cls}">${badge}</span>${r.recommended?' <span class="pg-badge pg-r-rec">★ RECOMMENDED</span>':''}${r.installed&&!current?' <span class="pg-ok">downloaded</span>':''}
+     <span class="pg-due">${esc(r.blurb)} ${esc(r.note)}</span>
+     ${pulling?`<span class="pg-bar"><i style="width:${Number(pull.pct)||0}%"></i></span><span class="pg-due">${esc(pull.status)} ${esc(pull.pct)}%</span>`:''}</span>${action}</li>`;}).join('')}</ul>
+  ${pull.error?`<p class="pg-err">Download failed: ${esc(pull.error)}</p>`:''}
+  ${m.other_installed.length?`<p class="pg-muted">Also installed: ${m.other_installed.map(esc).join(', ')}</p>`:''}`;
+ clearTimeout(modelPoll);
+ if(pull.active&&D.page==='settings')modelPoll=setTimeout(renderModels,1000);
+}
 async function systems(){
  try{
   const s=await get('/api/settings');
   const opt=(v,t,sel)=>`<option value="${esc(v)}"${sel?' selected':''}>${esc(t)}</option>`;
   page('settings','Systems',`
    <h3>Assistant</h3>
-   <label>AI model<select id="sModel">${(s.models.length?s.models:[s.model]).map(m=>opt(m,MODEL_NAMES[m]||m,m===s.model)).join('')}</select></label>
+   <div id="sModels"><p class="pg-muted">Checking your hardware…</p></div>
    <label class="pg-check"><input type="checkbox" id="sTools"${s.tools_enabled?' checked':''}> Abilities (timers, memory, weather, search, calendar)</label>
    <label class="pg-check"><input type="checkbox" id="sPC"${s.pc_controls?' checked':''}> PC controls (media, volume, open allowed apps)</label>
    <h3>Voice</h3>
@@ -119,12 +140,12 @@ async function systems(){
    <button type="button" class="pg-btn pg-wide" data-act="display">Hologram, speech pace and phone QR…</button>
    <button type="button" class="pg-primary pg-wide" data-act="save">Save</button><p id="sMsg" class="pg-muted" role="status"></p>`,'CORTANA // SYSTEMS');
   document.getElementById('sWake').onchange=async e=>{if(!await C.setWake(e.target.checked))e.target.checked=false;};
+  renderModels();
   systems.initial=s;
  }catch(e){failed('settings','Systems',e);}
 }
 async function saveSystems(){
  const s=systems.initial||{},v=id=>document.getElementById(id),data={};
- if(v('sModel').value!==s.model)data.model=v('sModel').value;
  data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;
  if(v('sEngine').value!==s.voice_engine)data.voice_engine=v('sEngine').value;
  if(v('sVoice').value!==s.voice)data.voice=v('sVoice').value;
@@ -148,6 +169,7 @@ D.body().addEventListener('click',async e=>{
    await post('/api/memory',{action:'clear_history'});memory();}
   else if(act==='read'&&lastBriefing)C.speak(briefingSpeech(lastBriefing));
   else if(act==='save')saveSystems();
+  else if(act==='get-model'||act==='use-model'){btn.disabled=true;await post('/api/models',{action:act==='get-model'?'download':'use',tag:btn.dataset.tag});renderModels();}
   else if(act==='disconnect'){await post('/api/settings',{calendar_url:''});systems();}
   else if(act==='display'){D.hide();document.getElementById('settingsDialog').showModal();}
  }catch(err){alertIn(err.message);}

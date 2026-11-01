@@ -73,5 +73,11 @@ in that mode only. **Cost:** requires Tailscale on both devices; [Unverified] on
 **Why:** the repo is public; the model is a fan port of a Microsoft character with an unverified licence. The app degrades
 gracefully without it, and repo artwork is original.
 
+### D-019: Recommend and restrict models by detected hardware
+**Why:** users shouldn't guess which model their GPU can run, or download 17 GB they can't use. Thresholds come from
+measurements on an 8 GB RTX 3070 (9B ≈ 94% on the GPU → ~21 tok/s, acceptable) with 1.5 GB reserved for Windows and the
+browser. Too-big models are refused server-side, not just hidden. On first run, an already-installed usable model is
+preferred over forcing a large download. **Cost:** estimates, not benchmarks; VRAM used by games at that moment isn't considered.
+
 ### D-018: No voice cloning of third parties
 The project supports training a Piper voice only from the owner's (or a consenting person's) recordings.

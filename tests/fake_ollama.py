@@ -7,6 +7,7 @@ import json, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LAST_REQUEST = {}
+INSTALLED = ['qwen3.5:9b', 'qwen3.5:4b']
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -31,12 +32,17 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(.005)
 
     def do_GET(self):
-        self._json({'models': [{'name': 'qwen3.5:9b'}, {'name': 'qwen3.5:4b'}]})
+        self._json({'models': [{'name': n} for n in INSTALLED]})
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         if self.path == '/api/generate':
             return self._json({'done': True})
+        if self.path == '/api/pull':
+            if body.get('model') == 'qwen3.5:missing':
+                return self._stream([{'error': 'pull model manifest: file does not exist'}])
+            INSTALLED.append(body['model'])
+            return self._stream([{'status': 'pulling manifest'}] + [{'status': 'downloading', 'total': 100, 'completed': c} for c in (25, 50, 100)] + [{'status': 'success'}])
         LAST_REQUEST.clear()
         LAST_REQUEST.update(body)
         messages = body['messages']
