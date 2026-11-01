@@ -187,21 +187,27 @@ def _unfold(text):
     return re.sub(r'\r?\n[ \t]', '', text).splitlines()
 
 def _parse_dt(value, params):
+    """Return (datetime, all_day). Times with Z or a TZID stay timezone-aware in their own zone, so repeats are
+    expanded in that zone's wall-clock time (a weekly 09:30 stays 09:30 across a clock change). Floating times and
+    dates stay naive. Convert to local time only after expanding (see _local)."""
+    from datetime import timezone
     from zoneinfo import ZoneInfo
     if params.get('VALUE') == 'DATE' or re.fullmatch(r'\d{8}', value):
         return datetime.strptime(value[:8], '%Y%m%d'), True
-    utc = value.endswith('Z')
     d = datetime.strptime(value.rstrip('Z')[:15], '%Y%m%dT%H%M%S')
-    if utc:
-        from datetime import timezone
-        return d.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None), False
+    if value.endswith('Z'):
+        return d.replace(tzinfo=timezone.utc), False
     tzid = params.get('TZID')
     if tzid:
         try:
-            return d.replace(tzinfo=ZoneInfo(tzid)).astimezone().replace(tzinfo=None), False
+            return d.replace(tzinfo=ZoneInfo(tzid)), False
         except Exception:
             pass  # unknown zone: treat as local time
     return d, False
+
+def _local(d):
+    """Aware datetime -> naive local time; naive values are already local."""
+    return d.astimezone().replace(tzinfo=None) if d.tzinfo else d
 
 def parse_ics(text):
     events, cur = [], None
@@ -242,20 +248,35 @@ def events_on(events, day):
         if e.get('status') == 'CANCELLED':
             continue
         start = e['start']
-        length = (e.get('end') or start + (timedelta(days=1) if e.get('all_day') else timedelta(hours=1))) - start
+        end = e.get('end')
+        if end is not None and (end.tzinfo is None) != (start.tzinfo is None):
+            end = None  # mixed aware/naive values can't be subtracted; fall back to the default length
+        length = (end or start + (timedelta(days=1) if e.get('all_day') else timedelta(hours=1))) - start
         starts = [start]
         if e.get('rrule'):
             try:
                 from dateutil.rrule import rrulestr
-                rule = rrulestr(e['rrule'], dtstart=start, ignoretz=True)
-                starts = rule.between(lo - length, hi, inc=True)
+                rule = rrulestr(e['rrule'], dtstart=start)
+                # Search a generous window in the event's own zone, then filter precisely in local time below.
+                pad = length + timedelta(days=1)
+                wlo, whi = lo - pad, hi + timedelta(days=1)
+                if start.tzinfo:
+                    wlo, whi = wlo.replace(tzinfo=start.tzinfo), whi.replace(tzinfo=start.tzinfo)
+                starts = rule.between(wlo, whi, inc=True)
             except Exception:
-                starts = [start]
+                try:  # e.g. a UNTIL in UTC on a floating start: expand naively, as before
+                    from dateutil.rrule import rrulestr
+                    naive = start.replace(tzinfo=None)
+                    starts = rrulestr(e['rrule'], dtstart=naive, ignoretz=True).between(lo - length, hi, inc=True)
+                    starts = [x.replace(tzinfo=start.tzinfo) for x in starts]
+                except Exception:
+                    starts = [start]
         for s in starts:
-            if s in e['exdates']:
+            if s in e['exdates']:  # aware values compare by instant, across zones
                 continue
-            if s < hi and s + length > lo:
-                out.append({'title': e.get('title', 'Busy'), 'start': s, 'all_day': e.get('all_day', False),
+            ls = _local(s)
+            if ls < hi and ls + length > lo:
+                out.append({'title': e.get('title', 'Busy'), 'start': ls, 'all_day': e.get('all_day', False),
                             'location': e.get('location', '')})
     out.sort(key=lambda x: (not x['all_day'], x['start']))
     return out

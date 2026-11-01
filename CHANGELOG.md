@@ -10,8 +10,13 @@ All notable changes. Dates are UK time.
   with a live progress bar. Too-big models can't be selected (enforced by the server). First run picks the recommended
   model, or the best one already installed.
 - `GET/POST /api/models`; `app/hardware.py`; 5 new tests (37 total).
+- **Downloadable `Cortana.exe`**: `.github/workflows/release.yml` runs the tests and builds the exe on a Windows runner,
+  then attaches it to a GitHub release.
 
 ### Fixed
+- **Calendar repeats across a clock change**: weekly events were expanded in the PC's local time, so after a
+  BST/GMT change they moved by an hour and cancelled dates (EXDATE) still showed. Repeats are now expanded in the event's
+  own time zone. Found by the Windows release build (UTC runner).
 - **Hair rendering** (dark helmet, strands across the face, varying per load): hair now writes depth as a cut-out material.
 - Validation messages (e.g. "too big for this PC") now reach the page instead of a generic "Invalid request".
 
