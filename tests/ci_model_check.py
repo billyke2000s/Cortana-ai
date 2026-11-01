@@ -10,6 +10,7 @@ os.environ.setdefault('CORTANA_DATA_DIR', tempfile.mkdtemp())
 import runtime, store, tools  # noqa: E402
 
 MODEL = sys.argv[1] if len(sys.argv) > 1 else 'qwen3.5:4b'
+REPEAT = int(os.environ.get('REPEAT', '2'))   # each ask runs this many times: tool choice varies between runs
 URL = os.environ.get('OLLAMA_URL', 'http://127.0.0.1:11434')
 
 def chat(messages, use_tools=True, images=None, predict=400):
@@ -41,7 +42,7 @@ CASES = [   # (ask, expected tool or None, check on arguments)
 
 results = []
 print(f'=== Tool choice: {MODEL}, real prompt ({len(system["content"])} chars) and {len(tools.TOOLS)} tool schemas ===')
-for ask, want, check in CASES:
+for ask, want, check in [c for c in CASES for _ in range(REPEAT)]:
     t = time.time()
     msg = chat([system, {'role': 'user', 'content': ask}])
     calls = [c['function'] for c in msg.get('tool_calls') or []]

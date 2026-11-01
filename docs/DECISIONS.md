@@ -116,9 +116,10 @@ reminders plus a Google "add event" link per event. Google iCal events also get 
 
 ### D-026: Tool results above 2,500 characters for reading tools
 `RESULT_LIMIT`: web search 3,500, documents 3,200, clipboard 3,500. Estimated worst case at 6,144 with 18 tool schemas
-(characters/4): prompt with 40 facts and the document list ~1,100 + schemas ~1,520 + full history ~1,500 + one 3,500-char
-result ~950 ≈ 5,100, leaving ~1,000 tokens for the reply (typical replies are 50-300). New-tool descriptions were cut short
-to stay inside this. Re-measure before adding tools or raising limits.
+(characters/4): prompt with 40 facts and the document list ~1,150 + schemas ~1,660 + full history ~1,500 + one 3,500-char
+result ~950 ≈ 5,260, leaving ~880 tokens for the reply in that worst case (typical replies are 50-300). Shorter tool
+descriptions were tried to save ~140 tokens, but the real 4B model then skipped tools twice in 11 asks (it invented a weather
+report and a document summary), so the tested descriptions were kept. Re-measure before adding tools or raising limits.
 
 ### D-018: No voice cloning of third parties
 The project supports training a Piper voice only from the owner's (or a consenting person's) recordings.

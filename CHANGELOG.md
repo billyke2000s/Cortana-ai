@@ -2,6 +2,23 @@
 
 All notable changes. Dates are UK time.
 
+## [1.4.0] - 2026-11-01
+
+### Added
+- **Read your files**: PDF, Word (.docx), PowerPoint (.pptx) and text files, from the 📎 in Chat, by dropping them on the
+  panel, from Memory → Documents, or a whole folder (PC only). "Summarise this", "what does the brief say about the deadline?",
+  "quiz me on chapter 3": answers cite the document and page. Only the extracted text is kept, on the PC. Adds pypdf (BSD-3).
+- **See your screen**: "what's this error on my screen?" captures the primary screen and the local Qwen model reads it
+  (Qwen 3.5 takes images at every size). The screenshot is deleted straight away.
+- **Clipboard**: "summarise what I copied", "fix this code I copied" (text or a copied image), "copy that to my clipboard".
+  Every chat card has a **Copy** button.
+- **Find files**: "where's my coursework PDF from last week?" searches Desktop, Documents, Downloads, OneDrive and more;
+  "open number 1" / "read number 1". She never opens programs, scripts or shortcuts.
+- **Calendar events**: "book study time Thursday at 3" saves the event, reminds you 10 minutes before, and shows an
+  **Add to Google Calendar** button. Google Calendar events also get a reminder 10 minutes before.
+- **Screen, clipboard and file access** switch in Systems. Cards for found files and new events, built from the data.
+- `/api/documents`, `/api/events`; real-model and Windows checks in the Live check workflow. 16 new tests (62 total).
+
 ## [1.3.0] - 2026-11-01
 
 ### Added
