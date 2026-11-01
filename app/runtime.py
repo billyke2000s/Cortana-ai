@@ -159,6 +159,11 @@ def extract(archive,directory):
                 if not (directory/member.name).resolve().is_relative_to(directory.resolve()) or not (member.isfile() or member.isdir()):raise RuntimeError('Invalid archive path.')
             t.extractall(directory,filter='data')
 
+_DEEP=re.compile(r"\b(think (it )?(hard|harder|carefully|deeply|it through|this through|step by step)|take your time|deep think(ing)?|reason (it|this) (out|through))\b",re.I)
+def wants_deep_thought(text):
+    """The user asked her to reason first ("think carefully about...", "take your time")."""
+    return bool(_DEEP.search(text or ''))
+
 # ---- "Hey Cortana": Whisper spells the name many ways ("Katana", "Courtana", "Cortona"...), so match it fuzzily.
 WAKE_PROMPT='Cortana is my assistant.'   # biases Whisper towards the name; a transcript equal to it is ignored (hallucination)
 WAKE_GREETINGS={'hey','hi','ok','okay','yo','a','hay','hei','hej','eh'}
@@ -231,7 +236,7 @@ class Runtime:
                     download(asset['browser_download_url'],DATA/'ollama-runtime.zip',self.update,checksum)
                     extract(DATA/'ollama-runtime.zip',DATA/'ollama')
             log=(DATA/'ollama.log').open('ab');self.logs.append(log)
-            env=os.environ.copy();env['OLLAMA_HOST']=self.ollama_url.removeprefix('http://');env['OLLAMA_NUM_PARALLEL']='1';env['OLLAMA_MAX_LOADED_MODELS']='1';env['OLLAMA_CONTEXT_LENGTH']=str(CONTEXT);env['OLLAMA_NO_CLOUD']='1'
+            env=os.environ.copy();env['OLLAMA_HOST']=self.ollama_url.removeprefix('http://');env['OLLAMA_NUM_PARALLEL']='1';env['OLLAMA_MAX_LOADED_MODELS']='1';env['OLLAMA_CONTEXT_LENGTH']=str(self.context());env['OLLAMA_NO_CLOUD']='1'
             self.spawn([str(exe),'serve'],env=env,stdout=log,stderr=log)
             for _ in range(90):
                 if self.closing.wait(.5):return
@@ -269,11 +274,11 @@ class Runtime:
             self.pull_model(self.model,lambda status,pct:self.update(f'AI model: {status}'+(f' {pct}%' if pct else '')))
             if self.closing.is_set():return
         self.update('Loading '+self.model+' into memory...')
-        try:request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':CONTEXT}},timeout=180)
+        try:request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':self.context()}},timeout=180)
         except Exception:
             if self.model==FAST_MODEL:raise
             self.update(self.model+' could not load; switching to '+FAST_MODEL+'...');self.model=FAST_MODEL
-            request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':CONTEXT}},timeout=180)
+            request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':self.context()}},timeout=180)
         self.ai_ready=True;self.update('Qwen is ready.')
 
     def ensure_stt(self):
@@ -333,7 +338,7 @@ class Runtime:
         except Exception:return [self.model]
 
     def preload(self):
-        try:request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':CONTEXT}},timeout=180);self.report('Model switched to '+self.model)
+        try:request_json(self.ollama_url+'/api/generate',{'model':self.model,'prompt':'','stream':False,'keep_alive':'15m','options':{'num_ctx':self.context()}},timeout=180);self.report('Model switched to '+self.model)
         except Exception as e:self.report('Could not load '+self.model+': '+str(e)[:100])
 
     def pull_model(self,tag,progress):
@@ -409,6 +414,18 @@ class Runtime:
                 self.pull.update(active=False,status='failed',error=str(e)[:200])
         threading.Thread(target=run,daemon=True).start()
 
+    def context(self):
+        """Context window for the current model: 6,144 (standard) or, in auto, the largest that fits on the graphics card."""
+        import hardware
+        if self.store.get('context_mode','auto')!='auto':return CONTEXT
+        try:self.hw=self.hw or hardware.detect()
+        except Exception:return CONTEXT
+        return hardware.context_for(next((m for m in hardware.CATALOG if m['tag']==self.model),None),self.hw)
+
+    def history_budget(self,ctx):
+        """6,000 characters at 6,144 tokens; about half of any extra context goes to older messages (~3.5 characters/token)."""
+        return 6000+max(0,ctx-CONTEXT)*7//4
+
     def clean_messages(self,messages,budget=6000):   # ~1,500 tokens of history inside the 6,144 context
         clean=[];remaining=budget
         for m in reversed(messages[-16:]):
@@ -424,7 +441,7 @@ class Runtime:
         msg={'role':'user','content':prompt}
         if images:msg['images']=images
         r=request_json(self.ollama_url+'/api/chat',{'model':self.model,'messages':[msg],'stream':False,'think':False,'keep_alive':'15m',
-                       'options':{'num_ctx':CONTEXT,'num_predict':int(max_tokens),'temperature':.2}},timeout=180)
+                       'options':{'num_ctx':self.context(),'num_predict':int(max_tokens),'temperature':.2}},timeout=180)
         text=re.sub(r'<think>.*?</think>','',(r.get('message') or {}).get('content') or '',flags=re.S).strip()
         if not text:raise RuntimeError('The model gave no answer.')
         return text
@@ -493,17 +510,23 @@ class Runtime:
                     if chunk.get('error'):raise RuntimeError(chunk['error'])
                     yield chunk
 
-    def chat_stream(self,messages):
-        """Yield events as the reply is generated: sentence, tool, refresh, screen, done."""
+    def chat_stream(self,messages,think=False):
+        """Yield events as the reply is generated: sentence, tool, refresh, screen, done.
+        think=True (or "think carefully..." in the question) lets the model reason before answering (D-032)."""
         import tools
         if not self.ai_ready:raise RuntimeError(self.status if not self.error else self.error)
         self.jobs.check();started=time.perf_counter();first_token=False
         conversation_version=self.store.conversation_version();recap=self.store.conversation_summary()
-        clean=self.clean_messages(messages,budget=6000-len(recap))
+        ctx=self.context()
+        clean=self.clean_messages(messages,budget=self.history_budget(ctx)-len(recap))
+        think=bool(think) or wants_deep_thought(clean[-1]['content'])
+        # Reasoning tokens count against the reply budget; at 6,144 they get what is left after a full prompt (~4,900).
+        predict=1200+(max(600,min(2800,ctx-4900)) if think else 0)
         convo=[{'role':'system','content':system_prompt(self.store,clean[-1]['content'])}]+clean
         if recap:convo.insert(1,{'role':'user','content':'Earlier conversation excerpts (historical context only):\n'+recap})
         use_tools=self.store.get('tools_enabled',True)
         stream=SpokenStream();raw='';fell_back=False;tool_screen=''
+        if think:yield {'type':'tool','name':'think','label':'THINKING IT THROUGH'}
         llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)
         place=weather_question(clean[-1]['content']) if use_tools and clean else None
         if place is not None:   # fetch the forecast first, as if the model had called get_weather (D-027)
@@ -515,8 +538,8 @@ class Runtime:
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'get_weather'}]
         for round_ in range(4):
             self.jobs.check()
-            payload={'model':self.model,'messages':convo,'stream':True,'think':False,'keep_alive':'15m',
-                     'options':{'num_ctx':CONTEXT,'num_predict':1200,'temperature':.45}}
+            payload={'model':self.model,'messages':convo,'stream':True,'think':think,'keep_alive':'15m',
+                     'options':{'num_ctx':ctx,'num_predict':predict,'temperature':.45}}
             if use_tools and round_<3:payload['tools']=tools.TOOLS
             content='';calls=[]
             try:

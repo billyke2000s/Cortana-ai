@@ -28,6 +28,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', 'application/x-ndjson')
         self.end_headers()
+        if getattr(self, 'think', False):   # real Ollama streams reasoning in message.thinking before any content
+            chunks = [{'message': {'role': 'assistant', 'content': '', 'thinking': w + ' '}} for w in 'First I weigh the options.'.split()] + list(chunks)
         for c in chunks:
             self.wfile.write((json.dumps(c) + '\n').encode())
             self.wfile.flush()
@@ -49,6 +51,7 @@ class Handler(BaseHTTPRequestHandler):
         LAST_REQUEST.update(body)
         if body.get('stream') is not False:
             CHAT_REQUESTS.append(body)   # every streaming chat request, oldest first
+            self.think = body.get('think') is True
         messages = body['messages']
         if body.get('stream') is False:   # real Ollama returns one JSON object when stream is false
             m = messages[-1]

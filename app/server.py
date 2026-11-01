@@ -9,7 +9,7 @@ UNPAIRED_PAGE=('<!doctype html><meta name=viewport content="width=device-width,i
  '<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#020814;color:#e8f4ff;font:16px system-ui;text-align:center;padding:24px">'
  '<div><h1 style="color:#9fe2ff;letter-spacing:.12em">CORTANA</h1><p>This phone isn\'t paired with this session.</p>'
  '<p style="color:#a9c6e6">Scan the QR code shown in the Cortana window on your PC.<br>Each time Cortana restarts it shows a new QR code, so old links stop working.</p></div>').encode()
-SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications')
+SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode')
 _weather_cache={'at':0,'key':None,'value':None}
 class AppServer(ThreadingHTTPServer):
     daemon_threads=True
@@ -64,7 +64,7 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/settings':
             store=runtime.store
             return self.send_json({**{k:store.get(k) for k in SETTINGS_PUBLIC},'model':runtime.model,'voice':store.get('voice','en_US-hfc_female-medium'),
-                'expression_mode':store.get('expression_mode','normal'),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
+                'expression_mode':store.get('expression_mode','normal'),'context_mode':store.get('context_mode','auto'),'context':runtime.context(),'setup_complete':store.get('setup_complete',False),'native_notifications':store.get('native_notifications',True),
                 'voice_engine':store.get('voice_engine','piper'),'pc_controls':store.get('pc_controls',True),'tools_enabled':store.get('tools_enabled',True),'pc_access':store.get('pc_access',True),
                 'phone_access':store.get('phone_access','cloudflare'),'calendar_connected':bool(store.get('calendar_url')),'brave_connected':bool(store.get('brave_key')),
                 'voices':runtime.voice.catalog(),'models':runtime.installed_models(),'voice_status':runtime.voice.status})
@@ -125,8 +125,10 @@ class Handler(SimpleHTTPRequestHandler):
             if self.path=='/api/chat-stream':
                 messages=data.get('messages',[])
                 if not isinstance(messages,list) or len(messages)>20 or not all(isinstance(m,dict) for m in messages):raise ValueError('Invalid conversation.')
+                think=data.get('think',False)
+                if not isinstance(think,bool):raise ValueError('Use true or false for think.')
                 def events():
-                    with runtime.jobs.scope(data.get('request_id')):yield from runtime.chat_stream(messages)
+                    with runtime.jobs.scope(data.get('request_id')):yield from runtime.chat_stream(messages,think)
                 return self.stream_events(events())
             if self.path=='/api/objectives':return self.send_json(objectives_action(runtime.store,data))
             if self.path=='/api/memory':return self.send_json(memory_action(runtime.store,data))
@@ -182,6 +184,9 @@ def settings_action(runtime,data):
         if url and not re.fullmatch(r'https://\S{10,800}',url):raise ValueError('The calendar address must start with https://')
         store.set('calendar_url',url)
     if 'brave_key' in data:store.set('brave_key',str(data['brave_key']).strip()[:120])
+    if 'context_mode' in data:
+        if data['context_mode'] not in ('auto','standard'):raise ValueError('Choose Auto or Standard memory size.')
+        store.set('context_mode',data['context_mode'])
     if 'expression_mode' in data:
         if data['expression_mode'] not in ('normal','expressive'):raise ValueError('Choose Normal or Expressive.')
         store.set('expression_mode',data['expression_mode'])

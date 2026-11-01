@@ -30,7 +30,7 @@ Escape or the stop button returns to `idle` from any state and cancels requests 
   disabled). The user presses Use (installed) or Download; the choice is saved and nothing loads until then. Headless runs
   (`--headless`) and `CORTANA_MODEL` skip the question and pick automatically: the **recommended** model if it's installed;
   otherwise the best installed model that isn't too big (and says which one is recommended); if none is usable, she downloads
-  the recommended one. `num_ctx` 6,144, `temperature` 0.45, up to 1,200 output tokens, thinking off. If the model fails to load
+  the recommended one. `num_ctx` 6,144 by default; **Auto** memory size uses the largest of 8,192/12,288/16,384 whose cache still fits on the graphics card next to the model (6,144 on the processor, mixture-of-experts or tight cards), and gives about half the extra room to older messages. `temperature` 0.45, up to 1,200 output tokens. **Deep thinking** (🧠 in Chat, or "think carefully about…" / "take your time") turns reasoning on and adds up to 2,800 tokens for it; the reasoning is never spoken. If the model fails to load
   or fails before producing text, she switches to `qwen3.5:4b` and retries once.
 - Recommendation (`hardware.py`): usable graphics memory = total − 1.5 GB; need = download size + 0.3 GB. Fast = fits;
   Good = ≥80% fits; Slow = ≥60%; Too big = less, or the overflow doesn't fit in RAM − 6 GB (mixture-of-experts models: Good

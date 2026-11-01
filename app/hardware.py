@@ -123,6 +123,22 @@ def rate(model, hw):
     return 'too_big', round(frac * 100), f'Needs about {need:.0f} GB of graphics memory; your card has {vram:.0f} GB.'
 
 
+CONTEXT_STEPS = (16384, 12288, 8192, 6144)   # largest first; 6,144 is the tested baseline (D-004)
+KV_GB_PER_1K = OVERHEAD_GB / 6.144           # context cache cost, scaled from the 9B measurement
+
+
+def context_for(model, hw):
+    """Largest context whose cache still fits on the graphics card next to the model; 6,144 otherwise (CPU, MoE, tight cards)."""
+    vram = hw.get('vram_gb') if hw else None
+    if not model or not vram or model.get('moe'):
+        return CONTEXT_STEPS[-1]
+    usable = max(0.0, vram - WINDOWS_RESERVE_GB)
+    for steps in CONTEXT_STEPS:
+        if model['size_gb'] + steps / 1024 * KV_GB_PER_1K <= usable:
+            return steps
+    return CONTEXT_STEPS[-1]
+
+
 def recommend(hw, installed=(), available=None):
     """Rate every model and pick the most capable one that runs fast or well. `available` limits the list to tags that exist."""
     rows = []

@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const app=$('app'),out=$('transcript'),label=$('listenLabel'),mic=$('mic');
 const clientId=crypto.randomUUID?.().replaceAll('-','')||Math.random().toString(36).slice(2);
-let activeJob=null,turnStarted=0,playingText='',restorePromise=null,restored=false,modePreviewUntil=0;
+let deepThinking=false,activeJob=null,turnStarted=0,playingText='',restorePromise=null,restored=false,modePreviewUntil=0;
 const wake={on:false,stream:null,input:null,node:null,busy:false,pending:null};
 let queue=null,state='idle',audioContext=null,source=null,requestId=0,controller=null,recording=null,workletReady=false,capabilities={ai:false,timedSpeech:false},history=[];
 const avatar=()=>window.CortanaAvatar;
@@ -91,7 +91,7 @@ async function send(text){
   else if(ev.type==='error')throw Error(ev.error);
  };
  try{
-  const r=await fetch('/api/chat-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,request_id:activeJob}),signal:controller.signal});
+  const r=await fetch('/api/chat-stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,request_id:activeJob,think:deepThinking}),signal:controller.signal});
   if(!r.ok){const v=await r.json().catch(()=>({}));throw Error(v.error||'Service unavailable.');}
   const reader=r.body.getReader(),decoder=new TextDecoder();let buf='';
   for(;;){
@@ -154,6 +154,7 @@ $('character').value=preference('character','1.3')==='1.8'?'1.8':'1.3';$('rate')
 function applySettings(){avatar()?.setCharacter($('character').value);avatar()?.setFull($('hologramView').value==='full');}
 $('character').addEventListener('change',()=>{savePreference('character',$('character').value);applySettings();api('/api/settings',{expression_mode:$('character').value==='1.8'?'expressive':'normal'}).catch(()=>{});});
 $('rate').addEventListener('change',()=>savePreference('rate',$('rate').value));
+deepThinking=preference('deep','0')==='1';
 $('hologramView').addEventListener('change',()=>{savePreference('view',$('hologramView').value);applySettings();});
 applySettings();document.addEventListener('cortana:avatar-ready',applySettings);
 mic.addEventListener('click',listen);
@@ -202,7 +203,7 @@ refreshStatus();setInterval(refreshStatus,4000);
 addEventListener('keydown',e=>{if(e.key==='Escape')stop();});
 addEventListener('pagehide',stop);
 // An existing assistant can provide replies using this API without replacing the UI.
-window.Cortana={applyMode,restoreConversation,clearConversation(){stop();history=[];chatLog.length=0;chatChanged();},speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
+window.Cortana={get deep(){return deepThinking;},set deep(v){deepThinking=!!v;savePreference('deep',deepThinking?'1':'0');},applyMode,restoreConversation,clearConversation(){stop();history=[];chatLog.length=0;chatChanged();},speak,stop,send,api,get state(){return state;},get wake(){return wake.on;},setWake,get chat(){return chatLog;},showScreen:md=>showScreen(md),
  note(text,error=false){chatLog.push({role:'system',text,error});chatChanged();}};
 
 /* ---- Timer and reminder alerts (checked with every status poll) ---- */

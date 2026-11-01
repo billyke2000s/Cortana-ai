@@ -122,6 +122,7 @@ function chat(){
  page('chat','Chat',`<div id="chatLog" class="chat-log" aria-live="polite"></div>
   <form id="chatForm" class="chat-compose"><label class="sr-only" for="chatInput">Message</label>
    <button type="button" class="pg-btn chat-attach" data-act="attach" aria-label="Add a file for Cortana to read" title="Add a PDF, Word, PowerPoint or text file">📎</button>
+   <button type="button" class="pg-btn chat-deep" data-act="deep" aria-pressed="${C.deep}" title="Deep thinking: she reasons before answering (slower). Or say “think carefully about…”">🧠</button>
    <textarea id="chatInput" rows="1" maxlength="3000" placeholder="Message Cortana…" enterkeyhint="send"></textarea>
    <button type="submit" class="pg-primary" aria-label="Send">Send</button></form>`,'CORTANA // COMMS');
  renderChatLog();const b=D.body();b.scrollTop=b.scrollHeight;
@@ -198,6 +199,9 @@ async function systems(){
    <label class="pg-check"><input type="checkbox" id="sTools"${s.tools_enabled?' checked':''}> Abilities (timers, memory, weather, search, calendar)</label>
    <label class="pg-check"><input type="checkbox" id="sPC"${s.pc_controls?' checked':''}> PC controls (media, volume, open allowed apps)</label>
    <label class="pg-check"><input type="checkbox" id="sAccess"${s.pc_access!==false?' checked':''}> Screen, clipboard and file access (only when you ask; nothing leaves this PC)</label>
+   <h3>Brain</h3>
+   <label>Memory size<select id="sContext">${opt('auto','Auto: largest that fits your graphics card',s.context_mode!=='standard')}${opt('standard','Standard (6,144 tokens)',s.context_mode==='standard')}</select></label>
+   <p class="pg-muted">Current: ${esc(s.context)} tokens. Bigger remembers more of the conversation and long documents. Deep thinking: 🧠 in Chat, or say “think carefully about…”.</p>
    <h3>Character</h3>
    <label>Expression<select id="sExpression">${opt('normal','Normal',s.expression_mode!=='expressive')}${opt('expressive','Expressive',s.expression_mode==='expressive')}</select></label>
    <button type="button" class="pg-btn pg-wide" data-act="expression-preview">Preview expression</button>
@@ -230,7 +234,7 @@ async function saveSystems(){
  data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;data.pc_access=v('sAccess').checked;
  if(v('sEngine').value!==s.voice_engine)data.voice_engine=v('sEngine').value;
  if(v('sVoice').value!==s.voice)data.voice=v('sVoice').value;
- data.expression_mode=v('sExpression').value;data.native_notifications=v('sNotifications').checked;
+ data.expression_mode=v('sExpression').value;data.context_mode=v('sContext').value;data.native_notifications=v('sNotifications').checked;
  data.home_location=v('sHome').value.trim();
  if(v('sCal').value.trim())data.calendar_url=v('sCal').value.trim();
  if(v('sBrave').value.trim())data.brave_key=v('sBrave').value.trim();
@@ -246,6 +250,7 @@ D.body().addEventListener('click',async e=>{
  const act=btn.dataset.act,id=btn.dataset.id;
  try{
   if(act==='complete'||act==='delete'||act==='snooze'){await post('/api/objectives',{action:act,id:Number(id)});objectives();}
+  else if(act==='deep'){C.deep=!C.deep;btn.setAttribute('aria-pressed',String(C.deep));C.note(C.deep?'Deep thinking on: slower, more careful answers.':'Deep thinking off.');}
   else if(act==='edit-fact'){await post('/api/memory',{action:'edit',id:Number(id),text:document.querySelector('[data-fact="'+Number(id)+'"]').value});memory();}
   else if(act==='forget'){await post('/api/memory',{action:'forget',id:Number(id)});memory();}
   else if(act==='clear'){if(!confirmClear.armed){confirmClear.armed=true;btn.textContent='Tap again to clear everything';setTimeout(()=>{confirmClear.armed=false;},4000);return;}

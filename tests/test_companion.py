@@ -201,3 +201,48 @@ class VoiceSpeedAndReminderTests(unittest.TestCase):
         # The model sees the 15 newest earlier messages (msg5..msg19); the recap must cover msg4 and older, with no gap or overlap.
         recap=s.conversation_summary().split('\n')
         self.assertEqual(recap[-1],'user: msg4');self.assertNotIn('msg5',s.conversation_summary())
+
+class BrainTests(unittest.TestCase):
+    """1.6 step 2: deep thinking and a context size that fits the graphics card."""
+    def test_context_fits_graphics_card(self):
+        h=base.hardware;nine=next(m for m in h.CATALOG if m['tag']=='qwen3.5:9b');four=next(m for m in h.CATALOG if m['tag']=='qwen3.5:4b')
+        self.assertEqual(h.context_for(nine,{'vram_gb':8}),6144)      # 9B already spills on 8 GB: no bigger cache
+        self.assertEqual(h.context_for(nine,{'vram_gb':12}),16384)
+        self.assertEqual(h.context_for(four,{'vram_gb':6}),16384);self.assertEqual(h.context_for(four,{'vram_gb':4}),6144)
+        self.assertEqual(h.context_for(nine,{'vram_gb':None}),6144)   # processor only
+        moe=next(m for m in h.CATALOG if m['moe']);self.assertEqual(h.context_for(moe,{'vram_gb':48}),6144)
+
+    def test_deep_thought_phrases(self):
+        w=base.runtime.wants_deep_thought
+        for yes in ['Think carefully about which laptop to buy','take your time and compare them','Can you think it through?']:self.assertTrue(w(yes),yes)
+        for no in ['What do you think of this?','Set a timer','I think so']:self.assertFalse(w(no),no)
+
+class BrainApiTests(unittest.TestCase):
+    request=base.ApiTests.request
+    setUpClass=classmethod(CompanionApiTests.setUpClass.__func__)
+    tearDownClass=classmethod(CompanionApiTests.tearDownClass.__func__)
+
+    def stream(self,body):
+        status,_,raw=self.request('POST','/api/chat-stream',body)
+        return status,[json.loads(l) for l in raw.decode().splitlines() if l.strip()] if status==200 else raw
+
+    def test_think_flag_reaches_ollama_and_reasoning_is_never_spoken(self):
+        base.fake_ollama.CHAT_REQUESTS.clear()
+        status,events=self.stream({'messages':[{'role':'user','content':'Hello there'}],'think':True})
+        self.assertEqual(status,200);req=base.fake_ollama.CHAT_REQUESTS[-1]
+        self.assertIs(req['think'],True);self.assertGreater(req['options']['num_predict'],1200)
+        self.assertEqual(events[0],{'type':'tool','name':'think','label':'THINKING IT THROUGH'})
+        spoken=' '.join(e['text'] for e in events if e['type']=='sentence')
+        self.assertNotIn('weigh the options',spoken);self.assertEqual(events[-1]['type'],'done')
+
+    def test_normal_turn_does_not_think_and_bad_flag_rejected(self):
+        base.fake_ollama.CHAT_REQUESTS.clear()
+        self.stream({'messages':[{'role':'user','content':'Hello there'}]})
+        req=base.fake_ollama.CHAT_REQUESTS[-1];self.assertIs(req['think'],False);self.assertEqual(req['options']['num_predict'],1200)
+        self.assertEqual(self.request('POST','/api/chat-stream',{'messages':[{'role':'user','content':'Hi'}],'think':'yes'})[0],400)
+
+    def test_context_mode_setting(self):
+        self.assertEqual(self.request('POST','/api/settings',{'context_mode':'huge'})[0],400)
+        self.assertEqual(self.request('POST','/api/settings',{'context_mode':'standard'})[0],200)
+        s=json.loads(self.request('GET','/api/settings')[2]);self.assertEqual((s['context_mode'],s['context']),('standard',6144))
+        self.rt.store.set('context_mode','auto')

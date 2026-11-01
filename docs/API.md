@@ -158,3 +158,8 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 - `GET /api/memory` adds `conflicts`, an array of potentially conflicting fact-ID groups. `POST /api/memory {action:"edit",id,text}` replaces one existing fact (1–300 chars).
 - `POST /api/objectives {action:"snooze",id,minutes:10}` re-arms a timer/reminder for 1–1440 minutes. GET adds `recent_alerts`: at most 20 acknowledged timers from the last day. Items have additive `notified` state.
 - `voice-profile/*`, Python modules, downloaded weights and temporary audio are never static web files. All additions keep the existing auth/origin/JSON/size guards.
+
+## 1.6 additions
+
+- `POST /api/chat-stream` accepts optional `think` (boolean, default false). Thinking also turns on when the question asks for it ("think carefully about…", "take your time"). The stream then starts with `{type:"tool",name:"think",label:"THINKING IT THROUGH"}`; the model's reasoning is never streamed or spoken.
+- Settings GET/POST add `context_mode` (`auto` default / `standard`); GET also returns `context`, the token window in use.

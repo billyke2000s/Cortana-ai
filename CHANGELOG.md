@@ -2,7 +2,13 @@
 
 All notable changes. Dates are UK time.
 
-## [Unreleased] - 1.6 step 1: speed and fixes
+## [Unreleased] - 1.6
+
+### Added (step 2: brain)
+- Deep thinking: 🧠 toggle in Chat, or ask her to "think carefully" / "take your time". Reasoning is never spoken.
+- Auto memory size: up to 16,384 tokens when the model and its cache fit on the graphics card (Systems → Brain; Standard keeps 6,144).
+
+### Step 1: speed and fixes
 
 ### Fixed
 - Cortana's voice no longer re-hashes and re-unpacks its 109 MB model archive (and the 87 MB lip-sync zip) on every launch; it unpacks once (`.unpacked` marker).
