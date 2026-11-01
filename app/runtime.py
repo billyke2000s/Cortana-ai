@@ -45,8 +45,7 @@ def split_reply(text):
     if screen and not spoken:spoken="I've put it on screen for you."
     return spoken[:1500],screen[:12000]
 
-# Weather questions are answered from real data fetched before the model runs: qwen3.5:4b invented a forecast in 2 of 4
-# runs even with a hint (DECISIONS D-027), and a wrong forecast is worse than none.
+# Legacy parsing helper retained for compatibility tests only. Chat never uses it to select or pre-run tools.
 _WEATHER=re.compile(r"\b(weather|forecast|temperature|rain(ing|y)?|snow(ing)?|sunny|umbrella|degrees outside|how (hot|cold|warm) is it)\b",re.I)
 _PLACE=re.compile(r"\b(?:in|for|at|near)\s+((?:[a-z][\w'.-]*)(?:\s+(?!today|tomorrow|tonight|this|next|on|at|right|now|later|morning|afternoon|evening|weekend|please)[a-z][\w'.-]*){0,3})",re.I)
 _NOT_PLACE={'the','a','my','general','celsius','fahrenheit','degrees','it','there','here','case','time','an','hour','minutes','days','week'}
@@ -426,7 +425,7 @@ class Runtime:
         msg={'role':'user','content':prompt}
         if images:msg['images']=images
         r=request_json(self.ollama_url+'/api/chat',{'model':self.model,'messages':[msg],'stream':False,'think':False,'keep_alive':'15m',
-                       'options':{'num_ctx':CONTEXT,'num_predict':int(max_tokens),'temperature':.2}},timeout=180)
+                       'options':{'num_ctx':self.agent.settings()['context_tokens'],'num_predict':int(max_tokens),'temperature':.2}},timeout=180)
         text=re.sub(r'<think>.*?</think>','',(r.get('message') or {}).get('content') or '',flags=re.S).strip()
         if not text:raise RuntimeError('The model gave no answer.')
         return text
@@ -523,7 +522,7 @@ class Runtime:
                 for chunk in self.ollama_stream(payload):
                     self.jobs.check()
                     msg=chunk.get('message') or {}
-                    calls+=msg.get('tool_calls') or []
+                    calls+=(msg.get('tool_calls') or [])[:4-len(calls)]
                     piece=re.sub(r'</?think>','',msg.get('content') or '')
                     if piece:
                         if not first_token:self.jobs.measure('first_token_ms',started);first_token=True
@@ -545,7 +544,7 @@ class Runtime:
                     except ValueError:args={}
                 yield {'type':'tool','name':name,'label':tools.TOOL_LABELS.get(name,'WORKING')}
                 self.jobs.check()
-                advertised={s['function']['name'] for s in available}
+                advertised={s['function']['name'] for s in available} if use_tools and round_<17 else set()
                 if name not in advertised:result,change={'error':'That tool is not currently available. Discover its category first.'},None
                 elif name in {s['function']['name'] for s in tools.TOOLS}:result,change=tools.run(name,args,self.store,llm)
                 else:result,change=self.agent.run(name,args,groups)

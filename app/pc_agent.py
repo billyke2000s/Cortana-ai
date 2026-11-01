@@ -50,7 +50,7 @@ def powershell(script,args):
     if os.name!='nt':raise RuntimeError('This ability runs on the Windows PC.')
     p=subprocess.run(['powershell','-NoProfile','-NonInteractive','-STA','-Command',"[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();"+script],input=json.dumps(args).encode(),capture_output=True,timeout=20,creationflags=HIDDEN)
     if p.returncode:raise RuntimeError('Windows could not access that application or control. Take a fresh snapshot; elevated or custom-drawn apps may not expose controls.')
-    return json.loads(p.stdout.decode('utf8-sig') or 'null')
+    return json.loads(p.stdout.decode('utf-8-sig') or 'null')
 
 def desktop(agent,args,approved=False):
     action=args['action']

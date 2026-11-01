@@ -48,9 +48,12 @@ class Agent:
     def __init__(self,runtime):
         from workspace import Workspace
         from browser_agent import Browser
-        self.runtime=runtime;self.store=runtime.store;self.workspace=Workspace(runtime);self.browser=Browser(runtime)
+        self.runtime=runtime;self.workspace=Workspace(runtime);self.browser=Browser(runtime)
         self.execution_lock=threading.RLock();self.review_lock=threading.Lock();self.automation_lock=threading.Lock();self.last_tick=0;self.folder_state={}
         self.desktop_state={};self.connection_clients={}
+
+    @property
+    def store(self):return self.runtime.store
 
     def context(self):
         active=self.store.get('active_file','')

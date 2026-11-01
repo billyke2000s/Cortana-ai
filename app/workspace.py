@@ -20,9 +20,12 @@ TEXT_TYPES={'.txt','.md','.csv','.json','.py','.js','.html','.css','.xml','.yaml
 
 class Workspace:
     def __init__(self,runtime):
-        self.runtime=runtime;self.store=runtime.store
+        self.runtime=runtime
         self.home=DATA/'workspace';self.home.mkdir(parents=True,exist_ok=True)
         self.journal=DATA/'file-history';self.journal.mkdir(exist_ok=True)
+
+    @property
+    def store(self):return self.runtime.store
 
     def roots(self):
         return {'Workspace':self.home,**{r['name']:Path(r['path']) for r in self.store.get('work_roots',[])}}
@@ -190,10 +193,11 @@ class Workspace:
         action=args.get('action','read');path=self.path(args.get('path') or 'workbook.xlsx',action not in ('write','chart'))
         if action=='write':
             rows=args.get('rows') or []
+            if any(isinstance(v,str) and v.startswith(('=','+','-','@')) and ('|' in v or '[' in v or 'WEBSERVICE(' in v.upper()) for row in rows if isinstance(row,list) for v in row):raise ValueError('External spreadsheet formulas and DDE commands are not supported.')
             if not isinstance(rows,list) or len(rows)>10000 or any(not isinstance(row,list) or len(row)>100 for row in rows):raise ValueError('Use at most 10,000 rows and 100 columns.')
             record=self.checkpoint('spreadsheet',[path]);path.parent.mkdir(parents=True,exist_ok=True)
             if path.suffix.lower()=='.csv':
-                with path.open('w',newline='',encoding='utf8-sig') as f:csv.writer(f).writerows(rows)
+                with path.open('w',newline='',encoding='utf-8-sig') as f:csv.writer(f).writerows(rows)
             elif path.suffix.lower()=='.xlsx':
                 from openpyxl import Workbook,load_workbook
                 from openpyxl.styles import Font,PatternFill
@@ -238,7 +242,7 @@ class Workspace:
     def _rows(self,path,sheet=None):
         if path.stat().st_size>MAX_BYTES:raise ValueError('Spreadsheet exceeds 12 MB.')
         if path.suffix.lower()=='.csv':
-            with path.open(newline='',encoding='utf8-sig') as f:return [r for i,r in enumerate(csv.reader(f)) if i<10000]
+            with path.open(newline='',encoding='utf-8-sig') as f:return [r for i,r in enumerate(csv.reader(f)) if i<10000]
         if path.suffix.lower()=='.xlsx':
             from openpyxl import load_workbook
             wb=load_workbook(path,read_only=True,data_only=False)
@@ -257,10 +261,11 @@ class Workspace:
             for value in (args.get('inputs') or [])[:10]:
                 p=self.path(value,True)
                 if not p.is_file() or p.stat().st_size>MAX_BYTES:raise ValueError('Inputs must be files under 12 MB.')
+                if p.name=='code.py':raise ValueError('Rename an input called code.py so it does not replace the generated program.')
                 shutil.copy2(p,source/p.name)
             output=self.home/'Code outputs'/name;output.mkdir(parents=True);output.chmod(0o777)
             command=[docker,'run','-d','--name',name,'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
-                '--memory','512m','--cpus','1','--pids-limit','64','--user','65534:65534','--tmpfs','/tmp:rw,noexec,nosuid,size=64m',
+                '--memory','512m','--memory-swap','512m','--cpus','1','--pids-limit','64','--user','65534:65534','--tmpfs','/tmp:rw,noexec,nosuid,size=64m',
                 '--mount','type=bind,src='+str(source.resolve())+',dst=/input,readonly','--tmpfs','/output:rw,noexec,nosuid,size=64m,nr_inodes=1024,uid=65534,gid=65534',
                 '--workdir','/output','python:3.12-slim','python','-I','-c','import time;time.sleep(90)']
             start=subprocess.run(command,capture_output=True,timeout=30,creationflags=HIDDEN)
