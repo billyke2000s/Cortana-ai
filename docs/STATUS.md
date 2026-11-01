@@ -4,7 +4,7 @@ _Last updated: 1 November 2026._
 
 ## 1.6.0: verification
 
-- Offline suite: 110 tests passed on Linux (Python 3.13). New tests cover the voice unpack/warm-up, reminder backoff, recap offset, context sizing, deep thinking, watchers and briefing, the approval gate end to end (nothing written until approved, one use, expiry, origin/auth), every work tool, picture validation and privacy.
+- Offline suite: 112 tests passed on Linux (Python 3.13). New tests cover the voice unpack/warm-up, reminder backoff, recap offset, context sizing, deep thinking, watchers and briefing, the approval gate end to end (nothing written until approved, one use, expiry, origin/auth), every work tool, picture validation and privacy.
 - Browser check (Playwright/Chromium, fake Ollama): six layouts, approval card via tap and via typed "yes", deep thinking toggle, new Systems sections, no page errors.
 - **[Unverified]** everything that needs the real models or Windows: how well qwen3.5 9B/4B choose the new tools and phrase approval requests, deep-thinking quality and time, the Auto context on a real graphics card, `pc_health`'s PowerShell output, the Word file opening in Word, mailto drafts in the user's mail app, folder tidying on a real Downloads folder, Windows pop-ups for notices. The release workflow's real-model job runs only on a tag.
 - Real ZipVoice on a 2-core cloud CPU (step 1): first launch load + one-time unpack + warm-up 64.9 s; second launch 9.8 s; first reply sentence 7.6–7.9 s after warm-up.

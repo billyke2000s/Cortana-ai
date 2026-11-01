@@ -436,3 +436,28 @@ class PictureTests(unittest.TestCase):
         for bad in [[self.PNG]*3,['not base64!'],[base.base64.b64encode(b'MZ executable').decode()],'x']:
             self.assertEqual(self.request('POST','/api/chat-stream',{'messages':msg,'images':bad})[0],400)
         self.assertEqual(self.request('POST','/api/chat-stream',{'messages':msg,'pad':'x'*70000})[0],400)   # only pictures may be big
+
+class TimerGuardTests(unittest.TestCase):
+    """D-036: a plainly requested timer is set in code, so a model that only *says* it set one can't fake it."""
+    def test_timer_requests_are_parsed(self):
+        t=base.runtime.timer_request
+        self.assertEqual(t('Set a timer for 10 minutes for the pasta.'),{'minutes':10,'label':'pasta'})
+        self.assertEqual(t('set a 10 minute timer'),{'minutes':10,'label':''})
+        self.assertEqual(t('Timer for 90 seconds'),{'minutes':1.5,'label':''})
+        self.assertEqual(t('start a timer for an hour and 15 minutes for my bread'),{'minutes':75,'label':'bread'})
+        self.assertEqual(t('half an hour timer please'),{'minutes':30,'label':''})
+        for no in ['How long is left on my timer?','Cancel the pasta timer','Set a timer','Remind me in 10 minutes','set a timer for 30 hours',
+                   'add 5 minutes to the timer']:
+            self.assertIsNone(t(no),no)
+
+    def test_model_that_never_calls_the_tool_still_sets_exactly_one_timer(self):
+        rt=base.runtime.Runtime();rt.store.close();rt.store=base.store.Store(':memory:');rt.ai_ready=True
+        self.addCleanup(rt.store.close)
+        def lazy_model(payload):   # the 9B failure seen in CI: claims success, calls nothing
+            self.assertNotIn('set_timer',[t['function']['name'] for t in payload.get('tools',[])])
+            yield {'message':{'content':'Got it, Chief. Setting a 10-minute timer for the pasta.'}}
+        with patch.object(rt,'ollama_stream',lazy_model):
+            events=list(rt.chat_stream([{'role':'user','content':'Set a timer for 10 minutes for the pasta.'}]))
+        self.assertIn({'type':'tool','name':'set_timer','label':'SETTING TIMER'},events)
+        timers=[i for i in rt.store.items() if i['kind']=='timer'];self.assertEqual(len(timers),1)
+        self.assertEqual(timers[0]['text'],'pasta');self.assertAlmostEqual(timers[0]['due']-time.time(),600,delta=5)

@@ -78,7 +78,7 @@ class Handler(BaseHTTPRequestHandler):
         if 'tidy my downloads' in user and 'organise_files' in offered:
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'organise_files', 'arguments': {'folder': 'downloads'}}}]}}, {'done': True}])
-        if 'timer' in user and body.get('tools'):
+        if 'timer' in user and 'set_timer' in offered:
             return self._stream([{'message': {'content': '', 'tool_calls': [
                 {'function': {'name': 'set_timer', 'arguments': {'minutes': 10, 'label': 'pasta'}}}]}}, {'done': True}])
         if 'find my' in user and body.get('tools'):

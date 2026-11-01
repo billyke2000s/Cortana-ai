@@ -43,7 +43,7 @@ Up to 4 model rounds per message; up to 4 tool calls per round. Tool results are
 
 | Tool | Behaviour |
 |---|---|
-| `set_timer(minutes, label?)` | 0 < minutes ≤ 1,440. Creates a timer item. |
+| `set_timer(minutes, label?)` | 0 < minutes ≤ 1,440. Creates a timer item. **A plain request with a length ("set a 10 minute timer for the pasta") is set by the app before the model answers** (`runtime.timer_request`, D-036); the model only confirms it. |
 | `set_reminder(text, at? \| in_minutes?)` | `in_minutes` relative; `at` as `HH:MM` → next occurrence (today or tomorrow), or `YYYY-MM-DD HH:MM`. Refuses times more than 60 s in the past. |
 | `add_task(text)` | To-do item, no due time. |
 | `list_objectives()` | Open items with times. |

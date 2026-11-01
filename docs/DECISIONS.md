@@ -165,3 +165,7 @@ Six work tools add ~640 tokens of schema. Offering them on every turn would push
 ### D-035: Ask before doing
 
 Small local models misread requests, and documents/web pages can carry instructions (prompt injection). Any action that changes something outside Cortana's own database waits for approval: the model's call becomes a `confirm` stream event and a held, one-use, 10-minute action; the model is told it has not happened. Approval is a tap or a short "yes"; anything else in between clears the voice shortcut (the card's buttons still work). `run()` refuses these tools without `approved=True` as a second line of defence. No "always allow": each action is approved on its own. Not built in 1.6, deliberately: website automation, desktop app control by clicking/typing and running model-written code — each needs a real sandbox or browser engine and stronger guarantees than a local 9B model gives (see STATUS roadmap).
+
+### D-036: Plain timer requests are set in code first
+
+The 1.6.0 release check caught qwen3.5:9b answering "Setting a 10-minute timer for the pasta" without calling `set_timer`, so no timer existed. Like weather (D-027), a message that plainly asks for a new timer with a length (`runtime.timer_request`: a number or "an"/"half an" with seconds/minutes/hours, optional "for the …" label, no cancel/check/change words) runs `set_timer` before the model answers; the model then only confirms it, and `set_timer` is removed from that turn's tools so it cannot add a duplicate. Anything else about timers still goes to the model.

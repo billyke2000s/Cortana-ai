@@ -50,6 +50,23 @@ def split_reply(text):
 _WEATHER=re.compile(r"\b(weather|forecast|temperature|rain(ing|y)?|snow(ing)?|sunny|umbrella|degrees outside|how (hot|cold|warm) is it)\b",re.I)
 _PLACE=re.compile(r"\b(?:in|for|at|near)\s+((?:[a-z][\w'.-]*)(?:\s+(?!today|tomorrow|tonight|this|next|on|at|right|now|later|morning|afternoon|evening|weekend|please)[a-z][\w'.-]*){0,3})",re.I)
 _NOT_PLACE={'the','a','my','general','celsius','fahrenheit','degrees','it','there','here','case','time','an','hour','minutes','days','week'}
+_TIMER_UNITS={'second':1/60,'sec':1/60,'minute':1,'min':1,'hour':60,'hr':60}
+_TIMER_AMOUNT=re.compile(r"\b(\d+(?:\.\d+)?|an?|half an?)\s*-?\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b",re.I)
+_TIMER_LABEL=re.compile(r"\bfor\s+(?:the\s+|my\s+)?(?!\d|an?\s|half\b)([a-z][a-z' -]{1,30}?)\s*[.!?]*$",re.I)
+def timer_request(text):
+    """{'minutes', 'label'} when the message plainly asks for a new timer with a length ("set a 10 minute timer for the
+    pasta", "timer for 90 seconds"), else None. Questions about, or changes to, existing timers are left to the model."""
+    text=(text or '').strip()
+    if not re.search(r"\btimer\b",text,re.I) or re.search(r"\b(cancel|stop|delete|remove|how long|left|remaining|check|pause|snooze|extend|add)\b",text,re.I):return None
+    total=0.0
+    for amount,unit in _TIMER_AMOUNT.findall(text):
+        a=amount.lower();n=.5 if a.startswith('half') else 1.0 if a in ('a','an') else float(a)
+        total+=n*_TIMER_UNITS[re.sub(r's$','',unit.lower())]
+    if not 0<total<=24*60:return None
+    m=_TIMER_LABEL.search(text);label=(m.group(1).strip() if m else '')
+    if re.search(r"\b(seconds?|secs?|minutes?|mins?|hours?|hrs?)\b",label,re.I):label=''
+    return {'minutes':round(total,4),'label':label}
+
 def weather_question(text):
     """None if not a weather question, else the place named in it ('' = home town)."""
     text=text or ''
@@ -540,7 +557,16 @@ class Runtime:
             tool_screen=tools.screen_for('get_weather',result)
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'get_weather','arguments':args}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'get_weather'}]
+        timer=timer_request(clean[-1]['content']) if use_tools and clean else None
+        if timer:   # set it in code first, so she can never say a timer is running when it isn't (D-036)
+            args={'minutes':timer['minutes'],**({'label':timer['label']} if timer['label'] else {})}
+            yield {'type':'tool','name':'set_timer','label':tools.TOOL_LABELS['set_timer']}
+            result,change=tools.run('set_timer',args,self.store,llm)
+            if change:yield {'type':'refresh','what':change}
+            convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'set_timer','arguments':args}}]},
+                    {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'set_timer'}]
         offered=tools.tools_for(clean[-1]['content'],ctx);rounds=6 if think else 4   # deep thinking may chain more steps
+        if timer:offered=[t for t in offered if t['function']['name']!='set_timer']   # never a second, duplicate timer
         for round_ in range(rounds):
             self.jobs.check()
             payload={'model':self.model,'messages':convo,'stream':True,'think':think,'keep_alive':'15m',
