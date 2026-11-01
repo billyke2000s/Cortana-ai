@@ -44,6 +44,10 @@ jobs:
     needs: superseded
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ['qwen3.5:4b', 'qwen3.5:9b']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,11 +61,8 @@ jobs:
           sleep 5
       - name: Check real 4B and 9B models with retrieved memory and recap
         run: |
-          ollama pull qwen3.5:4b
-          python tests/ci_context_check.py qwen3.5:4b
-          ollama stop qwen3.5:4b
-          ollama pull qwen3.5:9b
-          python tests/ci_context_check.py qwen3.5:9b
+          ollama pull '${{ matrix.model }}'
+          python tests/ci_context_check.py '${{ matrix.model }}'
   build:
     needs: superseded
     runs-on: windows-latest

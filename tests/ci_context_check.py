@@ -3,6 +3,8 @@ import json
 import os
 import sys
 import tempfile
+import urllib.request
+from unittest.mock import patch
 sys.path.insert(0,'app');os.environ.setdefault('CORTANA_DATA_DIR',tempfile.mkdtemp())
 from runtime import Runtime
 from store import Store
@@ -12,8 +14,17 @@ for i in range(50):r.store.add_fact(f'The user enjoys game number {i}')
 for i in range(24):r.store.log_message('user' if i%2==0 else 'assistant','We discussed planning a study session.')
 checks=[('Set a timer for 10 minutes for the pasta.','set_timer'),('Remember that my favourite colour is cyan.','remember'),
  ('How do I build a table in Python?','screen'),('Remind me to call mum at 6pm.','set_reminder'),('Tell me a joke.','reply'),('What is my dog called?','Rex')]
+# A hosted CPU takes longer than the GPU target. Change only the transport deadline;
+# actual model responses, prompts, tool execution and application code are unchanged.
+original_open=urllib.request.urlopen
+def cpu_open(request,*args,**kwargs):
+    if getattr(request,'full_url','').startswith(r.ollama_url+'/api/'):
+        kwargs['timeout']=900
+    return original_open(request,*args,**kwargs)
 for ask,expect in checks:
-    events=list(r.chat_stream([{'role':'user','content':ask}]))
+    with patch('urllib.request.urlopen',cpu_open):
+        events=list(r.chat_stream([{'role':'user','content':ask}]))
+    assert r.model==sys.argv[1],f'Requested {sys.argv[1]}, got fallback {r.model}'
     assert events and events[-1]['type']=='done',events
     if expect in ('set_timer','remember','set_reminder'):assert any(e.get('name')==expect for e in events),events
     elif expect=='screen':assert any(e['type']=='screen' for e in events),events
