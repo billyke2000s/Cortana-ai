@@ -172,6 +172,8 @@ async function refreshStatus(){
   $('aiInfo').textContent=capabilities.ai?'Local assistant: '+capabilities.model:capabilities.status;
   $('statusText').textContent=capabilities.ai?'ONLINE':'STARTING';
   announceAlerts(capabilities.alerts||[]);
+  // First launch: keep the model chooser up (Systems also contains it) until a model is picked.
+  if(capabilities.chooseModel&&capabilities.canPair&&window.CortanaDisplay?.page!=='settings')window.CortanaPages?.open('choose-model');
   $('phoneSection').hidden=!capabilities.canPair;
   if(capabilities.canPair&&capabilities.phoneReady&&!shownQR){$('phoneQR').src='/api/phone-qr';$('phoneQR').hidden=false;shownQR=true;$('phoneHelp').textContent='Scan with your phone camera. Keep the PC launcher open.';}
   if(capabilities.canPair&&!capabilities.phoneReady){$('phoneQR').hidden=true;shownQR=false;$('phoneHelp').textContent=capabilities.error||'Preparing your secure phone connection...';}

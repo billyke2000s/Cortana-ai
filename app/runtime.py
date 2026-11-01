@@ -147,6 +147,8 @@ class Runtime:
         else:self.token=secrets.token_urlsafe(32)
         self.local_url=None;self.model=os.getenv('CORTANA_MODEL') or self.store.get('model') or MODEL
         self.model_chosen=bool(os.getenv('CORTANA_MODEL') or self.store.get('model'))   # False: pick the recommended model for this PC
+        # First launch with the window open: wait for the user to pick a model on the page (launcher sets ask_model).
+        self.ask_model=False;self.awaiting_choice=False;self.model_picked=threading.Event()
         self.hw=None;self.tag_exists={};self.pull={'active':False,'tag':None,'status':'','pct':0,'error':None}
         self.ollama_url=os.getenv('CORTANA_OLLAMA_URL','http://127.0.0.1:11434').rstrip('/')
         self.ai_ready=False;self.stt_ready=False;self.status='Starting Cortana';self.error=None
@@ -187,6 +189,18 @@ class Runtime:
                 except Exception:pass
             else:raise RuntimeError('Ollama did not start. See ollama.log in the app data folder.')
         installed=[m['name'] for m in tags.get('models',[])]
+        if not self.model_chosen and self.ask_model:
+            import hardware
+            self.hw=self.hw or hardware.detect()
+            rows=hardware.recommend(self.hw,installed,self.available_tags(installed))
+            best=next((r['label'] for r in rows if r['tag']==hardware.recommended_tag(rows,MODEL)),'')
+            self.awaiting_choice=True
+            self.update('Choose your AI model on the Cortana page.'+(f' Recommended for this PC: {best}.' if best else ''))
+            try:
+                while not self.model_picked.wait(.5):
+                    if self.closing.is_set():return
+            finally:self.awaiting_choice=False
+            installed=[m['name'] for m in request_json(self.ollama_url+'/api/tags',timeout=5).get('models',[])]
         if not self.model_chosen:
             import hardware
             self.hw=self.hw or hardware.detect()
@@ -308,7 +322,8 @@ class Runtime:
         try:installed=[m['name'] for m in request_json(self.ollama_url+'/api/tags',timeout=3).get('models',[])]
         except Exception:installed=[]
         rows=hardware.recommend(self.hw,installed,self.available_tags(installed))
-        return {'hardware':self.hw,'models':rows,'current':self.model,'recommended':hardware.recommended_tag(rows),
+        return {'hardware':self.hw,'models':rows,'current':None if self.awaiting_choice else self.model,   # nothing is in use until the first choice
+               'recommended':hardware.recommended_tag(rows),
                 'pull':dict(self.pull),'disk_free_gb':hardware.free_disk_gb(),'other_installed':[t for t in installed if t not in {r['tag'] for r in rows}]}
 
     def check_model(self,tag,need_installed=True):
@@ -322,7 +337,7 @@ class Runtime:
 
     def use_model(self,tag):
         self.check_model(tag)
-        self.store.set('model',tag);self.model=tag;self.model_chosen=True
+        self.store.set('model',tag);self.model=tag;self.model_chosen=True;self.model_picked.set()
         threading.Thread(target=self.preload,daemon=True).start()
 
     def start_pull(self,tag,use_after=True):
@@ -334,7 +349,10 @@ class Runtime:
         self.pull={'active':True,'tag':tag,'status':'starting','pct':0,'error':None}
         def run():
             try:
-                self.pull_model(tag,lambda status,pct:self.pull.update(status=status,pct=pct))
+                def progress(status,pct):
+                    self.pull.update(status=status,pct=pct)
+                    if self.awaiting_choice:self.update(f'Downloading {tag}: {status}'+(f' {pct}%' if pct else ''))
+                self.pull_model(tag,progress)
                 if use_after:self.use_model(tag)          # switch first, so nobody sees 'done' with the old model still active
                 self.pull.update(active=False,status='done',pct=100)
             except Exception as e:

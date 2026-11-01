@@ -114,6 +114,14 @@ async function renderModels(){
  clearTimeout(modelPoll);
  if(pull.active&&D.page==='settings')modelPoll=setTimeout(renderModels,1000);
 }
+/* First launch: the server waits for this choice before loading any model. */
+function chooseModel(){
+ page('settings','Choose your AI',`<p>Welcome, Chief. Pick the model Cortana thinks with. Each one is rated for <b>this PC's graphics card</b>:
+  <span class="pg-badge pg-r-rec">★ RECOMMENDED</span> is the best fit, and models that are too big can't be chosen.
+  Press <b>Use</b> for one that's already downloaded, or <b>Download</b> to fetch it (progress shows here). You can change it later in Systems.</p>
+  <div id="sModels"><p class="pg-muted">Checking your hardware…</p></div>`,'CORTANA // FIRST SETUP');
+ renderModels().then(()=>[...document.querySelectorAll('#sModels .pg-model')].find(li=>li.querySelector('.pg-r-rec'))?.scrollIntoView({block:'center'}));
+}
 async function systems(){
  try{
   const s=await get('/api/settings');
@@ -178,5 +186,5 @@ document.addEventListener('cortana:refresh',e=>{
  if(e.detail.what==='objectives'&&D.page==='tasks')objectives();
  if(e.detail.what==='memory'&&D.page==='memory')memory();
 });
-const PAGES={tasks:objectives,memory,briefing,settings:systems};
+const PAGES={tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
 window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;}};

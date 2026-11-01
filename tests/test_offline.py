@@ -227,6 +227,34 @@ class CalendarTests(unittest.TestCase):
         self.assertNotIn('Weekly with exception', day8)                # EXDATE honoured
 
 
+class FirstLaunchTests(unittest.TestCase):
+    def test_waits_for_model_choice(self):
+        """First launch with the window open: nothing loads until the user picks a model on the page."""
+        rt = runtime.Runtime(lambda text: None)
+        rt.tag_exists = {m['tag']: True for m in hardware.CATALOG}
+        rt.ask_model, rt.model_chosen = True, False
+        t = threading.Thread(target=rt.ensure_ai, daemon=True)
+        t.start()
+        for _ in range(50):
+            if rt.awaiting_choice:
+                break
+            time.sleep(.05)
+        self.assertTrue(rt.awaiting_choice)
+        self.assertIn('Choose your AI model', rt.status)
+        self.assertIn('Qwen', rt.status)                     # names the recommended model
+        time.sleep(.3)
+        self.assertFalse(rt.ai_ready)                        # still waiting, nothing auto-picked
+        self.assertIsNone(rt.models_info()['current'])      # every model offers Use/Download, incl. the default
+        rt.use_model('qwen3.5:4b')
+        t.join(5)
+        self.assertFalse(t.is_alive())
+        self.assertTrue(rt.ai_ready)
+        self.assertFalse(rt.awaiting_choice)
+        self.assertEqual(rt.model, 'qwen3.5:4b')
+        rt.store.set('model', None)
+        rt.close()
+
+
 def silent_voice(text, rate=0):
     b = io.BytesIO()
     w = wave.open(b, 'wb')

@@ -56,7 +56,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.authorised():return self.send_data(UNPAIRED_PAGE,'text/html; charset=utf-8',403)
         if parsed.path=='/api/status':
             alerts=[{'id':i['id'],'kind':i['kind'],'text':i['text']} for i in runtime.store.due_alerts()]
-            return self.send_json({'timedSpeech':os.name=='nt','ai':runtime.ai_ready,'transcription':runtime.stt_ready,'model':runtime.model,'status':runtime.status,'canPair':self.local,'phoneReady':bool(runtime.phone_url),'error':runtime.error,'voice':runtime.voice.status,'alerts':alerts})
+            return self.send_json({'timedSpeech':os.name=='nt','ai':runtime.ai_ready,'transcription':runtime.stt_ready,'model':runtime.model,'status':runtime.status,'canPair':self.local,'phoneReady':bool(runtime.phone_url),'error':runtime.error,'voice':runtime.voice.status,'alerts':alerts,'chooseModel':runtime.awaiting_choice})
         if parsed.path=='/api/objectives':return self.send_json({'items':runtime.store.items()})
         if parsed.path=='/api/memory':return self.send_json({'facts':runtime.store.facts(),'messages':runtime.store.recent_messages(60)})
         if parsed.path=='/api/settings':

@@ -133,7 +133,7 @@ pip install -r requirements.txt
 python app/launcher.py
 ```
 
-**First launch** downloads what's missing and remembers it: Ollama and the AI model (if absent), Whisper (~150 MB), and Piper with a voice (~85 MB). Keep the small Cortana window open while you use her.
+**First launch** asks which AI model to use (each Qwen model is rated for your graphics card, the best fit is marked ★ RECOMMENDED, and ones too big for your PC are disabled), then downloads what's missing and remembers it: Ollama and the chosen model, Whisper (~150 MB), and Piper with a voice (~85 MB). Keep the small Cortana window open while you use her.
 
 <details>
 <summary><b>📱 Use it on your phone</b></summary>

@@ -6,6 +6,7 @@ def main():
     import argparse
     parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=0);parser.add_argument('--headless',action='store_true');parser.add_argument('--no-tunnel',action='store_true');parser.add_argument('--no-open',action='store_true');args=parser.parse_args()
     events=queue.Queue();runtime=Runtime(events.put)
+    runtime.ask_model=not args.headless   # first launch: let the user pick the model (headless/tests keep the automatic pick)
     # Tailscale needs the same local port every launch so the phone address keeps working.
     port=args.port or (int(runtime.store.get('port',47817)) if runtime.store.get('phone_access','cloudflare')=='tailscale' else 0)
     server=AppServer(('127.0.0.1',port),runtime)

@@ -27,8 +27,10 @@ Invalid → `403` pairing page.
 ```json
 {"timedSpeech": true, "ai": true, "transcription": true, "model": "qwen3.5:9b", "status": "Ready...",
  "canPair": true, "phoneReady": true, "error": null, "voice": "Natural voice ready.",
- "alerts": [{"id": 3, "kind": "timer", "text": "pasta"}]}
+ "alerts": [{"id": 3, "kind": "timer", "text": "pasta"}], "chooseModel": false}
 ```
+`chooseModel`: true on first launch while the server waits for the user to pick a model (`POST /api/models`); the PC page
+opens the "Choose your AI" panel while it's true.
 `alerts`: due, unannounced timers/reminders. Acknowledge each with `POST /api/objectives {"action":"ack","id":3}`.
 
 ## Conversation

@@ -25,7 +25,10 @@ Escape or the stop button returns to `idle` from any state and cancels requests 
   the display panel. Trigger: the `[[SCREEN]]` marker, or (fallback) the first fenced code block or Markdown table row.
 - Spoken text never contains Markdown symbols (`* ` # _ > |`), and Markdown links are reduced to their text.
 - If the model returns only screen content, she says "I've put it on screen for you."
-- Model: on first run (no model chosen) Cortana detects the GPU and RAM and uses the **recommended** model if it's installed;
+- Model: on first launch with the window open (no model chosen yet), Cortana starts Ollama, then **waits**: the PC page opens a
+  "Choose your AI" panel listing every Qwen 3.5 model rated for this PC (recommended one starred and scrolled to, too-big ones
+  disabled). The user presses Use (installed) or Download; the choice is saved and nothing loads until then. Headless runs
+  (`--headless`) and `CORTANA_MODEL` skip the question and pick automatically: the **recommended** model if it's installed;
   otherwise the best installed model that isn't too big (and says which one is recommended); if none is usable, she downloads
   the recommended one. `num_ctx` 6,144, `temperature` 0.45, up to 1,200 output tokens, thinking off. If the model fails to load
   or fails before producing text, she switches to `qwen3.5:4b` and retries once.

@@ -2,6 +2,13 @@
 
 All notable changes. Dates are UK time.
 
+## [1.2.0] - 2026-11-01
+
+### Added
+- **First-launch model choice**: the app no longer picks a model silently. On first launch the PC page opens
+  "Choose your AI", lists the Qwen 3.5 models rated for this PC's graphics card (recommended starred, too-big disabled)
+  and waits for Use/Download before loading anything. `chooseModel` in `/api/status`. 1 new test (38 total).
+
 ## [1.1.0] - 2026-11-01
 
 ### Added
