@@ -2,7 +2,7 @@
 
 All notable changes. Dates are UK time.
 
-## [Unreleased] - 1.6
+## [1.6.0] - 2026-11-01
 
 ### Added (step 2: brain)
 - Deep thinking: 🧠 toggle in Chat, or ask her to "think carefully" / "take your time". Reasoning is never spoken.

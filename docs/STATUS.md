@@ -2,7 +2,7 @@
 
 _Last updated: 1 November 2026._
 
-## 1.6 (unreleased): verification
+## 1.6.0: verification
 
 - Offline suite: 110 tests passed on Linux (Python 3.13). New tests cover the voice unpack/warm-up, reminder backoff, recap offset, context sizing, deep thinking, watchers and briefing, the approval gate end to end (nothing written until approved, one use, expiry, origin/auth), every work tool, picture validation and privacy.
 - Browser check (Playwright/Chromium, fake Ollama): six layouts, approval card via tap and via typed "yes", deep thinking toggle, new Systems sections, no page errors.
