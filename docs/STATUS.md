@@ -4,6 +4,8 @@ _Last updated: 1 November 2026._
 
 ## 1.8.0: verification
 
+**Released:** [v1.8.0](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.8.0), built from `775425c26a75145e5319b0406afd0cbd9fee99a6` in Actions run 41349884894 (UI, Windows build + offline suite + packaged voice smoke, real `qwen3.5:4b` 6/6 and `qwen3.5:9b` 6/6). `Cortana.exe` SHA-256 `55a17a623e850d42c4573cfca2c7d7815fa916ffecb30144e5ce947b27f3e79f`.
+
 - Offline suite: 149 tests on Linux, including a fake OpenJarvis server (SSE stream, model from /v1/info, system prompt, API key header, key never returned, timers kept by Cortana, fallback when not running, phone never routed, approvals on the PC only, loopback-only URL, starter config, Windows-MCP config editing with backup, unusual formats left alone, Windows control needing Full access).
 - Browser check passed with the new Brain controls.
 - On the owner's PC (read-only check): `~/OpenJarvis/.venv/Scripts/jarvis.exe` exists; `~/.openjarvis` has no config.toml; version-check reports 0.1.1 with 1.0.2 available.
