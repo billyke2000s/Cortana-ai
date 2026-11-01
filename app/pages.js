@@ -235,7 +235,7 @@ async function saveSystems(){
  if(v('sCal').value.trim())data.calendar_url=v('sCal').value.trim();
  if(v('sBrave').value.trim())data.brave_key=v('sBrave').value.trim();
  data.phone_access=v('sPhone').value;
- try{await post('/api/settings',data);C.applyMode(data.expression_mode);v('sMsg').textContent='Saved.';setTimeout(systems,700);}catch(e){v('sMsg').textContent=e.message;}
+ try{await post('/api/settings',data);C.applyMode(data.expression_mode);if(v('sMsg'))v('sMsg').textContent='Saved.';setTimeout(()=>{if(D.page==='settings')systems();},700);}catch(e){if(v('sMsg'))v('sMsg').textContent=e.message;}
 }
 
 /* ---------------- shared ---------------- */
