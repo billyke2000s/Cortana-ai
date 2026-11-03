@@ -42,6 +42,8 @@ if enabled) rather than in a public issue.
 
 ## Known residual risks
 
+HEAD requests use the same pairing and static-file whitelist checks as static GET requests. Unpaired HEAD receives 403, private paths receive 404, and API HEAD receives 405; no response body is sent. Settings switches require actual JSON booleans before writes, and blank folder paths are rejected before indexing.
+
 - Anyone who sees the QR code (or a screenshot of it) can pair until the next restart in Cloudflare mode, or indefinitely in
   Tailscale mode (delete `phone_token` from the database to rotate). Keep it private.
 - Local processes on the PC can reach `127.0.0.1` without pairing (by design: the PC is trusted).

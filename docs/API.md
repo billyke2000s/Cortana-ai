@@ -4,6 +4,8 @@ Base URL: `http://127.0.0.1:<port>` on the PC, or the paired tunnel URL on a pho
 
 ## Access rules (apply to every endpoint)
 
+- **HEAD**: pairing and the static whitelist apply as for static GET requests; responses contain headers only. API paths return `405` with `Allow: GET, POST` after authentication. HEAD does not perform pairing or API actions.
+
 - **Local** (Host `localhost`/`127.0.0.1`, no proxy headers): always allowed.
 - **Remote** (phone): Host must equal the tunnel host **and** the `cortana_session` cookie must match. Otherwise: `403` HTML pairing page (GET) or `403 {"error"}` (POST).
 - **POST**: `Content-Type: application/json` required (`415`); `Origin`, if present, must equal this host (`403`); body size 1–64,000 bytes (1,500,000 for `/api/transcribe`, 16,000,000 for `/api/documents`) (`400`).
@@ -95,6 +97,8 @@ Returns the open items list.
 Secrets (`calendar_url`, `brave_key`, tokens) are **never** returned.
 
 ### `POST /api/settings`
+Boolean switches accept JSON `true`/`false` only. Strings, numbers, nulls and containers return `400` before any setting is saved. Requests from a phone that include `full_access` are also rejected before saving other fields.
+
 Any subset of: `model` (`[\w.:/-]{1,80}`), `voice_engine` (`piper`|`windows`|`zipvoice`), `voice` (must be in the catalog),
 `home_location` (≤80 chars), `calendar_url` (`https://…` or `""` to disconnect), `brave_key`, `pc_controls` (bool),
 `tools_enabled` (bool), `pc_access` (bool: screen, clipboard, file search/open), `phone_access` (`cloudflare`|`tailscale`, applies next launch). → `{"ok": true}`.
@@ -130,6 +134,8 @@ Weather is cached for 10 minutes; the calendar for 5. `events` merges Cortana's 
 `{"documents": [{id, name, path|null, pages|null, chars, added, summarised}], "folders": [str], "canAddFolder": bool}`; `canAddFolder` is true only on the PC.
 
 ### `POST /api/documents`
+`add_folder` requires a nonempty string path. Missing, blank and non-string paths return `400` without scanning a folder.
+
 - `{"action":"add","name":"brief.pdf","data":"<base64>"}` → `{"added":{id,name,pages,chars},"documents":[...]}`. Folders in `name` are dropped. PDF, .docx, .pptx and text types only; same name replaces the old copy.
 - `{"action":"add_folder","path":"C:\\…"}` (**PC only**, `400` from a phone) → `{"added_count", "skipped":[names], "documents"}`. Up to 80 files, 4 levels deep, ≤40 MB each.
 - `{"action":"remove","id":3}` → `{"documents":[...]}`.
@@ -153,7 +159,7 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 - `POST /api/chat-stream` and `/api/speech` accept optional `request_id` (1–100 ASCII letters/digits/underscore/hyphen). Existing payloads remain supported.
 - `POST /api/cancel {request_id}` → `{ok:true}`. A cancelled ID stays cancelled for one hour, including queued speech. Streaming ends with an error; cancelled speech returns 503. Completed tools are not rolled back.
 - `POST /api/metrics {playback_ms:number}` (0–600000) → `{ok:true}`. Status adds `latency` (milliseconds), `wakeDetector`, `lipSync`, `voiceReady` (false while the chosen voice loads), `expressionMode`, `choosePersonality`; alerts add `due`.
-- `POST /api/transcribe` with `wake:true` runs the small keyword detector first. A negative burst avoids Whisper. `interrupt:true` additionally requires the detector (no Whisper-only interruption fallback).
+- `POST /api/transcribe` with `wake:true` transcribes every burst with local Whisper and applies `wake_match`; there is no keyword-detector gate in the restored 1.7.1 runtime (D-037), including interruption bursts.
 - Settings GET/POST add `expression_mode` (`normal` default / `expressive`), `setup_complete` (boolean, false default), `native_notifications` (boolean, true default); `voice_engine` adds `zipvoice`. Unknown values are rejected.
 - `GET /api/memory` adds `conflicts`, an array of potentially conflicting fact-ID groups. `POST /api/memory {action:"edit",id,text}` replaces one existing fact (1–300 chars).
 - `POST /api/objectives {action:"snooze",id,minutes:10}` re-arms a timer/reminder for 1–1440 minutes. GET adds `recent_alerts`: at most 20 acknowledged timers from the last day. Items have additive `notified` state.

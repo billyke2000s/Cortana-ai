@@ -2,6 +2,15 @@
 
 _Last updated: 3 November 2026._
 
+## Post-rollback gateway review
+
+Reviewed the gateway, settings, storage, background watchers, cancellation and their callers/tests. This was a focused review, not a certification that every code path is fault-free.
+
+- Reproduced three faults with new regressions before changing the implementation: unrestricted HEAD handling, boolean coercion, and empty folder paths selecting the current directory.
+- Existing baseline: 132 tests, OK (skipped=1). After corrections: 135 tests, OK (skipped=1), using `python -m unittest discover -s tests -v` with workspace-local test dependencies and temporary files.
+- Application/build/test code contains no Jarvis references. Historical 1.8 documentation remains as release history.
+- **[Unverified]**: no new executable was built or installed; live model, voice, microphone, phone and desktop-control behaviour was not retested. The existing v1.7.1 executable does not contain these source changes.
+
 ## Rollback to 1.7.1
 
 The owner requested the version before OpenJarvis. Application files, build configuration and tests are restored to `883a4089cdc88e69142440d3ef0cf7674a264924` (the documented 1.7.1 state). Historical release records below remain for reference.

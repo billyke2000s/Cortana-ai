@@ -11,6 +11,11 @@ UNPAIRED_PAGE=('<!doctype html><meta name=viewport content="width=device-width,i
  '<p style="color:#a9c6e6">Scan the QR code shown in the Cortana window on your PC.<br>Each time Cortana restarts it shows a new QR code, so old links stop working.</p></div>').encode()
 SETTINGS_PUBLIC=('model','voice_engine','voice','home_location','pc_controls','tools_enabled','phone_access','pc_access','expression_mode','setup_complete','native_notifications','context_mode','briefing_time','watch_folders','watch_downloads','full_access')
 _weather_cache={'at':0,'key':None,'value':None}
+def static_allowed(path):
+    public_path=unquote(path).replace('\\','/')
+    allowed=public_path in ('/','/index.html','/app.js','/avatar.js','/pages.js','/mic-worklet.js','/responsive.css','/manifest.webmanifest','/app-icon.svg') or public_path.startswith(('/assets/','/vendor/'))
+    return allowed and '..' not in public_path.split('/')
+
 class AppServer(ThreadingHTTPServer):
     daemon_threads=True
     def __init__(self,address,runtime):
@@ -34,7 +39,8 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('X-Content-Type-Options','nosniff');self.send_header('Referrer-Policy','no-referrer');self.send_header('Permissions-Policy','microphone=(self), camera=()');self.send_header('X-Frame-Options','DENY');super().end_headers()
     def send_data(self,data,mime,status=200):
-        self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(data)));self.send_header('Cache-Control','no-store');self.end_headers();self.wfile.write(data)
+        self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(data)));self.send_header('Cache-Control','no-store');self.end_headers()
+        if self.command!='HEAD':self.wfile.write(data)
     def send_json(self,value,status=200):self.send_data(json.dumps(value,default=str).encode(),'application/json; charset=utf-8',status)
     def stream_events(self,events):
         """Newline-delimited JSON, flushed per event so the page can speak the first sentence while the rest is written."""
@@ -48,6 +54,14 @@ class Handler(SimpleHTTPRequestHandler):
             try:self.wfile.write((json.dumps({'type':'error','error':str(e) if isinstance(e,(RuntimeError,ValueError)) else 'The local service could not finish.'})+'\n').encode());self.wfile.flush()
             except OSError:pass
         finally:events.close()
+    def do_HEAD(self):
+        # The base class otherwise serves file metadata without our pairing or whitelist checks.
+        if not self.authorised():return self.send_data(UNPAIRED_PAGE,'text/html; charset=utf-8',403)
+        path=urlsplit(self.path).path
+        if path.startswith('/api/'):
+            self.send_response(405);self.send_header('Allow','GET, POST');self.send_header('Content-Length','0');self.end_headers();return
+        if not static_allowed(path):return self.send_error(404)
+        super().do_HEAD()
     def do_GET(self):
         runtime=self.server.runtime;parsed=urlsplit(self.path);pairing=parse_qs(parsed.query).get('pair',[''])[0]
         if pairing and self.headers.get('Host','').lower()==runtime.tunnel_host and secrets.compare_digest(pairing,runtime.token):
@@ -79,9 +93,7 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/phone':
             if not self.local:return self.send_json({'error':'Pairing is available on the PC only.'},403)
             return self.send_json({'ready':bool(runtime.phone_url),'url':runtime.phone_url})
-        public_path=unquote(parsed.path).replace('\\','/')
-        allowed=public_path in ('/','/index.html','/app.js','/avatar.js','/pages.js','/mic-worklet.js','/responsive.css','/manifest.webmanifest','/app-icon.svg') or public_path.startswith(('/assets/','/vendor/'))
-        if not allowed or '..' in public_path.split('/'):return self.send_error(404)
+        if not static_allowed(parsed.path):return self.send_error(404)
         super().do_GET()
     def do_POST(self):
         if not self.authorised():return self.send_json({'error':'Pair again using the QR code on your PC.'},403)
@@ -193,6 +205,11 @@ def memory_action(store,data):
     return {'facts':store.facts(),'messages':store.recent_messages(60)}
 def settings_action(runtime,data,local=False):
     store=runtime.store
+    boolean_keys=('setup_complete','native_notifications','watch_folders','watch_downloads','full_access','pc_controls','tools_enabled','pc_access')
+    # Reject malformed switches before writing any setting; bool('false') is True.
+    for key in boolean_keys:
+        if key in data and not isinstance(data[key],bool):raise ValueError('Use true or false for '+key+'.')
+    if 'full_access' in data and not local:raise ValueError('Full access can only be changed on the PC.')
     if 'model' in data:
         model=str(data['model'])
         if not re.fullmatch(r'[\w.:/-]{1,80}',model):raise ValueError('Invalid model.')
@@ -214,16 +231,13 @@ def settings_action(runtime,data,local=False):
         if not isinstance(at,str) or (at and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d',at)):raise ValueError('Use a time like 07:30, or leave it empty.')
         store.set('briefing_time',at)
     if 'full_access' in data:   # full access can only be switched on or off on the PC itself (D-038)
-        if not isinstance(data['full_access'],bool):raise ValueError('Use true or false for full_access.')
-        if not local:raise ValueError('Full access can only be changed on the PC.')
         store.set('full_access',data['full_access'])
     for key in ('setup_complete','native_notifications','watch_folders','watch_downloads'):
         if key in data:
-            if not isinstance(data[key],bool):raise ValueError('Use true or false for '+key+'.')
             store.set(key,data[key])
     if 'voice_engine' in data and data['voice_engine'] not in ('piper','windows','zipvoice'):raise ValueError('Unknown voice engine.')
     for key in ('pc_controls','tools_enabled','pc_access'):
-        if key in data:store.set(key,bool(data[key]))
+        if key in data:store.set(key,data[key])
     if data.get('phone_access') in ('cloudflare','tailscale'):store.set('phone_access',data['phone_access'])
     if data.get('voice_engine') in ('piper','windows','zipvoice') or data.get('voice'):
         voice=data.get('voice')
@@ -246,8 +260,10 @@ def documents_action(store,data,local):
         return {'added':{'id':did,'name':name,'pages':pages,'chars':len(text)},'documents':store.documents()}
     elif action=='add_folder':
         if not local:raise ValueError('Folders can only be added on the PC itself.')
-        folder=Path(str(data.get('path','')).strip().strip('"')).expanduser()
-        if not str(folder).strip() or not folder.is_dir():raise ValueError('That folder does not exist.')
+        path=data.get('path')
+        if not isinstance(path,str) or not path.strip().strip('"').strip():raise ValueError('Choose a folder path.')
+        folder=Path(path.strip().strip('"').strip()).expanduser()
+        if not folder.is_dir():raise ValueError('That folder does not exist.')
         added,skipped=[],[]
         import proactive
         candidates=proactive.folder_candidates(folder)

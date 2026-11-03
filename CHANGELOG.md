@@ -4,6 +4,12 @@ All notable changes. Dates are UK time.
 
 ## [Unreleased] - 2026-11-03
 
+### Fixed
+- Apply pairing and the static-file whitelist to HEAD requests, which previously inherited unrestricted file-metadata handling. API HEAD requests return 405 without a body.
+- Reject non-boolean settings before saving any changes; strings such as `"false"` no longer enable PC controls, abilities or PC file access.
+- Reject missing, blank and non-text folder paths before scanning; a blank path no longer indexes the current working folder.
+- Refresh stale wake-word and phone-access documentation for the restored 1.7.1 runtime.
+
 ### Changed
 - Restore the 1.7.1 application, build configuration and tests at the owner's request. Remove the 1.8 OpenJarvis bridge, Brain controls and API routes; Cortana uses its built-in Ollama runtime again. Existing release tags and Git history remain intact.
 - Use the existing v1.7.1 release for the matching Windows executable. This rollback does not replace an installed executable or modify user data or OpenJarvis settings.

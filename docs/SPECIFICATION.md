@@ -4,6 +4,8 @@ This describes intended behaviour. Code that disagrees with this document is a b
 
 As of 3 November 2026, the owner-requested rollback restores 1.7.1: Cortana uses its built-in Ollama runtime. There is no OpenJarvis bridge, Brain selector or `/api/jarvis/*` route. Stored OpenJarvis settings are unused; existing user data is not migrated or deleted.
 
+Post-rollback gateway corrections: HEAD requests obey pairing and the static whitelist (API HEAD returns 405); malformed boolean settings and phone requests containing `full_access` are rejected before saving other settings; Add folder requires an explicit nonempty string path instead of falling back to the current directory.
+
 ## 1. States
 
 The page is always in exactly one state, shown in the label under the hologram:
@@ -148,7 +150,7 @@ next (not dropped). With wake enabled, echo-cancelled keyword audio remains acti
 ## 9. Phone
 
 The PC window shows a QR for the phone link. Scanning pairs the phone for that launch (Cloudflare) or persistently
-(Tailscale). Unpaired visitors see a page explaining how to pair. The phone can use every feature except showing the pairing QR.
+(Tailscale). Unpaired visitors see a page explaining how to pair. Phones can upload individual documents, but cannot add PC folders, retrieve pairing material, change Full access or approve Full access actions.
 
 ## 10. Avatar
 

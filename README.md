@@ -12,12 +12,12 @@
 <img src="https://img.shields.io/badge/voice-Piper-7fd4ff?style=flat-square" alt="Piper">
 <img src="https://img.shields.io/badge/ears-Whisper.cpp-7fd4ff?style=flat-square" alt="Whisper.cpp">
 <img src="https://img.shields.io/badge/3D-Three.js-7fd4ff?style=flat-square&logo=threedotjs&logoColor=white" alt="Three.js">
-<img src="https://img.shields.io/badge/offline%20tests-132%20passing-3df58a?style=flat-square" alt="132 offline tests passing">
+<img src="https://img.shields.io/badge/offline%20tests-135%20checks-3df58a?style=flat-square" alt="135 offline tests; one skipped in the latest local run">
 <img src="https://img.shields.io/badge/AI%20agents-read%20AGENTS.md-ffb35c?style=flat-square" alt="AI agents: read AGENTS.md">
 
 ### Your PC is the core. Your phone is the display.
 
-1.5 adds expression/voice setup, saved chat restoration, relevant editable memories, Windows reminders and snooze, and local keyword detection. The reference voice is experimental, slower than Piper, and may skip words. See [release verification](docs/STATUS.md).
+Current source uses the restored 1.7.1 standalone runtime with gateway corrections made on 3 November 2026. No OpenJarvis installation is required. Wake-word bursts go through local Whisper. The reference voice is experimental, slower than Piper, and may skip words. See [release verification](docs/STATUS.md).
 
 **A holographic voice assistant that thinks, listens, speaks and remembers, entirely on your own computer.**<br>
 No cloud AI. No subscription. No account. Your conversations never leave your PC.
@@ -83,7 +83,7 @@ No cloud AI. No subscription. No account. Your conversations never leave your PC
 | 🖱️ | **Full access** (opt-in, PC only) | *"Play something chill on Spotify."* · *"Install VLC."* · *"Turn on dark mode."* | She runs approved commands, or uses the mouse and keyboard herself after you approve the task · move your mouse to take over |
 | 🧠 | **Deep thinking** | 🧠 in Chat, or *"Think carefully about which laptop to buy."* | Slower, more careful answers |
 
-> Abilities can be switched off in **Systems** (*Screen, clipboard and file access* has its own switch). She never runs programs, scripts or shortcuts, opens only files she just found or made for you, asks before changing anything (files, folders, email drafts), and screenshots and pictures go only to the AI on your PC.
+> Abilities can be switched off in **Systems** (*Screen, clipboard and file access* has its own switch). File search opens only files she just found or made, and refuses programs, scripts and shortcuts. Optional **Full access** separately supports approved commands and desktop tasks on the PC; it is off by default. Screenshots and pictures go to the local AI.
 
 ---
 
@@ -250,7 +250,7 @@ cortana-ai/
 ## 🧪 Tests
 
 ```bash
-python -m unittest discover -s tests -v     # 132 offline tests, about 3 seconds, no GPU or internet needed
+python -m unittest discover -s tests -v     # 135 tests, no GPU or external internet needed; uses localhost
 ```
 
 They cover the sentence streamer, storage, every tool, model recommendations, calendar parsing, the whole HTTP API (streaming chat with tool calls, objectives, memory, settings) and the security rules, including a regression test for phone QR pairing. See [TESTING.md](docs/TESTING.md).
