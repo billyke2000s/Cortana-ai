@@ -286,8 +286,6 @@ class Runtime:
         from neural import Neural
         from lips import Lips
         self.jobs=Jobs();self.neural=Neural(self.update);self.lips=Lips()
-        from openjarvis import OpenJarvis
-        self.jarvis=OpenJarvis(self)
         from voice import Voice
         self.voice=Voice(self)
 
@@ -635,13 +633,6 @@ class Runtime:
             if change:yield {'type':'refresh','what':change}
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'set_reminder','arguments':reminder}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'set_reminder'}]
-        if self.store.get('brain','cortana')=='openjarvis' and local and not (timer or reminder or place is not None):   # PC only
-            # OpenJarvis brain (D-042): its agent runs its own tools/connectors/MCP servers; Cortana stays the face.
-            # Timers, reminders and weather above stay with Cortana because they live in her app.
-            yield {'type':'tool','name':'openjarvis','label':'OPENJARVIS IS WORKING'}
-            if self.jarvis.ensure_running():
-                yield from self.jarvis_reply(convo,stream,clean,conversation_version,started,tool_screen);return
-            stream.spoken.append("OpenJarvis isn't running, so I'll answer myself.");yield {'type':'sentence','text':stream.spoken[-1]}
         offered=tools.tools_for(clean[-1]['content'],ctx,full);rounds=6 if think else 4   # deep thinking may chain more steps
         done_in_code={n for n,v in (('set_timer',timer),('set_reminder',reminder)) if v}
         offered=[t for t in offered if t['function']['name'] not in done_in_code]   # never a second, duplicate timer/reminder
@@ -700,27 +691,6 @@ class Runtime:
         if screen:yield {'type':'screen','markdown':screen[:12000]}
         if not stream.spoken:
             if not screen:raise RuntimeError('The model returned no spoken answer. Try again.')
-            stream.spoken.append("I've put it on screen for you.");yield {'type':'sentence','text':stream.spoken[-1]}
-        self.jobs.check();self.jobs.measure('reply_ms',started)
-        self.store.log_exchange(clean[-1]['content'],raw,conversation_version)
-        yield {'type':'done','reply':' '.join(stream.spoken)[:3000],'raw':raw[:6000]}
-
-    def jarvis_reply(self,convo,stream,clean,conversation_version,started,tool_screen=''):
-        """Stream OpenJarvis's answer through the same speech/screen pipeline as Cortana's own (contract §3.1)."""
-        raw='';first=False
-        try:
-            for piece in self.jarvis.stream(convo,self.jobs.check,self.jobs.watch):
-                if not first:self.jobs.measure('first_token_ms',started);first=True
-                raw+=piece
-                for sentence in stream.feed(piece):yield {'type':'sentence','text':sentence}
-        except (OSError,ValueError) as e:
-            self.jobs.check()
-            raise RuntimeError('OpenJarvis stopped answering: '+str(e)[:120])
-        for sentence in stream.finish():yield {'type':'sentence','text':sentence}
-        screen=tool_screen or (stream.screen or '').strip()
-        if screen:yield {'type':'screen','markdown':screen[:12000]}
-        if not stream.spoken:
-            if not screen:raise RuntimeError('OpenJarvis returned no answer. Try again.')
             stream.spoken.append("I've put it on screen for you.");yield {'type':'sentence','text':stream.spoken[-1]}
         self.jobs.check();self.jobs.measure('reply_ms',started)
         self.store.log_exchange(clean[-1]['content'],raw,conversation_version)

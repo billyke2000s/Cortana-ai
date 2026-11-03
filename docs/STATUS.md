@@ -1,6 +1,15 @@
 # Status
 
-_Last updated: 1 November 2026._
+_Last updated: 3 November 2026._
+
+## Rollback to 1.7.1
+
+The owner requested the version before OpenJarvis. Application files, build configuration and tests are restored to `883a4089cdc88e69142440d3ef0cf7674a264924` (the documented 1.7.1 state). Historical release records below remain for reference.
+
+- Before rollback: `python -m unittest discover -s tests -v` ran 149 tests, OK (skipped=1).
+- After rollback: the same command ran 132 tests, OK (skipped=1). Dependencies were installed in an isolated workspace folder; temporary files also used a workspace folder.
+- No new Windows executable was built or installed. Use the existing [v1.7.1 release](https://github.com/billyke2000s/Cortana-ai/releases/tag/v1.7.1).
+- **[Unverified]**: live GPU/model responses, microphone, phone, voice and desktop control were not retested for this rollback.
 
 ## 1.8.0: verification
 

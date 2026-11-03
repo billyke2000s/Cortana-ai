@@ -216,11 +216,6 @@ async function systems(){
    <label class="pg-check"><input type="checkbox" id="sPC"${s.pc_controls?' checked':''}> PC controls (media, volume, open allowed apps)</label>
    <label class="pg-check"><input type="checkbox" id="sAccess"${s.pc_access!==false?' checked':''}> Screen, clipboard and file access (only when you ask; nothing leaves this PC)</label>
    <h3>Brain</h3>
-   ${C.state!==undefined&&s.openjarvis&&'running' in s.openjarvis?`<label>Who thinks<select id="sBrain">${opt('cortana','Cortana (built in)',s.brain!=='openjarvis')}${opt('openjarvis','OpenJarvis (all its tools, connectors and agents)',s.brain==='openjarvis')}</select></label>
-   <p class="pg-muted">${s.openjarvis.running?`OpenJarvis is running${s.openjarvis.model?' · '+esc(s.openjarvis.model):''}${s.openjarvis.agent?' · agent '+esc(s.openjarvis.agent):''}.`:s.openjarvis.install?'OpenJarvis is installed; Cortana starts it when needed.':'OpenJarvis not found in your OpenJarvis folder. Install it, or start <code>jarvis serve</code> yourself.'} Cortana stays the face and voice; timers, reminders and weather stay with her.</p>
-   <label>OpenJarvis address (this PC only)<input id="sJarvisUrl" value="${esc(s.openjarvis_url||'http://127.0.0.1:8000')}" maxlength="40"></label>
-   <label>OpenJarvis API key (only if you set one)<input id="sJarvisKey" type="password" placeholder="${s.openjarvis_key_set?'Saved':'Not needed for this PC'}" maxlength="200"></label>
-   <button type="button" class="pg-btn pg-wide" data-act="jarvis-windows">Give OpenJarvis control of Windows (Windows-MCP)</button><p class="pg-muted" id="sJarvisMsg"></p>`:''}
    <label>Memory size<select id="sContext">${opt('auto','Auto: largest that fits your graphics card',s.context_mode!=='standard')}${opt('standard','Standard (6,144 tokens)',s.context_mode==='standard')}</select></label>
    <p class="pg-muted">Current: ${esc(s.context)} tokens. Bigger remembers more of the conversation and long documents. Deep thinking: 🧠 in Chat, or say “think carefully about…”.</p>
    ${C.state!==undefined&&(await get('/api/status')).canPair?`<h3>Full access</h3>
@@ -262,7 +257,7 @@ async function saveSystems(){
  data.tools_enabled=v('sTools').checked;data.pc_controls=v('sPC').checked;data.pc_access=v('sAccess').checked;
  if(v('sEngine').value!==s.voice_engine)data.voice_engine=v('sEngine').value;
  if(v('sVoice').value!==s.voice)data.voice=v('sVoice').value;
- data.expression_mode=v('sExpression').value;data.context_mode=v('sContext').value;if(v('sBrain')){data.brain=v('sBrain').value;data.openjarvis_url=v('sJarvisUrl').value.trim();if(v('sJarvisKey').value.trim())data.openjarvis_key=v('sJarvisKey').value.trim();}if(v('sFull'))data.full_access=v('sFull').checked;data.briefing_time=v('sBriefAt').value;data.watch_folders=v('sWatchDocs').checked;data.watch_downloads=v('sWatchDl').checked;data.native_notifications=v('sNotifications').checked;
+ data.expression_mode=v('sExpression').value;data.context_mode=v('sContext').value;if(v('sFull'))data.full_access=v('sFull').checked;data.briefing_time=v('sBriefAt').value;data.watch_folders=v('sWatchDocs').checked;data.watch_downloads=v('sWatchDl').checked;data.native_notifications=v('sNotifications').checked;
  data.home_location=v('sHome').value.trim();
  if(v('sCal').value.trim())data.calendar_url=v('sCal').value.trim();
  if(v('sBrave').value.trim())data.brave_key=v('sBrave').value.trim();
@@ -279,7 +274,6 @@ D.body().addEventListener('click',async e=>{
  try{
   if(act==='complete'||act==='delete'||act==='snooze'){await post('/api/objectives',{action:act,id:Number(id)});objectives();}
   else if(act==='confirm-yes'||act==='confirm-no')C.confirm(id,act==='confirm-yes');
-  else if(act==='jarvis-windows'){btn.disabled=true;const r=await post('/api/jarvis/windows-control',{});document.getElementById('sJarvisMsg').textContent=r.message;}
   else if(act==='task-stop'){C.stopTask(id);btn.disabled=true;btn.textContent='Stopping…';}
   else if(act==='deep'){C.deep=!C.deep;btn.setAttribute('aria-pressed',String(C.deep));C.note(C.deep?'Deep thinking on: slower, more careful answers.':'Deep thinking off.');}
   else if(act==='edit-fact'){await post('/api/memory',{action:'edit',id:Number(id),text:document.querySelector('[data-fact="'+Number(id)+'"]').value});memory();}

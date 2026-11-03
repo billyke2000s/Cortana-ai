@@ -2,6 +2,8 @@
 
 This describes intended behaviour. Code that disagrees with this document is a bug in one of them; fix both together.
 
+As of 3 November 2026, the owner-requested rollback restores 1.7.1: Cortana uses its built-in Ollama runtime. There is no OpenJarvis bridge, Brain selector or `/api/jarvis/*` route. Stored OpenJarvis settings are unused; existing user data is not migrated or deleted.
+
 ## 1. States
 
 The page is always in exactly one state, shown in the label under the hologram:
@@ -175,7 +177,3 @@ Systems → **Full access** (PC only, off by default). When on, requests made on
 - `run_command(command, why?)`: one PowerShell command, shown exactly on the approval card; runs hidden in the user's home folder with a 120-second limit; exit code, the last 2,500 characters of output and any errors come back.
 - `computer_task(goal)`: the goal is approved once; then up to 15 rounds of: screenshot (whole primary screen, scaled to 1280 px) → the model returns one JSON action (click, double_click, right_click, type, press keys, scroll, wait, done, fail) → it is performed with Windows SendInput. Moving the mouse yourself stops it before the next action (she remembers where she left the cursor; any other movement is you); **Stop** on the card stops it between steps. The model is told never to type passwords or payment details.
 While a task runs, the launcher draws a pulsing blue frame round the whole screen with "CORTANA HAS CONTROL · move your mouse to take over" (click-through, not focusable, excluded from screen capture on Windows 10 2004+), and the arrow, hand and text cursors turn Cortana blue; both are removed when the task ends for any reason, and the user's cursors are reloaded on every start. Screens are captured in-process (GDI, DPI-aware for the capturing thread, scaled to 1280 px) with the PowerShell capture as fallback; 0.25 s pause after each action. Her instructions state whether full access is on, off (and where to switch it on) or unavailable because she is being used from the phone. Every command and step is appended to `full-access.log` in the data folder. A paired phone never gets these tools and cannot approve them or switch the mode.
-
-## 14. OpenJarvis brain (1.8, opt-in)
-
-Systems → Brain → **Who thinks**: Cortana (built in) or OpenJarvis. With OpenJarvis, questions asked on the PC (except plain timers, reminders and weather, which Cortana handles) go to the local OpenJarvis server with Cortana's personality and speech rules as the system message; its answer streams through the same speech/screen pipeline. Cortana starts `~/OpenJarvis/.venv/Scripts/jarvis.exe serve --host 127.0.0.1 --port <port>` if it isn't running (up to 40 s), and otherwise says it isn't running and answers herself. Questions from the phone are always answered by Cortana. OpenJarvis approval requests show as approval cards in Chat on the PC. **Give OpenJarvis control of Windows** (Full access must be on) adds Windows-MCP without PowerShell/Registry/FileSystem/Process tools.

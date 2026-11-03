@@ -2,6 +2,12 @@
 
 All notable changes. Dates are UK time.
 
+## [Unreleased] - 2026-11-03
+
+### Changed
+- Restore the 1.7.1 application, build configuration and tests at the owner's request. Remove the 1.8 OpenJarvis bridge, Brain controls and API routes; Cortana uses its built-in Ollama runtime again. Existing release tags and Git history remain intact.
+- Use the existing v1.7.1 release for the matching Windows executable. This rollback does not replace an installed executable or modify user data or OpenJarvis settings.
+
 ## [1.8.0] - 2026-11-01
 
 ### Added
