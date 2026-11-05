@@ -199,3 +199,7 @@ The owner wants "everything OpenJarvis has, with a Halo theme", 100% local. Port
 ### D-043: Restore the version before OpenJarvis
 
 On 3 November 2026 the owner requested a rollback to the version that does not need Jarvis. Restore the documented 1.7.1 application, build and tests with a forward commit; retain Git history, release tags and historical release records. Existing OpenJarvis settings and user data are outside this repository rollback. The matching executable remains available in release v1.7.1.
+
+### D-044: Optional extensions use data manifests and separate local services
+
+The owner requested an easy extension mechanism, with project-specific abilities distributed outside Cortana. Use one JSON manifest and a separately started service, rather than importing arbitrary Python/JavaScript into the assistant or running installation commands. The existing approval flow handles mutations and the host knows no extension-specific product names. Four enabled tools and 5,500 schema characters are allowed; reserve schema characters from history so installing an extension does not grow the prompt budget. Cost: authors run their service separately, and real-model tool selection remains to be measured. See EXTENSIONS.md.

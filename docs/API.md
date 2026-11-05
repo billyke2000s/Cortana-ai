@@ -176,3 +176,15 @@ Only: `/`, `/index.html`, `/app.js`, `/pages.js`, `/avatar.js`, `/mic-worklet.js
 - `POST /api/chat-stream` accepts optional `images`: up to 2 base64 PNG/JPEG/WebP pictures (≤1.8 MB each) for the current question only; the request limit is 4 MB only when pictures are attached (64 KB otherwise). Pictures are never stored.
 - Stream `confirm` events add `name` (the tool). `computer_task` cards can be stopped with `POST /api/cancel {request_id:"task_<id>"}` (between steps).
 - Settings GET/POST add `full_access` (boolean, default false). POST is refused from a paired phone; `run_command`/`computer_task` approvals via `POST /api/confirm` are refused unless they come from the PC.
+
+## Generic extensions (source implementation, 5 November 2026)
+
+PC-only, existing pairing/origin/JSON/size checks apply. See [author guide](EXTENSIONS.md).
+
+- `GET /api/extensions` → `{extensions:[{id,name,version,description,enabled,tools:[{name,description,approval}]}]}`. No connection tokens or service headers are returned.
+- `POST /api/extensions {action:"preview",manifest:{...}}` validates an import and returns reviewable metadata/service address, excluding its token.
+- `POST /api/extensions {action:"install",manifest:{...}}` installs or replaces a manifest, disabled initially.
+- `POST /api/extensions {action:"enable"|"disable"|"remove",id}` changes its registration.
+- Enabled extension tools use names `ext_<10-character-id-hash>_<tool-name>` and the existing `confirm`/`/api/confirm` contracts. Approval checks PC origin, current registration revision and the Abilities switch again before transport.
+
+Private setting `installed_extensions` stores manifests and enabled flags. It is never part of `/api/settings`. Extension responses cannot contain the configured service token; it is redacted defensively. All extension transport uses fixed manifest paths on literal loopback, without proxy/redirect support.

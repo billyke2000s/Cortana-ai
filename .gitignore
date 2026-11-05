@@ -34,3 +34,6 @@ live-check-report.json
 
 # Scoped private reference requested for this release. Model weights remain ignored.
 !app/voice-profile/reference.wav
+
+# Extension connection files contain private service tokens
+examples/extension-template/extension.json

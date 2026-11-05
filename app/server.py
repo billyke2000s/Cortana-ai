@@ -86,6 +86,9 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path=='/api/documents':return self.send_json({'documents':runtime.store.documents(),'folders':runtime.store.get('doc_folders',[]),'canAddFolder':self.local})
         if parsed.path=='/api/events':return self.send_json({'events':runtime.store.upcoming_events()})
         if parsed.path=='/api/models':return self.send_json(runtime.models_info())
+        if parsed.path=='/api/extensions':
+            if not self.local:return self.send_json({'error':'Extensions are available on the PC only.'},403)
+            return self.send_json(runtime.extensions.listing())
         if parsed.path=='/api/phone-qr':
             if not self.local:return self.send_json({'error':'Pairing is available on the PC only.'},403)
             if not runtime.phone_url:return self.send_json({'error':'Phone connection is starting.'},503)
@@ -106,6 +109,9 @@ class Handler(SimpleHTTPRequestHandler):
             data=json.loads(self.rfile.read(size))
             if not isinstance(data,dict):raise ValueError('Invalid request.')
             runtime=self.server.runtime
+            if self.path=='/api/extensions':
+                if not self.local:return self.send_json({'error':'Manage extensions on the PC itself.'},403)
+                return self.send_json(runtime.extensions.manage(data))
             if self.path=='/api/cancel':
                 key=runtime.jobs.key(data.get('request_id'))
                 if not key:raise ValueError('Request ID required.')

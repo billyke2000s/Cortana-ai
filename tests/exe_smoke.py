@@ -40,6 +40,7 @@ else:
     sys.exit('Cortana.exe did not start its server within 90 s')
 print('status:', json.loads(raw)['status'])
 checks = []
+extensions = json.loads(call('/api/extensions')[1]); checks.append(('extension host bundled', extensions == {'extensions': []}))
 status, page = call('/'); checks.append(('page', status == 200 and b'CORTANA' in page.upper()))
 for path in ('/app.js', '/pages.js', '/avatar.js', '/vendor/three.module.js', '/vendor/GLTFLoader.js'):
     try:

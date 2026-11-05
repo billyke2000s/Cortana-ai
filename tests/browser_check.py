@@ -65,6 +65,29 @@ try:
         page.click('[data-act=deep]');assert page.get_attribute('[data-act=deep]','aria-pressed')=='true'
         page.evaluate("window.CortanaPages.open('settings')");page.wait_for_selector('#sContext');page.wait_for_selector('#sBriefAt');page.wait_for_selector('#sFull')
         print('APPROVAL CARD / VOICE YES / DEEP TOGGLE / SYSTEMS OK',flush=True)
+        # Generic extension import/review/install/enable/disable/remove in the real browser.
+        import json
+        extension={'manifest_version':1,'id':'example.browser-check','name':'Example local ability','version':'1.0.0',
+            'description':'<img src=x onerror=window.extensionInjected=true>',
+            'connection':{'url':'http://127.0.0.1:47831','token':'T'*40},
+            'tools':[{'name':'echo','description':'Return text.','path':'/v1/echo','approval':False,
+                'parameters':{'type':'object','properties':{'text':{'type':'string'}}}}]}
+        page.click('[data-act=extensions]');page.wait_for_selector('[data-act=ext-import]')
+        with page.expect_file_chooser() as chooser:
+            page.click('[data-act=ext-import]')
+        chooser.value.set_files({'name':'extension.json','mimeType':'application/json','buffer':json.dumps(extension).encode()})
+        page.wait_for_selector('[data-act=ext-install]')
+        assert 'T'*40 not in page.locator('#extensionPreview').inner_text()
+        assert page.evaluate('window.extensionInjected') is None
+        page.click('[data-act=ext-install]');page.wait_for_selector('[data-act=ext-enable]')
+        page.click('[data-act=ext-enable]');page.wait_for_selector('[data-act=ext-disable]')
+        for width,height in [(320,568),(390,844),(1280,900)]:
+            page.set_viewport_size({'width':width,'height':height})
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'),width
+        page.click('[data-act=ext-disable]');page.wait_for_selector('[data-act=ext-enable]')
+        page.click('[data-act=ext-remove]');page.wait_for_function("!document.querySelector('[data-act=ext-enable]')")
+        assert r.extensions.listing()['extensions']==[]
+        print('EXTENSION IMPORT / ESCAPING / ENABLE / DISABLE / REMOVE OK',flush=True)
         assert not errors,errors
         print('CONSOLE OK',flush=True)
         browser.close()

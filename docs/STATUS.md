@@ -131,3 +131,11 @@ Repository metadata currently reports **public**. The docs previously described 
 6. Validate the small keyword detector and playback echo rejection with real microphones.
 7. Optional: more abilities (music service, smart-home) behind the same allow-list rules and the approval gate.
 8. Not built yet, on purpose (D-035): website automation (filling in forms), desktop app control by clicking/typing, running model-written code, whole multi-tool "missions" beyond the 6-step deep-thinking loop, a plugin system. Each needs a real sandbox or browser engine; revisit after the 1.6 abilities are proven on the real models.
+
+## Generic extension host (5 November 2026, source branch)
+
+Implemented generic JSON import/review/install/enable/disable/remove, namespaced model tools, PC-only invocation and approval tied to a manifest revision, private loopback tokens and an author template. No project-specific extension is bundled. Existing Abilities and gateway protections remain. Schema size is reserved from history.
+
+Local verification: 143 offline tests passed; real Chromium checked the existing six layouts, approval flow and extension import/escaping/enable/disable/remove. No real 4B/9B selection, Windows executable, voice, phone or owner's GPU test is claimed by these local checks. The extension-check workflow builds a separate Windows artifact; the old v1.7.1 EXE remains unchanged until replaced by a build containing this source.
+
+Extension results are rendered deterministically as escaped JSON cards, including read-only proposal results, so a model summary cannot hide the actual returned diff.

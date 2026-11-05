@@ -267,6 +267,8 @@ class Runtime:
         DATA.mkdir(parents=True,exist_ok=True)
         from store import Store
         self.store=Store(DATA/'cortana.db')
+        from extensions import ExtensionManager
+        self._extensions=ExtensionManager(self.store)
         self.report=report;self.phone_url=None;self.tunnel_host=None
         # Tailscale gives a stable phone address, so keep the pairing token between launches in that mode only.
         if self.store.get('phone_access','cloudflare')=='tailscale':
@@ -288,6 +290,13 @@ class Runtime:
         self.jobs=Jobs();self.neural=Neural(self.update);self.lips=Lips()
         from voice import Voice
         self.voice=Voice(self)
+
+    @property
+    def extensions(self):
+        from extensions import ExtensionManager
+        if not hasattr(self,'_extensions') or self._extensions.store is not self.store:
+            self._extensions=ExtensionManager(self.store)
+        return self._extensions
 
     def update(self,text):self.status=text;self.report(text)
     def spawn(self,args,env=None,stdout=None,stderr=None):
@@ -597,7 +606,9 @@ class Runtime:
         self.jobs.check();started=time.perf_counter();first_token=False
         conversation_version=self.store.conversation_version();recap=self.store.conversation_summary()
         ctx=self.context()
-        clean=self.clean_messages(messages,budget=self.history_budget(ctx)-len(recap))
+        extension_schemas=self.extensions.schemas(local)
+        extension_budget=len(json.dumps(extension_schemas)) if extension_schemas else 0
+        clean=self.clean_messages(messages,budget=max(500,self.history_budget(ctx)-len(recap)-extension_budget))
         think=bool(think) or wants_deep_thought(clean[-1]['content'])
         # Reasoning tokens count against the reply budget; at 6,144 they get what is left after a full prompt (~4,900).
         predict=1200+(max(600,min(2800,ctx-4900)) if think else 0)
@@ -634,6 +645,7 @@ class Runtime:
             convo+=[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'set_reminder','arguments':reminder}}]},
                     {'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:2500],'tool_name':'set_reminder'}]
         offered=tools.tools_for(clean[-1]['content'],ctx,full);rounds=6 if think else 4   # deep thinking may chain more steps
+        offered+=extension_schemas
         done_in_code={n for n,v in (('set_timer',timer),('set_reminder',reminder)) if v}
         offered=[t for t in offered if t['function']['name'] not in done_in_code]   # never a second, duplicate timer/reminder
         any_calls=bool(done_in_code) or place is not None;nudged=False
@@ -674,7 +686,21 @@ class Runtime:
                     except ValueError:args={}
                 yield {'type':'tool','name':name,'label':tools.TOOL_LABELS.get(name,'WORKING')}
                 self.jobs.check()
-                if name in tools.CONFIRM:   # ask before doing (D-035): describe it, run only after the user approves
+                if name.startswith('ext_'):
+                    change=None
+                    try:
+                        if not local:raise ValueError('Extensions are available on the PC only.')
+                        manifest,ext_tool=self.extensions.prepare(name,args)
+                        if ext_tool['approval']:
+                            from extensions import revision
+                            pid=self.hold(name,args,local)
+                            self.pending[pid]['extension_revision']=revision(manifest)
+                            yield {'type':'confirm','id':pid,'name':name,'label':manifest['name'],
+                                   'summary':ext_tool['description'],'detail':json.dumps(args,ensure_ascii=False)[:5000]}
+                            result={'status':'waiting for approval','note':'The extension action has not run yet.'}
+                        else:result=self.extensions.call(name,args,local=True)
+                    except ValueError as e:result={'error':str(e)}
+                elif name in tools.CONFIRM:   # ask before doing (D-035): describe it, run only after the user approves
                     plan=tools.preview(name,args,self.store)
                     if 'error' in plan:result,change=plan,None
                     else:
@@ -685,6 +711,10 @@ class Runtime:
                 else:result,change=tools.run(name,args,self.store,llm)
                 if change:yield {'type':'refresh','what':change}
                 tool_screen=tools.screen_for(name,result) or tool_screen   # weather, files found, new events: a card every time (D-021)
+                if name.startswith('ext_') and result.get('status')!='waiting for approval':
+                    displayed=json.dumps(result,ensure_ascii=False,indent=2)
+                    if len(displayed)>11000:displayed=displayed[:11000]+'\n[Result truncated for display]'
+                    tool_screen='# Extension result\n```json\n'+displayed+'\n```'
                 convo.append({'role':'tool','content':json.dumps(result,ensure_ascii=False,default=str)[:tools.RESULT_LIMIT.get(name,2500)],'tool_name':name})
         for sentence in stream.finish():yield {'type':'sentence','text':sentence}
         screen=tool_screen or (stream.screen or '').strip()   # the tool's card wins, so weather looks the same every time
@@ -721,12 +751,15 @@ class Runtime:
         Full-access actions are only approved on the PC itself, while full access is still switched on."""
         import tools
         entry=getattr(self,'pending',{}).get(str(pid))
-        if entry and entry['name'] in tools.FULL and not (local and entry['local']):
+        if entry and (entry['name'] in tools.FULL or entry['name'].startswith('ext_')) and not (local and entry['local']):
             raise ValueError('Approve this on the PC itself.')
         entry=getattr(self,'pending',{}).pop(str(pid),None)
         if not entry or time.monotonic()-entry['at']>=self.PENDING_SECONDS:
             raise ValueError('That request has expired. Ask me again.')
         if not approve:return {'ok':True,'say':'Cancelled. Nothing was changed.'}
+        if entry['name'].startswith('ext_'):
+            result=self.extensions.call(entry['name'],entry['args'],local=True,approved=True,expected=entry.get('extension_revision'))
+            return {'ok':'error' not in result,'say':result.get('error') or 'The extension returned a result. See the details below.','result':result,'refresh':None}
         if entry['name'] in tools.FULL and not self.store.get('full_access',False):
             raise ValueError('Full access was switched off.')
         llm=lambda prompt,images=None,max_tokens=300:self.complete(prompt,images,max_tokens)

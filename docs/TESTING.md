@@ -91,3 +91,7 @@ and nav; add/complete/delete objectives; memory add/forget; settings save; displ
 - Manual: compare Normal/Expressive, try voice previews and arbitrary paragraphs, interrupt with speakers and with headphones, close the browser before a reminder, reopen/snooze, restart while a reminder is overdue. Voice identity and real-room echo cannot be established by silent/browser or synthetic tests.
 
 Hosted CPU model checks allow 900 seconds per local Ollama transport operation (the shipped app retains 180 seconds). This only changes the test deadline, not prompts or responses. The test refuses silent 9B → 4B fallback. Both models run on separate CPU runners.
+
+## Optional extension checks
+
+`tests/test_extensions.py` exercises manifest validation, private tokens, PC-only management/approval, lifecycle, argument validation, schema budgets and real loopback HTTP. `tests/browser_check.py` also imports a file through the real UI, checks escaped markup and hidden tokens, and enables/disables/removes its tool at phone/desktop widths. The extension-check workflow builds a Windows artifact and smoke-tests `/api/extensions` in the bundled executable. These checks use scripted services/models; real extension selection by 4B/9B is a separate unverified check, not inferred from the fake model.
