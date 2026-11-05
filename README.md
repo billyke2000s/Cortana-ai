@@ -272,3 +272,7 @@ Point it at **[AGENTS.md](AGENTS.md)** first. It's a strict rulebook (security i
 - **Licence:** none has been chosen yet, so by default all rights are reserved by the author. Add a `LICENSE` file to change that.
 
 <div align="center"><br><sub>Built with an unreasonable amount of blue glow.</sub></div>
+
+## Optional extensions
+
+On the PC: Systems → Extensions → Import extension. Review, install, then enable its tools. Authors can copy the dependency-free example service; see [the extension guide](docs/EXTENSIONS.md). Services run separately and project-specific abilities are not bundled with Cortana.

@@ -1,0 +1,45 @@
+name: Extension host checks
+on:
+  pull_request:
+  push:
+    branches: ['feature/extension-host']
+permissions:
+  contents: read
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt playwright==1.51.0
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m unittest discover -s tests -v
+      - run: python tests/browser_check.py
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python build/build_cortana.py
+      - name: Smoke test bundled executable
+        shell: pwsh
+        env:
+          CORTANA_DATA_DIR: '${{ runner.temp }}\CortanaExtensionTest'
+          CORTANA_MODEL: qwen3.5:4b
+        run: |
+          $app = Start-Process -FilePath .\dist\Cortana.exe -ArgumentList '--headless','--no-open','--no-tunnel','--port','8777' -PassThru
+          try {
+            python tests/exe_smoke.py http://127.0.0.1:8777
+            if ($LASTEXITCODE -ne 0) { throw 'Executable smoke test failed' }
+          } finally { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cortana-extension-host-windows
+          path: dist/Cortana.exe

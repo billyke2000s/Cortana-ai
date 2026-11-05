@@ -111,3 +111,7 @@ reminder item 10 minutes before. Alerts = `done=0 AND announced=0 AND due<=now`.
 `companion.Jobs` tracks bounded per-client request IDs, cancellation events, active Ollama sockets and text-free last-request timings. The browser synthesises sentences in order while previously prepared audio plays. Stop closes active Ollama reads, aborts queued calls and rejects cancelled output before/after native synthesis. Native chunks and already executing tools may finish.
 
 The reminder loop checks every two seconds; calendar refresh stays at five minutes. A fixed PowerShell notification program receives reminder text on stdin. `items.notified` is an additive migration separate from browser `announced`; snooze clears both. `Store.log_exchange` atomically checks a history version so Clear History cannot be undone by a stale reply. Recap consumes part of the existing 6,000-character history allowance; query-ranked facts have a separate 1,800-character cap.
+
+## Optional extension host
+
+`app/extensions.py` validates data-only manifests, stores private connections through Store, and POSTs to separately running loopback services. Runtime adds only enabled schemas to PC turns, reserves their size from history, and reuses the existing approval path for mutations. Server exposes PC-only management routes; Systems renders the generic import/review/enable/disable/remove interface. The module is a PyInstaller hidden import and is never statically served. No extension-specific application code or assets are bundled. See [EXTENSIONS.md](EXTENSIONS.md).

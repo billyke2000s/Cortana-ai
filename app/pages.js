@@ -175,6 +175,28 @@ D.body().addEventListener('dragleave',()=>D.body().classList.remove('drop-on'));
 D.body().addEventListener('drop',e=>{if(!e.dataTransfer?.files?.length)return;e.preventDefault();D.body().classList.remove('drop-on');if(D.page!=='chat')chat();uploadFiles([...e.dataTransfer.files]);});
 
 /* ---------------- Systems (settings) ---------------- */
+let extensionDraft=null;
+async function extensions(){
+ try{
+  const data=await get('/api/extensions');
+  page('extensions','Extensions',`<p>Add abilities from an extension JSON file. Review its tools, install it, then enable it. Services run separately on this PC.</p>
+   <button type="button" class="pg-primary pg-wide" data-act="ext-import">Import extension…</button>
+   <div id="extensionPreview"></div>
+   <ul class="pg-list">${data.extensions.map(x=>`<li class="pg-item"><span class="pg-text"><b>${esc(x.name)}</b> · ${esc(x.version)}<span class="pg-due">${esc(x.description)}</span><span class="pg-due">${x.tools.map(t=>esc(t.name)+(t.approval?' (approval required)':'')).join(' · ')}</span></span><button class="pg-btn" data-act="ext-${x.enabled?'disable':'enable'}" data-id="${esc(x.id)}">${x.enabled?'Disable':'Enable'}</button><button class="pg-btn" data-act="ext-remove" data-id="${esc(x.id)}">Remove</button></li>`).join('')}</ul>
+   ${data.extensions.length?'':'<p class="pg-muted">No extensions installed.</p>'}`);
+ }catch(e){failed('extensions','Extensions',e);}
+}
+function importExtension(){
+ const input=document.createElement('input');input.type='file';input.accept='.json';
+ input.onchange=async()=>{
+  try{
+   const f=input.files[0];if(!f)return;if(f.size>30000)throw Error('Choose a JSON file smaller than 30 KB.');
+   extensionDraft=JSON.parse(await f.text());
+   const p=await post('/api/extensions',{action:'preview',manifest:extensionDraft});
+   document.getElementById('extensionPreview').innerHTML=`<h3>${esc(p.name)} · ${esc(p.version)}</h3><p>${esc(p.description)}</p><p class="pg-muted">Service: ${esc(p.service)}</p><ul>${p.tools.map(t=>`<li>${esc(t.name)}: ${esc(t.description)}${t.approval?' — asks before running':''}</li>`).join('')}</ul><button type="button" class="pg-btn pg-wide" data-act="ext-install">Install (disabled initially)</button>`;
+  }catch(e){extensionDraft=null;alertIn(e.message);}
+ };input.click();
+}
 /* AI model picker: rated for this PC's graphics card; models that are too big can't be chosen. */
 const RATING={fast:['FAST','pg-r-fast'],good:['GOOD','pg-r-good'],slow:['SLOW','pg-r-slow'],too_big:['TOO BIG','pg-r-big']};
 let modelPoll=null;
@@ -211,6 +233,7 @@ async function systems(){
   const opt=(v,t,sel)=>`<option value="${esc(v)}"${sel?' selected':''}>${esc(t)}</option>`;
   page('settings','Systems',`
    <h3>Assistant</h3>
+   ${(await get('/api/status')).canPair?'<button type="button" class="pg-btn pg-wide" data-act="extensions">Extensions…</button>':''}
    <div id="sModels"><p class="pg-muted">Checking your hardware…</p></div>
    <label class="pg-check"><input type="checkbox" id="sTools"${s.tools_enabled?' checked':''}> Abilities (timers, memory, weather, search, calendar)</label>
    <label class="pg-check"><input type="checkbox" id="sPC"${s.pc_controls?' checked':''}> PC controls (media, volume, open allowed apps)</label>
@@ -282,6 +305,10 @@ D.body().addEventListener('click',async e=>{
    await post('/api/memory',{action:'clear_history'});C.clearConversation();memory();}
   else if(act==='read'&&lastBriefing)C.speak(briefingSpeech(lastBriefing));
   else if(act==='save')saveSystems();
+  else if(act==='extensions')extensions();
+  else if(act==='ext-import')importExtension();
+  else if(act==='ext-install'){if(!extensionDraft)throw Error('Choose the extension file again.');await post('/api/extensions',{action:'install',manifest:extensionDraft});extensionDraft=null;extensions();}
+  else if(['ext-enable','ext-disable','ext-remove'].includes(act)){await post('/api/extensions',{action:act.slice(4),id});extensions();}
   else if(act==='expression-preview'){C.applyMode(document.getElementById('sExpression').value,true);C.speak('Still with me, Chief? Of course you are. What is our next move?');}
   else if(act==='voice-preview'){await post('/api/settings',{voice_engine:document.getElementById('sEngine').value,voice:document.getElementById('sVoice').value});C.speak('Systems online, Chief. I am ready when you are.');}
   else if(act==='setup-preview'){C.applyMode(document.getElementById('setupExpression').value,true);await post('/api/settings',{voice_engine:document.getElementById('setupVoice').value});C.speak('Still with me, Chief? Of course you are. What is our next move?');}
@@ -315,6 +342,6 @@ async function setup(){
  <button type="button" class="pg-primary pg-wide" data-act="setup-save">Save and continue</button>`,'CORTANA // FIRST SETUP');
  }catch(e){failed('setup','Meet Cortana',e);}
 }
-const PAGES={setup,chat,tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
+const PAGES={setup,chat,tasks:objectives,memory,briefing,settings:systems,extensions,'choose-model':chooseModel};
 window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;},
  async readBriefing(){await briefing();if(lastBriefing)C.speak(briefingSpeech(lastBriefing));}};

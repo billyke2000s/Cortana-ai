@@ -2,7 +2,11 @@
 
 All notable changes. Dates are UK time.
 
-## [Unreleased] - 2026-11-03
+## [Unreleased] - 2026-11-05
+
+### Added
+- Generic optional extensions: JSON import/review, enable/disable/remove, namespaced local-model tools and PC approval cards. Separate services use private loopback connections; no extension code is imported or launched.
+- Dependency-free extension author template and docs/EXTENSIONS.md.
 
 ### Fixed
 - Apply pairing and the static-file whitelist to HEAD requests, which previously inherited unrestricted file-metadata handling. API HEAD requests return 405 without a body.
