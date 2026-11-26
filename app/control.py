@@ -3,10 +3,10 @@
 Off by default (setting `full_access`), PC-only (never from a paired phone), and every action is approved first:
 - run_command: the exact command is shown on the approval card; it runs once, hidden, with a time limit.
 - computer_task: the goal is approved once; then up to MAX_STEPS rounds of screenshot -> the local model picks ONE
-  action -> it is performed. Emergency stop: the user moves the mouse (she notices it isn't where she left it), or Stop on the card.
+  action -> it is performed. Emergency stop: press Escape anywhere on the Windows desktop, or Stop on the card.
 Everything run is appended to DATA/full-access.log so the owner can see exactly what happened.
 """
-import base64, ctypes, json, os, re, struct, subprocess, time, zlib
+import base64, ctypes, json, os, re, struct, subprocess, threading, time, zlib
 from datetime import datetime
 
 HIDDEN = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
@@ -154,39 +154,91 @@ class UserTookOver:
         return abs(now[0] - self.left[0]) > self.tolerance or abs(now[1] - self.left[1]) > self.tolerance
 
 
-def perform(step, size):
+class EscapeStop:
+    """Latch Escape even while the model is thinking; never resume the cancelled task."""
+    def __init__(self, pressed=None, on_stop=None):
+        self.pressed = pressed or (lambda: os.name == 'nt' and bool(ctypes.windll.user32.GetAsyncKeyState(0x1B) & 0x8000))
+        self.on_stop = on_stop
+        self.stopped = threading.Event()
+        self.closed = threading.Event()
+        self.thread = threading.Thread(target=self._watch, daemon=True)
+
+    def start(self):
+        self._sample()
+        self.thread.start()
+
+    def _sample(self):
+        if self.pressed() and not self.stopped.is_set():
+            self.stopped.set()
+            if self.on_stop:
+                self.on_stop()
+
+    def _watch(self):
+        while not self.closed.wait(.01):
+            self._sample()
+
+    def __call__(self):
+        return self.stopped.is_set()
+
+    def close(self):
+        self.closed.set()
+        self.thread.join()
+
+    def check(self):
+        if self():
+            raise InterruptedError('Escape pressed. Computer control stopped.')
+
+
+def perform(step, size, check=None):
     """Do one action. Coordinates are pixels in the screenshot of `size` (w, h); SendInput gets 0-65535 absolute values,
     so screen scaling (DPI) does not matter."""
+    check = check or (lambda: None)
+    def send(*items):
+        check()
+        _send(*items)
+    def pause(seconds):
+        until = time.monotonic() + seconds
+        while True:
+            check()
+            remaining = until - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(.01, remaining))
     action = step.get('action')
+    check()
     if action in ('click', 'double_click', 'right_click', 'move'):
         w, h = size
         x, y = float(step.get('x', -1)), float(step.get('y', -1))
         if not (0 <= x <= w and 0 <= y <= h):
             raise ValueError('That point is outside the screen.')
         ax, ay = int(x / w * 65535), int(y / h * 65535)
-        _send(_mouse(0x0001 | 0x8000, ax, ay))   # MOVE | ABSOLUTE
-        time.sleep(.08)
+        send(_mouse(0x0001 | 0x8000, ax, ay))   # MOVE | ABSOLUTE
+        pause(.08)
         if action == 'move':
             return
         down, up = (0x0008, 0x0010) if action == 'right_click' else (0x0002, 0x0004)
         for _ in range(2 if action == 'double_click' else 1):
-            _send(_mouse(down), _mouse(up));time.sleep(.06)
+            send(_mouse(down), _mouse(up));pause(.06)
     elif action == 'type':
         text = str(step.get('text') or '')[:500]
         for ch in text:
             if ch == '\n':
-                _send(_key(0x0D), _key(0x0D, True))
+                send(_key(0x0D), _key(0x0D, True))
             else:
-                _send(_key(0, unicode_char=ch), _key(0, True, unicode_char=ch))
-            time.sleep(.01)
+                send(_key(0, unicode_char=ch), _key(0, True, unicode_char=ch))
+            pause(.01)
     elif action == 'press':
         vks = parse_keys(step.get('keys'))
-        _send(*[_key(v) for v in vks]);time.sleep(.05);_send(*[_key(v, True) for v in reversed(vks)])
+        send(*[_key(v) for v in vks])
+        try:
+            pause(.05)
+        finally:
+            _send(*[_key(v, True) for v in reversed(vks)])
     elif action == 'scroll':
         amount = max(-20, min(20, int(step.get('amount', -3))))
-        _send(_mouse(0x0800, data=amount * 120))
+        send(_mouse(0x0800, data=amount * 120))
     elif action == 'wait':
-        time.sleep(min(5.0, max(.2, float(step.get('seconds', 1)))))
+        pause(min(5.0, max(.2, float(step.get('seconds', 1)))))
     else:
         raise ValueError(f'Unknown action {action}.')
 
@@ -334,14 +386,29 @@ def computer_task(goal, llm, check, max_steps=MAX_STEPS, shoot=None, act=None, s
     """Screenshot -> model picks one action -> do it, until done/fail/stop. Returns a summary dict.
     `check()` raises when the user pressed Stop; `show(True/False)` turns the blue border and cursor on/off;
     shoot/act/stop/show are injectable for tests."""
-    shoot, act, stop = shoot or screen, act or perform, stop or UserTookOver()
-    if os.name != 'nt' and act is perform:
+    shoot = shoot or screen
+    native = act is None or act is perform
+    if os.name != 'nt' and native:
         raise RuntimeError('Mouse and keyboard control only works on the Windows PC.')
+    escape = EscapeStop(on_stop=(lambda: show(False)) if show else None)
+    def checked():
+        escape.check()
+        check()
+    if native:
+        act = lambda step, size: perform(step, size, check=checked)
+    stop = stop or (lambda: False)
     if show:
         show(True)
+    escape.start()
     try:
-        return _task_loop(goal, llm, check, max_steps, shoot, act, stop)
+        return _task_loop(goal, llm, checked, max_steps, shoot, act, stop)
+    except InterruptedError:
+        if not escape():
+            raise
+        log('stopped', 'Escape pressed')
+        return {'stopped': 'Escape pressed. Computer control stopped.'}
     finally:
+        escape.close()
         if show:
             show(False)
 
@@ -356,6 +423,7 @@ def _task_loop(goal, llm, check, max_steps, shoot, act, stop):
             return {'stopped': 'You took the mouse, so I stopped. It is all yours.', 'steps': history}
         shot, size = shoot()
         reply = llm(PROMPT.format(goal=goal, w=size[0], h=size[1], history='\n'.join(history[-8:]) or '(none yet)'), images=[shot], max_tokens=220)
+        check()
         try:
             step = parse_step(reply)
         except (ValueError, json.JSONDecodeError):
