@@ -78,7 +78,7 @@ def main():
             runtime.error=str(e);runtime.update('Setup needs attention: '+str(e));(DATA/'startup-error.log').write_text(traceback.format_exc(),encoding='utf8')
     threading.Thread(target=startup,daemon=True).start()
     threading.Thread(target=runtime.background_loop,daemon=True).start()   # calendar reminders
-    if not args.no_open:open_desktop(runtime.local_url)
+    if args.headless and not args.no_open:open_desktop(runtime.local_url)
     if args.headless:
         print('CORTANA_LOCAL_URL='+runtime.local_url,flush=True)
         try:
@@ -90,15 +90,9 @@ def main():
         return
     import tkinter as tk
     window=tk.Tk();window.report_callback_exception=lambda t,e,tb:log_error('error in the launcher window',t,e,tb);window.title('Cortana');window.geometry('460x730');window.minsize(400,680);window.configure(bg='#041228')
-    tk.Label(window,text='CORTANA',font=('Segoe UI',27,'bold'),fg='#9fe2ff',bg='#041228').pack(pady=(22,3))
-    tk.Label(window,text='DESKTOP ASSISTANT  ·  OPTIONAL PHONE PAIRING',font=('Segoe UI',9),fg='#a9c6e6',bg='#041228').pack()
-    status=tk.StringVar(value='Starting your assistant...')
-    tk.Label(window,textvariable=status,wraplength=390,font=('Segoe UI',11),fg='#e8f4ff',bg='#041228',height=3).pack(padx=20,pady=10)
-    canvas=tk.Canvas(window,width=280,height=280,bg='#082044',highlightthickness=0);canvas.pack(pady=8);canvas.create_text(140,140,text='Preparing your phone QR...',fill='#a9c6e6',font=('Segoe UI',12),width=230)
-    tk.Label(window,text='Scan with your phone camera.\nKeep this app open while using Cortana.',font=('Segoe UI',11),fg='#d6eaff',bg='#041228').pack(pady=10)
-    tk.Button(window,text='Open Cortana on this PC',command=lambda:open_desktop(runtime.local_url),font=('Segoe UI',11),bg='#16436c',fg='white',relief='flat',padx=20,pady=9).pack(pady=5)
-    tk.Label(window,text='Phone access uses a private HTTPS link (Cloudflare or Tailscale).\nThe QR code grants access: keep it private.\nAI, speech and memory stay on this PC.',font=('Segoe UI',9),fg='#96b2cf',bg='#041228').pack(pady=12)
-    rendered=None;overlay=None
+    from desktop import Desktop
+    desktop=Desktop(window,runtime)
+    overlay=None
     def show_overlay():
         """Glowing blue frame round the whole screen while she has control. Click-through, always on top, and hidden from
         screenshots (her own included), so it never gets in her way or yours."""
@@ -128,26 +122,18 @@ def main():
         import control;control.restore_cursor()   # if a previous run crashed mid-task, give the user their own cursor back
     except Exception:pass
     def poll():
-        nonlocal rendered,overlay
+        nonlocal overlay
         if runtime.control_visible and overlay is None:
             try:overlay=show_overlay()
             except Exception as e:log_error('could not draw the control border',type(e),e,e.__traceback__);runtime.control_visible=False
         elif not runtime.control_visible and overlay is not None:
             overlay.destroy();overlay=None
         try:
-            while True:status.set(events.get_nowait())
+            while True:events.get_nowait()
         except queue.Empty:pass
-        if runtime.phone_url and runtime.phone_url!=rendered:
-            rendered=runtime.phone_url;matrix=qr_matrix(rendered);n=len(matrix);scale=max(1,260//n);size=n*scale
-            image=tk.PhotoImage(width=size,height=size);image.put('white',to=(0,0,size,size))
-            for y,row in enumerate(matrix):
-                for x,on in enumerate(row):
-                    if on:image.put('#041228',to=(x*scale,y*scale,(x+1)*scale,(y+1)*scale))
-            canvas.delete('all');canvas.create_image(140,140,image=image);canvas.qr_image=image
-        if not runtime.phone_url and rendered:
-            rendered=None;canvas.delete('all');canvas.create_text(140,140,text='Phone disconnected.\nRestart Cortana to reconnect.',fill='#a9c6e6',width=230)
         window.after(250,poll)
     def close():
+        desktop.stop()
         try:
             import control;control.restore_cursor()
         except Exception:pass
