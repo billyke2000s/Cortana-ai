@@ -95,6 +95,14 @@ def main():
     closed=threading.Event()
     web=webview.create_window('Cortana',runtime.local_url,width=1280,height=850,min_size=(800,600),background_color='#041228')
     web.events.closed += lambda: closed.set()
+    def verify_desktop():
+        # CI and diagnostics: confirm the real holographic page loaded in the embedded window.
+        try:
+            if web.evaluate_js("Boolean(document.querySelector('#cortana-sprite') && document.querySelector('#mic') && document.querySelector('#nav'))"):
+                (DATA/'desktop-ready.json').write_text(json.dumps({'renderer':'edgechromium','url':runtime.local_url}))
+        except Exception as e:
+            log_error('desktop page verification',type(e),e,e.__traceback__)
+    web.events.loaded += verify_desktop
     def overlay_loop():
         window=tk.Tk();window.withdraw()
         window.report_callback_exception=lambda t,e,tb:log_error('control overlay',t,e,tb)
