@@ -8,5 +8,5 @@ pypdf>=5.0
 sherpa-onnx==2.0.1
 numpy>=1.26,<3
 
-# Native desktop microphone capture
-sounddevice>=0.5,<1
+# Embedded Windows WebView2 desktop host
+pywebview==5.4; sys_platform == 'win32'
