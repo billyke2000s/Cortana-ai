@@ -7,3 +7,6 @@ pypdf>=5.0
 # CPU voice and small keyword spotter (no PyTorch).
 sherpa-onnx==2.0.1
 numpy>=1.26,<3
+
+# Native desktop microphone capture
+sounddevice>=0.5,<1
