@@ -220,7 +220,7 @@ async function systems(){
    <p class="pg-muted">Current: ${esc(s.context)} tokens. Bigger remembers more of the conversation and long documents. Deep thinking: 🧠 in Chat, or say “think carefully about…”.</p>
    ${C.state!==undefined&&(await get('/api/status')).canPair?`<h3>Full access</h3>
    <label class="pg-check"><input type="checkbox" id="sFull"${s.full_access?' checked':''}> Let her run commands and use the mouse and keyboard on this PC</label>
-   <p class="pg-muted">Only from this PC, never from your phone. She shows every command, and every mouse/keyboard task, for you to approve first. Move your mouse during a task and she stops and hands it back. Everything she runs is logged in full-access.log. Small AI models make mistakes: approve carefully.</p>`:''}
+   <p class="pg-muted">Only from this PC, never from your phone. She shows every command, and every mouse/keyboard task, for you to approve first. Press Escape during a task to stop and take control back. Everything she runs is logged in full-access.log. Small AI models make mistakes: approve carefully.</p>`:''}
    <h3>Character</h3>
    <label>Expression<select id="sExpression">${opt('normal','Normal',s.expression_mode!=='expressive')}${opt('expressive','Expressive',s.expression_mode==='expressive')}</select></label>
    <button type="button" class="pg-btn pg-wide" data-act="expression-preview">Preview expression</button>
@@ -318,3 +318,8 @@ async function setup(){
 const PAGES={setup,chat,tasks:objectives,memory,briefing,settings:systems,'choose-model':chooseModel};
 window.CortanaPages={open(target){const fn=PAGES[target];if(!fn)return false;fn();return true;},
  async readBriefing(){await briefing();if(lastBriefing)C.speak(briefingSpeech(lastBriefing));}};
+
+// Wide PC windows start with a usable conversation alongside the hologram.
+const desktopLayout=matchMedia('(min-width: 900px) and (min-height: 560px)');
+function openDesktopChat(){if(desktopLayout.matches&&!D.page)chat();}
+openDesktopChat();desktopLayout.addEventListener('change',openDesktopChat);
