@@ -89,56 +89,69 @@ def main():
         finally:runtime.close();server.shutdown();server.server_close()
         return
     import tkinter as tk
-    window=tk.Tk();window.report_callback_exception=lambda t,e,tb:log_error('error in the launcher window',t,e,tb);window.title('Cortana');window.geometry('460x730');window.minsize(400,680);window.configure(bg='#041228')
-    from desktop import Desktop
-    desktop=Desktop(window,runtime)
-    overlay=None
-    def show_overlay():
-        """Glowing blue frame round the whole screen while she has control. Click-through, always on top, and hidden from
-        screenshots (her own included), so it never gets in her way or yours."""
-        o=tk.Toplevel(window);o.overrideredirect(True);o.attributes('-topmost',True)
-        sw,sh=o.winfo_screenwidth(),o.winfo_screenheight();o.geometry(f'{sw}x{sh}+0+0')
-        key='#010203';o.configure(bg=key)
-        try:o.attributes('-transparentcolor',key)
-        except tk.TclError:pass
-        c=tk.Canvas(o,width=sw,height=sh,bg=key,highlightthickness=0);c.pack()
-        frames=[c.create_rectangle(w/2+i,w/2+i,sw-w/2-i,sh-w/2-i,outline=col,width=w) for i,(w,col) in enumerate([(16,'#0b3a73'),(9,'#1c78d8'),(3,'#9fe2ff')])]
-        c.create_rectangle(sw/2-300,10,sw/2+300,44,fill='#06213f',outline='#5cc8ff',width=2)
-        c.create_text(sw/2,27,text='◆  CORTANA HAS CONTROL  ·  press ESC to stop',fill='#bfeeff',font=('Segoe UI',12,'bold'))
-        o.update_idletasks()
+    import webview
+    # WebView2 runs its own GUI loop on the main thread. Tk is only used for
+    # the independent control indicator, never as the main desktop UI.
+    closed=threading.Event()
+    web=webview.create_window('Cortana',runtime.local_url,width=1280,height=850,min_size=(800,600),background_color='#041228')
+    web.events.closed += lambda: closed.set()
+    def overlay_loop():
+        window=tk.Tk();window.withdraw()
+        window.report_callback_exception=lambda t,e,tb:log_error('control overlay',t,e,tb)
+        overlay=None
+        def show_overlay():
+            """Glowing blue frame round the whole screen while she has control. Click-through, always on top, and hidden from
+            screenshots (her own included), so it never gets in her way or yours."""
+            o=tk.Toplevel(window);o.overrideredirect(True);o.attributes('-topmost',True)
+            sw,sh=o.winfo_screenwidth(),o.winfo_screenheight();o.geometry(f'{sw}x{sh}+0+0')
+            key='#010203';o.configure(bg=key)
+            try:o.attributes('-transparentcolor',key)
+            except tk.TclError:pass
+            c=tk.Canvas(o,width=sw,height=sh,bg=key,highlightthickness=0);c.pack()
+            frames=[c.create_rectangle(w/2+i,w/2+i,sw-w/2-i,sh-w/2-i,outline=col,width=w) for i,(w,col) in enumerate([(16,'#0b3a73'),(9,'#1c78d8'),(3,'#9fe2ff')])]
+            c.create_rectangle(sw/2-300,10,sw/2+300,44,fill='#06213f',outline='#5cc8ff',width=2)
+            c.create_text(sw/2,27,text='◆  CORTANA HAS CONTROL  ·  press ESC to stop',fill='#bfeeff',font=('Segoe UI',12,'bold'))
+            o.update_idletasks()
+            try:
+                import ctypes
+                u=ctypes.windll.user32;hwnd=u.GetParent(o.winfo_id()) or o.winfo_id()
+                u.SetWindowLongW(hwnd,-20,u.GetWindowLongW(hwnd,-20)|0x80000|0x20|0x80|0x08000000)   # layered, click-through, no taskbar, no focus
+                u.SetWindowDisplayAffinity(hwnd,0x11)   # WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+): not in screenshots
+            except Exception:pass
+            phase=[0]
+            def pulse():
+                if not o.winfo_exists():return
+                phase[0]=(phase[0]+1)%20;glow=['#1c78d8','#2a8cf0','#3aa2ff','#2a8cf0'][phase[0]//5]
+                c.itemconfigure(frames[1],outline=glow);o.after(120,pulse)
+            pulse();return o
         try:
-            import ctypes
-            u=ctypes.windll.user32;hwnd=u.GetParent(o.winfo_id()) or o.winfo_id()
-            u.SetWindowLongW(hwnd,-20,u.GetWindowLongW(hwnd,-20)|0x80000|0x20|0x80|0x08000000)   # layered, click-through, no taskbar, no focus
-            u.SetWindowDisplayAffinity(hwnd,0x11)   # WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+): not in screenshots
+            import control;control.restore_cursor()   # if a previous run crashed mid-task, give the user their own cursor back
         except Exception:pass
-        phase=[0]
-        def pulse():
-            if not o.winfo_exists():return
-            phase[0]=(phase[0]+1)%20;glow=['#1c78d8','#2a8cf0','#3aa2ff','#2a8cf0'][phase[0]//5]
-            c.itemconfigure(frames[1],outline=glow);o.after(120,pulse)
-        pulse();return o
+        def poll():
+            nonlocal overlay
+            if runtime.control_visible and overlay is None:
+                try:overlay=show_overlay()
+                except Exception as e:log_error('could not draw the control border',type(e),e,e.__traceback__);runtime.control_visible=False
+            elif not runtime.control_visible and overlay is not None:
+                overlay.destroy();overlay=None
+            try:
+                while True:events.get_nowait()
+            except queue.Empty:pass
+            if closed.is_set():window.destroy();return
+            window.after(100,poll)
+        poll();window.mainloop()
+    indicator=threading.Thread(target=overlay_loop,daemon=True)
+    indicator.start()
     try:
-        import control;control.restore_cursor()   # if a previous run crashed mid-task, give the user their own cursor back
-    except Exception:pass
-    def poll():
-        nonlocal overlay
-        if runtime.control_visible and overlay is None:
-            try:overlay=show_overlay()
-            except Exception as e:log_error('could not draw the control border',type(e),e,e.__traceback__);runtime.control_visible=False
-        elif not runtime.control_visible and overlay is not None:
-            overlay.destroy();overlay=None
-        try:
-            while True:events.get_nowait()
-        except queue.Empty:pass
-        window.after(250,poll)
-    def close():
-        desktop.stop()
+        webview.start(gui='edgechromium',debug=False)
+    finally:
+        closed.set()
+        runtime.close()
+        server.shutdown();server.server_close()
+        indicator.join(timeout=2)
         try:
             import control;control.restore_cursor()
         except Exception:pass
-        window.destroy();runtime.close();server.shutdown();server.server_close()
-    window.protocol('WM_DELETE_WINDOW',close);poll();window.mainloop()
 if __name__=='__main__':
     try:main()
     except Exception:
