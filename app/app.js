@@ -368,6 +368,9 @@ function showPanel(title,html,label='CORTANA // DISPLAY',page=null){
 }
 // Keep the panel above the bottom navigation so pages can be switched while it is open.
 function placeHolo(){
+ if(matchMedia('(min-width: 900px) and (min-height: 560px)').matches){
+  holo.style.removeProperty('bottom');holo.style.removeProperty('max-height');return;
+ }
  const nav=document.querySelector('.nav-wrap');if(!nav)return;
  const top=nav.getBoundingClientRect().top,gap=8;
  holo.style.bottom=Math.max(8,innerHeight-top+gap)+'px';
@@ -378,7 +381,7 @@ function showScreen(md){holoLast=md;const r=holoMarkdown(md);showPanel(r.title,r
 function hideScreen(){if(holo.hidden)return;holo.hidden=true;holoPage=null;holoReopen.hidden=!holoLast;}
 holo.querySelector('.holo-close').addEventListener('click',hideScreen);
 holoReopen.addEventListener('click',()=>holoLast&&showScreen(holoLast));
-document.addEventListener('keydown',e=>{if(e.key==='Escape')hideScreen();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!matchMedia('(min-width: 900px) and (min-height: 560px)').matches)hideScreen();});
 holo.addEventListener('click',async e=>{
  const b=e.target.closest('.holo-copy');if(!b)return;
  const code=b.closest('.holo-code').querySelector('code').textContent;
