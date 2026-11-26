@@ -30,6 +30,23 @@ def clean_old_unpacks():
                 shutil.rmtree(d,ignore_errors=True)
         except OSError:pass
 
+def open_desktop(url):
+    """Open the full local UI in a dedicated Chromium app window, not a browser tab."""
+    import shutil, subprocess
+    if os.name == 'nt':
+        candidates = [shutil.which('msedge'), shutil.which('chrome')]
+        for base in (os.environ.get('PROGRAMFILES(X86)'), os.environ.get('PROGRAMFILES'), os.environ.get('LOCALAPPDATA')):
+            if base:
+                candidates.extend(str(Path(base)/p) for p in ('Microsoft/Edge/Application/msedge.exe', 'Google/Chrome/Application/chrome.exe'))
+        for browser in candidates:
+            if browser and Path(browser).is_file():
+                try:
+                    subprocess.Popen([browser, '--app='+url, '--window-size=1280,850'])
+                    return
+                except OSError:
+                    continue
+    webbrowser.open(url)
+
 def main():
     import argparse
     if sys.stdout is None:sys.stdout=open(os.devnull,'w')   # the windowed exe has no console; --headless prints status lines
@@ -61,7 +78,7 @@ def main():
             runtime.error=str(e);runtime.update('Setup needs attention: '+str(e));(DATA/'startup-error.log').write_text(traceback.format_exc(),encoding='utf8')
     threading.Thread(target=startup,daemon=True).start()
     threading.Thread(target=runtime.background_loop,daemon=True).start()   # calendar reminders
-    if not args.no_open:webbrowser.open(runtime.local_url)
+    if not args.no_open:open_desktop(runtime.local_url)
     if args.headless:
         print('CORTANA_LOCAL_URL='+runtime.local_url,flush=True)
         try:
@@ -74,12 +91,12 @@ def main():
     import tkinter as tk
     window=tk.Tk();window.report_callback_exception=lambda t,e,tb:log_error('error in the launcher window',t,e,tb);window.title('Cortana');window.geometry('460x730');window.minsize(400,680);window.configure(bg='#041228')
     tk.Label(window,text='CORTANA',font=('Segoe UI',27,'bold'),fg='#9fe2ff',bg='#041228').pack(pady=(22,3))
-    tk.Label(window,text='YOUR PC IS THE CORE. YOUR PHONE IS THE DISPLAY.',font=('Segoe UI',9),fg='#a9c6e6',bg='#041228').pack()
+    tk.Label(window,text='DESKTOP ASSISTANT  ·  OPTIONAL PHONE PAIRING',font=('Segoe UI',9),fg='#a9c6e6',bg='#041228').pack()
     status=tk.StringVar(value='Starting your assistant...')
     tk.Label(window,textvariable=status,wraplength=390,font=('Segoe UI',11),fg='#e8f4ff',bg='#041228',height=3).pack(padx=20,pady=10)
     canvas=tk.Canvas(window,width=280,height=280,bg='#082044',highlightthickness=0);canvas.pack(pady=8);canvas.create_text(140,140,text='Preparing your phone QR...',fill='#a9c6e6',font=('Segoe UI',12),width=230)
     tk.Label(window,text='Scan with your phone camera.\nKeep this app open while using Cortana.',font=('Segoe UI',11),fg='#d6eaff',bg='#041228').pack(pady=10)
-    tk.Button(window,text='Open Cortana on this PC',command=lambda:webbrowser.open(runtime.local_url),font=('Segoe UI',11),bg='#16436c',fg='white',relief='flat',padx=20,pady=9).pack(pady=5)
+    tk.Button(window,text='Open Cortana on this PC',command=lambda:open_desktop(runtime.local_url),font=('Segoe UI',11),bg='#16436c',fg='white',relief='flat',padx=20,pady=9).pack(pady=5)
     tk.Label(window,text='Phone access uses a private HTTPS link (Cloudflare or Tailscale).\nThe QR code grants access: keep it private.\nAI, speech and memory stay on this PC.',font=('Segoe UI',9),fg='#96b2cf',bg='#041228').pack(pady=12)
     rendered=None;overlay=None
     def show_overlay():
@@ -92,8 +109,8 @@ def main():
         except tk.TclError:pass
         c=tk.Canvas(o,width=sw,height=sh,bg=key,highlightthickness=0);c.pack()
         frames=[c.create_rectangle(w/2+i,w/2+i,sw-w/2-i,sh-w/2-i,outline=col,width=w) for i,(w,col) in enumerate([(16,'#0b3a73'),(9,'#1c78d8'),(3,'#9fe2ff')])]
-        c.create_rectangle(sw/2-250,10,sw/2+250,44,fill='#06213f',outline='#5cc8ff',width=2)
-        c.create_text(sw/2,27,text='◆  CORTANA HAS CONTROL  ·  move your mouse to take over',fill='#bfeeff',font=('Segoe UI',12,'bold'))
+        c.create_rectangle(sw/2-300,10,sw/2+300,44,fill='#06213f',outline='#5cc8ff',width=2)
+        c.create_text(sw/2,27,text='◆  CORTANA HAS CONTROL  ·  press ESC to stop',fill='#bfeeff',font=('Segoe UI',12,'bold'))
         o.update_idletasks()
         try:
             import ctypes
