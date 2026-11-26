@@ -74,6 +74,25 @@ jobs:
             $code = $LASTEXITCODE
           } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
           exit $code
+      - name: Verify packaged holographic desktop window
+        shell: pwsh
+        run: |
+          $env:CORTANA_DATA_DIR = "$env:RUNNER_TEMP\cortana-desktop"
+          $p = Start-Process dist\Cortana.exe -ArgumentList '--no-tunnel' -PassThru
+          try {
+            $marker = Join-Path $env:CORTANA_DATA_DIR 'desktop-ready.json'
+            $deadline = (Get-Date).AddSeconds(120)
+            while (!(Test-Path $marker) -and (Get-Date) -lt $deadline -and !$p.HasExited) {
+              Start-Sleep -Seconds 2
+              $p.Refresh()
+            }
+            if (!(Test-Path $marker)) {
+              Get-Content (Join-Path $env:CORTANA_DATA_DIR 'startup-error.log') -ErrorAction SilentlyContinue
+              Get-Content (Join-Path $env:CORTANA_DATA_DIR 'crash.log') -ErrorAction SilentlyContinue
+              throw 'Embedded Cortana desktop did not load its original interface'
+            }
+            Get-Content $marker
+          } finally { taskkill /PID $p.Id /T /F 2>$null }
       - uses: actions/upload-artifact@v4
         with:
           name: cortana-windows
@@ -90,12 +109,12 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.2') || github.ref_name }}
+          tag_name: ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.3') || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          name: Cortana ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.2') || github.ref_name }}
+          name: Cortana ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.3') || github.ref_name }}
           files: dist/Cortana.exe
           body: |
-            Download Cortana.exe and run it on Windows 10/11. Keep the launcher open.
+            Download Cortana.exe and run it on Windows 10/11. The original holographic interface opens directly in the desktop window. Microsoft Edge WebView2 Runtime is required.
 
             What changed: see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/CHANGELOG.md).
 
