@@ -16,7 +16,7 @@ try:
     with sync_playwright() as p:
         browser=p.chromium.launch(headless=True,args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'],env={k:v for k,v in os.environ.items() if 'proxy' not in k.lower()})
         page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
-        for width,height in [(320,568),(360,640),(390,844),(430,932),(844,390),(1280,900)]:
+        for width,height in [(320,568),(360,640),(390,844),(430,932),(844,390),(900,600),(1280,900),(1920,1080)]:
             page.set_viewport_size({'width':width,'height':height});page.goto(url)
             page.wait_for_function('window.CortanaPages !== undefined')
             if width==320:
@@ -32,6 +32,14 @@ try:
             with page.expect_response(lambda resp:resp.url.endswith('/api/settings') and resp.request.method=='GET'):pass
             panel=page.locator('#holoPanel').bounding_box();nav=page.locator('.nav-wrap').bounding_box()
             assert panel['y']+panel['height']<=nav['y']+1,(width,panel,nav)
+            stage=page.locator('.stage').bounding_box()
+            if width>=900 and height>=560:
+                assert panel['x']>=stage['x']+stage['width']-1,(width,panel,stage)
+                assert panel['width']>=300 and stage['height']>=100,(width,panel,stage)
+                assert page.locator('.desktop-welcome').is_visible()
+            else:
+                assert not page.locator('.desktop-welcome').is_visible()
+                assert page.locator('#app').bounding_box()['width']<=480
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'),width
             print('LAYOUT',width,height,'OK',flush=True)
         page.wait_for_function('window.CortanaAvatar?.ready',timeout=60000)
