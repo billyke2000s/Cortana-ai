@@ -2,7 +2,14 @@
 
 All notable changes. Dates are UK time.
 
-## [Unreleased] - 2026-11-03
+## [Unreleased] - 2026-11-26
+
+### Desktop and control
+- Open the full local interface in a dedicated Edge or Chrome application window on Windows, with a standard browser fallback.
+- Press Escape anywhere on the active Windows desktop to cancel computer control; mouse movement alone no longer stops it. Stop on the approval card remains available.
+- Latch Escape during model inference and check cancellation during input sequences. Added regression coverage.
+
+### Previous changes (2026-11-03)
 
 ### Fixed
 - Apply pairing and the static-file whitelist to HEAD requests, which previously inherited unrestricted file-metadata handling. API HEAD requests return 405 without a body.
