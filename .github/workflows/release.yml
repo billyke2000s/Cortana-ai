@@ -109,9 +109,9 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.3') || github.ref_name }}
+          tag_name: ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.4') || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          name: Cortana ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.3') || github.ref_name }}
+          name: Cortana ${{ github.event.inputs.tag || (github.ref == 'refs/heads/main' && 'v1.7.4') || github.ref_name }}
           files: dist/Cortana.exe
           body: |
             Download Cortana.exe and run it on Windows 10/11. The original holographic interface opens directly in the desktop window. Microsoft Edge WebView2 Runtime is required.
