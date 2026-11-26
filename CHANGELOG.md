@@ -2,7 +2,12 @@
 
 All notable changes. Dates are UK time.
 
-## [Unreleased] - 2026-11-26
+## [1.7.3] - 2026-11-26
+
+- Restore the original animated holographic interface in an embedded WebView2 desktop window. Remove the replacement Tk chat from the launch path, retaining the independent control indicator and Escape stop.
+- Verify that the packaged desktop host loads the original UI before publishing.
+
+## [1.7.2] - 2026-11-26
 
 ### Desktop and control
 - Native Tk desktop interface is the default, with chat history, microphone, speech, model selection, settings, approvals and phone pairing. The existing web UI remains optional.
