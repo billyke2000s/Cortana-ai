@@ -5,7 +5,7 @@ All notable changes. Dates are UK time.
 ## [Unreleased] - 2026-11-26
 
 ### Desktop and control
-- Open the full local interface in a dedicated Edge or Chrome application window on Windows, with a standard browser fallback.
+- Native Tk desktop interface is the default, with chat history, microphone, speech, model selection, settings, approvals and phone pairing. The existing web UI remains optional.
 - Press Escape anywhere on the active Windows desktop to cancel computer control; mouse movement alone no longer stops it. Stop on the approval card remains available.
 - Latch Escape during model inference and check cancellation during input sequences. Added regression coverage.
 
