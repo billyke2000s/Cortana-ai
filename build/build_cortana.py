@@ -13,7 +13,7 @@ work.mkdir(parents=True, exist_ok=True)
 if os.name != 'nt':
     sys.exit('Build on Windows: Cortana.exe uses Windows speech, keyboard and process APIs.')
 
-needed = {'PyInstaller': 'pyinstaller', 'qrcode': 'qrcode', 'dateutil': 'python-dateutil', 'tzdata': 'tzdata', 'pypdf': 'pypdf', 'sherpa_onnx': 'sherpa-onnx==2.0.1', 'numpy': 'numpy'}
+needed = {'PyInstaller': 'pyinstaller', 'qrcode': 'qrcode', 'dateutil': 'python-dateutil', 'tzdata': 'tzdata', 'pypdf': 'pypdf', 'sherpa_onnx': 'sherpa-onnx==2.0.1', 'numpy': 'numpy', 'sounddevice': 'sounddevice>=0.5,<1'}
 missing = [pkg for mod, pkg in needed.items() if importlib.util.find_spec(mod) is None]
 if missing:
     print('Installing', ', '.join(missing))
@@ -25,9 +25,9 @@ if not (app / 'assets' / 'cortana.glb').exists():
 WEB_FILES = ['index.html', 'app.js', 'pages.js', 'avatar.js', 'responsive.css', 'mic-worklet.js', 'speech.ps1', 'manifest.webmanifest', 'app-icon.svg']
 args = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--onefile', '--windowed', '--name', 'Cortana',
         '--distpath', str(dist), '--workpath', str(work / 'pyinstaller'), '--specpath', str(work), '--paths', str(app)]
-for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'proactive', 'work', 'control', 'sherpa_onnx', 'numpy']:
+for name in ['qrcode', 'store', 'tools', 'voice', 'hardware', 'files', 'pypdf', 'dateutil', 'dateutil.rrule', 'tzdata', 'neural', 'companion', 'lips', 'proactive', 'work', 'control', 'desktop', 'sounddevice', 'sherpa_onnx', 'numpy']:
     args += ['--hidden-import', name]
-args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx']
+args += ['--collect-data', 'tzdata', '--collect-all', 'sherpa_onnx', '--collect-all', 'sounddevice', '--collect-all', '_sounddevice_data']
 for name in ['PIL', 'torch', 'cv2', 'matplotlib', 'scipy', 'pandas']:
     args += ['--exclude-module', name]
 for name in WEB_FILES:
